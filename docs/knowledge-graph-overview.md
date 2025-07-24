@@ -5,11 +5,11 @@ This document outlines the overview of an AI Agent with RAG (Retrieval-Augmented
 
 ## Requirements
 - Load all settings from environment file (.env)
-- Index all documents and files in GitHub Repository based on list of URLs provided in `appSettings.json` using Github MCP tool
+- Index all documents and files in GitHub Repository based on list of URLs provided in `appSettings.json`
 - Using Python language for AI Agent
 - Using LangChain framework to build AI Agent, and LangGraph to manage workflows
 - Integration with LLM models (e.g.OpenAI...)
-- Using vector database with Pinecone and Chroma
+- Using vector database with Chroma and Pinecone. Allow switch between them based on `DATABASE_TYPE` environment setting.
 
 ## Architecture Overview
 
@@ -206,15 +206,17 @@ knowledge-graph-agent/
 #### .env Configuration
 ```bash
 # LLM Configuration
-LLM_PROVIDER = openai
-LLM_MODEL = gpt-4o-mini
-LLM_API_BASE_URL=https://api.openai.com/v1
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o-mini
+LLM_API_BASE_URL=https://api.openai.com/v1 #Just use for ollama only
 
 OPENAI_API_KEY=your_openai_api_key
 
 # Embedding Configuration
 EMBEDDING_PROVIDER=openai
 EMBEDDING_MODEL=text-embedding-ada-002
+EMBEDDING_BATCH_SIZE=50
+MAX_TOKENS_PER_BATCH=250000
 
 # Vector Database Configuration
 DATABASE_TYPE=chroma #This configuration to allow switch vector store between chroma and pinecone
@@ -227,7 +229,7 @@ PINECONE_COLLECTION_NAME=knowledge-base-graph
 
 # GitHub Configuration
 GITHUB_TOKEN=your_github_token
-GITHUB_FILE_EXTENSIONS=[".cs",".csproj",".py",".php",".js",".jsx",".ts",".tsx",".html",".cshtml",".md",".json",".yml",".yaml",".csv","dockerfile",".sh",".bash"]
+GITHUB_FILE_EXTENSIONS=[".cs",".csproj",".py",".php",".js",".jsx",".ts",".tsx",".html",".cshtml",".md", ".txt",".json",".yml",".yaml",".csv","dockerfile", ".config",".sh",".bash"]
 
 # Application Configuration
 APP_ENV=development #production
