@@ -3,7 +3,7 @@
 **Project:** Knowledge Graph Agent  
 **Timeline:** 2 Weeks (July 19 - August 2, 2025)  
 **Target:** Minimum Viable Product (MVP)  
-**Document Version:** 2.0
+**Document Version:** 2.1
 **Date Created:** July 19, 2025  
 **Date Updated:** July 23, 2025
 
@@ -29,6 +29,7 @@ This implementation plan delivers a focused 2-week MVP for the Knowledge Graph A
 - ✅ Environment-based configuration with comprehensive validation
 - ✅ Structured logging and health monitoring
 - ✅ Base agent architecture with extensible patterns
+- ✅ Web UI chatbot interface
 
 ### Out of Scope (Post-MVP)
 - ❌ Advanced chunking strategies (semantic, context-aware)
@@ -84,7 +85,7 @@ graph TB
 ### Technology Stack
 - **Backend Framework:** FastAPI with authentication middleware
 - **AI/ML Framework:** LangChain with LangGraph workflows
-- **Repository Integration:** GitHub MCP tool
+- **Repository Integration:** GitHub integration
 - **Vector Database:** Chroma, Pinecone (runtime switchable)
 - **LLM Provider:** OpenAI (GPT-4o-mini) via factory pattern
 - **Embeddings:** OpenAI text-embedding-ada-002 via factory pattern
@@ -92,143 +93,148 @@ graph TB
 - **Logging:** Structured logging with configurable levels
 - **Containerization:** Docker with production-ready configuration
 
-## Project Structure (Simplified)
+## Project Structure (MVP-Aligned)
 
 ```
 knowledge-graph-agent/
 ├── src/
 │   ├── config/
 │   │   ├── __init__.py
-│   │   └── settings.py              # Environment and appSettings.json configuration
+│   │   └── settings.py              # Environment-based configuration with validation
 │   ├── loaders/
 │   │   ├── __init__.py
-│   │   └── github_loader.py         # GitHub MCP tool integration
+│   │   └── github_loader.py         # GitHub integration for multiple repositories
 │   ├── processors/
 │   │   ├── __init__.py
-│   │   ├── document_processor.py    # Text processing and chunking
-│   │   └── chunking_strategy.py     # Configurable chunking strategies
+│   │   ├── document_processor.py    # Document chunking with metadata enrichment
+│   │   ├── chunking_strategy.py     # Language-aware chunking (.NET & React)
+│   │   └── metadata_extractor.py    # Extract code symbols and metadata
 │   ├── vectorstores/
 │   │   ├── __init__.py
 │   │   ├── base_store.py           # Vector store abstraction
-│   │   ├── chroma_store.py         # Chroma integration
-│   │   └── pinecone_store.py       # Pinecone integration
+│   │   ├── chroma_store.py         # Chroma vector storage
+│   │   ├── pinecone_store.py       # Pinecone vector storage
+│   │   └── store_factory.py        # Runtime switching (DATABASE_TYPE)
 │   ├── llm/
 │   │   ├── __init__.py
-│   │   ├── llm_factory.py          # LLM provider factory
-│   │   ├── embedding_factory.py    # Embedding provider factory
-│   │   └── openai_llm.py          # OpenAI specific implementation
+│   │   ├── llm_factory.py          # LLM provider factory pattern
+│   │   ├── embedding_factory.py    # Embedding provider factory pattern
+│   │   └── openai_provider.py      # OpenAI LLM and embedding implementation
 │   ├── agents/
 │   │   ├── __init__.py
-│   │   ├── base_agent.py           # Base agent abstraction
-│   │   └── rag_agent.py            # RAG pipeline with LangGraph
+│   │   ├── base_agent.py           # Base agent architecture with extensible patterns
+│   │   └── rag_agent.py            # RAG query processing with OpenAI integration
 │   ├── workflows/
 │   │   ├── __init__.py
-│   │   ├── indexing_workflow.py    # LangGraph indexing workflow
-│   │   └── query_workflow.py       # LangGraph query workflow
+│   │   ├── indexing_workflow.py    # LangGraph stateful indexing workflow
+│   │   └── query_workflow.py       # LangGraph stateful query workflow
 │   ├── utils/
 │   │   ├── __init__.py
-│   │   ├── logging.py              # Structured logging
+│   │   ├── logging.py              # Structured logging and health monitoring
 │   │   ├── helpers.py              # Utility functions
-│   │   └── prompt_manager.py       # Prompt templates and context injection
+│   │   └── prompt_manager.py       # Context injection and formatting
 │   └── api/
 │       ├── __init__.py
-│       ├── main.py                 # FastAPI application
-│       ├── routes.py               # API endpoints
+│       ├── main.py                 # FastAPI application entry point
+│       ├── routes.py               # REST API endpoints
 │       ├── models.py               # Pydantic request/response models
-│       └── middleware.py           # Authentication and logging middleware
-├── appSettings.json                 # Repository configuration
-├── requirements.txt                 # Python dependencies
-├── requirements-dev.txt            # Development dependencies
-├── .env.example                     # Environment variables template
-├── Dockerfile                       # Container configuration
+│       └── middleware.py           # Authentication middleware (API key)
+├── web/
+│   ├── Dockerfile                  # Container configuration
+│   ├── index.html                  # Main chatbot UI interface
+├── tests/
+│   ├── __init__.py
+│   ├── unit/                       # Unit tests for core components
+│   │   ├── test_chunking.py        # Language-aware chunking tests
+│   │   ├── test_metadata.py        # Metadata extraction tests
+│   │   └── test_factories.py       # Factory pattern tests
+│   └── integration/                # Integration tests
+│       ├── test_github_loader.py   # GitHub integration tests
+│       ├── test_vectorstore.py     # Vector store switching tests
+│       └── test_workflows.py       # LangGraph workflow tests
+├── appSettings.json                # Multiple repository configuration
+├── requirements.txt                # Core Python dependencies
+├── requirements-dev.txt            # Development and testing dependencies
+├── .env.example                    # Environment variables template
+├── Dockerfile                      # Container configuration
 ├── docker-compose.yml              # Development environment
 ├── docker-compose.prod.yml         # Production environment
-├── main.py                          # Application entry point
-└── README.md                        # Quick start guide
+├── main.py                         # Application entry point
+└── README.md                       # Quick start and configuration guide
 ```
 
-## Implementation Timeline
+## Implementation Timeline (MVP-Focused)
 
 ### Week 1: Core Infrastructure & Document Processing
 
-#### **Day 1-2: Project Foundation**
+#### **Day 1-2: Project Foundation & Configuration**
 
-**Task 1.1: Basic Project Setup (4 hours)**
-- Create minimal project directory structure
-- Initialize Python project with essential packages
-- Set up version control and basic documentation
-- Configure development environment
+**Task 1.1: MVP Project Setup (4 hours)**
+- Create MVP-aligned project directory structure with tests/
+- Initialize Python project with core dependencies for MVP features
+- Set up version control with .gitignore for Python/Docker
+- Configure development environment with Docker support
 
-**Task 1.2: Dependency Management (4 hours)**
-- Create `requirements.txt` with core dependencies:
-  - fastapi[all]
-  - langchain
-  - langgraph
-  - chromadb
-  - pinecone-client
-  - openai
-  - python-dotenv
-  - pydantic
-  - uvicorn[standard]
-  - httpx
-  - python-multipart
-- Create `requirements-dev.txt` with development dependencies:
-  - pytest
-  - pytest-asyncio
-  - black
-  - flake8
-  - pre-commit
+**Task 1.2: Dependency Management & Environment (6 hours)**
+- Create `requirements.txt` with MVP-focused dependencies:
+  - fastapi[all] (REST API with authentication middleware)
+  - langchain + langgraph (LangChain framework with workflows)
+  - chromadb + pinecone-client (vector storage with runtime switching)
+  - openai (OpenAI integration for RAG)
+  - python-dotenv + pydantic (environment-based configuration)
+  - uvicorn[standard] + httpx + python-multipart
+- Create `requirements-dev.txt` with testing dependencies
+- Create comprehensive `.env.example` with all MVP configuration variables
 
-**Task 1.3: Environment Configuration (8 hours)**
-- Implement `src/config/settings.py` with Pydantic models
+**Task 1.3: Environment-Based Configuration (8 hours)**
+- Implement `src/config/settings.py` with comprehensive Pydantic validation
 - Support for OpenAI, Chroma, Pinecone, and GitHub credentials
-- AppSettings.json parser for repository configuration
-- Create comprehensive `.env.example` with all required variables
-- Add configuration validation and error handling
-- Implement DATABASE_TYPE switcher for vector stores
-- Add structured logging configuration
+- AppSettings.json parser for multiple repository configuration
+- Add DATABASE_TYPE runtime switcher for vector stores
+- Configuration validation with detailed error messages
+- Structured logging configuration with health monitoring support
 
-#### **Day 3-4: GitHub Integration & Document Processing**
+#### **Day 3-4: GitHub Integration & Language-Aware Processing**
 
-**Task 1.4: GitHub Integration & Document Processing (10 hours)**
-- Implement `src/loaders/github_loader.py` with GitHub integration
+**Task 1.4: GitHub Integration for Multiple Repositories (10 hours)**
+- Implement `src/loaders/github_loader.py` with GitHub API integration
 - Support multiple repositories from appSettings.json configuration
-- GitHub API integration for content extraction from public and private repositories
-- Support configurable file extensions from environment settings
-- Metadata extraction (file path, repository info, commit info)
-- Handle authentication with GitHub tokens
-- Implement error handling for API rate limits and network issues
+- Private repository access with GitHub token authentication
+- Configurable file extensions from environment settings
+- Metadata extraction (file_path, repository info, commit info, language detection)
+- Error handling for API rate limits and network issues
+- Batch processing for efficient repository indexing
 
-**Task 1.5: LLM and Embedding Factories (6 hours)**
+**Task 1.5: LLM and Embedding Factory Patterns (8 hours)**
 - Create `src/llm/llm_factory.py` for LLM provider abstraction
 - Create `src/llm/embedding_factory.py` for embedding provider abstraction
-- Implement `src/llm/openai_llm.py` for OpenAI-specific integration
-- Support for multiple model configurations via environment variables
+- Implement `src/llm/openai_provider.py` for OpenAI-specific integration
+- Support for multiple OpenAI model configurations via environment
 - Error handling and retry logic for API failures
-- Token usage tracking and monitoring
+- Token usage tracking and monitoring for cost optimization
 
-#### **Day 5: Document Processing & Vector Storage**
+#### **Day 5: Language-Aware Document Processing & Vector Storage**
 
-**Task 1.6: Document Processing Pipeline (8 hours)**
-- Create `src/processors/document_processor.py`
-- Implement `src/processors/chunking_strategy.py` with configurable strategies:
-  - Recursive character splitter (default)
-  - Language-aware regex-based chunkers:
-    - C# → by class, method
-    - TypeScript/JSX → by function, React component
-- Add pluggable strategy pattern to support future semantic chunking
-- Extract and preserve rich metadata per chunk:
-  - `file_path`, `chunk_type`, `language`, `line_start`, `line_end`, `function_name`, `class_name`, `tokens`, `repository`
-- Include unit tests for chunking logic per file type
+**Task 1.6: Language-Aware Document Processing with Metadata (10 hours)**
+- Create `src/processors/document_processor.py` with metadata enrichment
+- Implement `src/processors/chunking_strategy.py` with language-aware strategies:
+  - .NET (C#): Class and method-based chunking with symbol extraction
+  - React (JS/TS): Function and component-based chunking with JSX support
+  - Generic: Recursive character splitter for other languages
+- Create `src/processors/metadata_extractor.py` for code symbol extraction
+- Extract and preserve metadata per chunk:
+  - `file_path`, `chunk_type`, `language`, `line_start`, `line_end`
+  - `class_name`, `function_name`, `component_name`, `tokens`, `repository`
+- Unit tests for language-aware chunking logic
 
-**Task 1.7: Vector Storage Implementation (8 hours)**
+**Task 1.7: Vector Storage with Runtime Switching (8 hours)**
 - Implement `src/vectorstores/base_store.py` for vector store abstraction
 - Implement `src/vectorstores/chroma_store.py` for Chroma integration
 - Implement `src/vectorstores/pinecone_store.py` for Pinecone integration
-- Runtime switching between Chroma and Pinecone based on DATABASE_TYPE
-- Document embedding using factory pattern
-- Batch upsert functionality for storing embeddings
-- Connection management and error handling for both vector stores
+- Create `src/vectorstores/store_factory.py` for runtime DATABASE_TYPE switching
+- Document embedding using factory pattern with metadata preservation
+- Batch upsert functionality with error recovery
+- Connection management and health checks for both vector stores
 
 ### Metadata Schema for Chunks
 
@@ -253,79 +259,82 @@ Metadata enables:
 - Future support for incremental re-indexing
 - Token usage auditing and embedding optimization
 
-### Week 2: RAG Pipeline & API Development
+### Week 2: LangGraph Workflows & REST API with Authentication
 
-#### **Day 6-7: LangGraph Workflows & RAG Implementation**
+#### **Day 6-7: LangGraph Stateful Workflows & Base Agent Architecture**
 
-**Task 2.1: LangGraph Workflow Setup (8 hours)**
-- Create `src/workflows/indexing_workflow.py` for document indexing workflow
-- Create `src/workflows/query_workflow.py` for query processing workflow
-- Implement state management for workflow execution
-- Error handling and retry logic within workflows
-- Progress tracking and logging for long-running indexing operations
-- Track workflow state and steps per run (ID, status, executed steps, duration)
-- Output workflow metadata for audit/debug/logging
-- Expose `/query?debug=true` param to return chunk metadata for matched results
+**Task 2.1: LangGraph Stateful Workflows (10 hours)**
+- Create `src/workflows/indexing_workflow.py` for stateful indexing workflow
+- Create `src/workflows/query_workflow.py` for stateful query workflow  
+- Implement state management for workflow execution with persistence
+- Error handling and retry logic within LangGraph workflows
+- Progress tracking and structured logging for long-running indexing
+- Workflow metadata tracking (ID, status, executed steps, duration)
+- Integration with vector store factory for runtime switching
+- Debug mode support: expose workflow state and chunk metadata
 
-**Task 2.2: RAG Agent Implementation (10 hours)**
-- Create `src/agents/base_agent.py` for agent abstraction
-- Implement `src/agents/rag_agent.py` with LangGraph integration
-- Query processing workflow with vector similarity search
-- Context retrieval with configurable top-k results
-- Integration with LLM factory for response generation
-- Response formatting and source attribution
+**Task 2.2: Base Agent Architecture & RAG Implementation (10 hours)**
+- Create `src/agents/base_agent.py` with extensible patterns
+- Implement `src/agents/rag_agent.py` with RAG query processing
+- Integration with LangGraph workflows for stateful processing
+- OpenAI integration via LLM factory for response generation
+- Context retrieval with configurable top-k results and metadata filtering
+- Response formatting with source attribution and chunk metadata
+- Support for repository filtering and language-specific queries
 
-**Task 2.3: Prompt Management (6 hours)**
-- Implement `src/utils/prompt_manager.py`
-- Design system prompt templates for code queries
-- Context injection for retrieved documents
-- Dynamic prompt composition based on query type
-- Response formatting and source citation templates
-- Handle edge cases (no results, insufficient context)
+**Task 2.3: Prompt Manager for Context Injection (6 hours)**
+- Implement `src/utils/prompt_manager.py` with context injection
+- Design system prompt templates optimized for code queries
+- Dynamic prompt composition based on query type and retrieved context
+- Context injection for retrieved documents with metadata preservation
+- Response formatting templates with source citation
+- Handle edge cases (no results, insufficient context, token limits)
 
-#### **Day 8-9: API Development & Authentication**
+#### **Day 8-9: REST API with Authentication Middleware**
 
-**Task 2.4: REST API Implementation (10 hours)**
-- Create `src/api/main.py` with FastAPI
-- Implement `src/api/routes.py` with comprehensive endpoints:
-  - `POST /index` - Index repositories from appSettings.json
+**Task 2.4: REST API Implementation (12 hours)**
+- Create `src/api/main.py` with FastAPI application
+- Implement `src/api/routes.py` with comprehensive MVP endpoints:
+  - `POST /index` - Index all repositories from appSettings.json
   - `POST /index/repository` - Index specific repository
-  - `POST /query` - Query the knowledge base
-  - `GET /repositories` - List indexed repositories
-  - `GET /health` - Health check with service status
-  - `GET /stats` - Index statistics and metrics
+  - `POST /query` - RAG query processing with OpenAI integration
+  - `GET /repositories` - List indexed repositories with metadata
+  - `GET /health` - Health check with service status and monitoring
+  - `GET /stats` - Index statistics and repository metrics
 - Implement `src/api/models.py` with Pydantic request/response models
 - Error handling and structured response formatting
+- Request validation and input sanitization
 
-**Task 2.5: Authentication & Middleware (8 hours)**
-- Implement `src/api/middleware.py` with authentication layer
-- API key-based authentication for endpoints
-- Request logging and response time tracking
-- Rate limiting and request validation
-- CORS configuration for web interface integration
-- Health monitoring and service status endpoints
+**Task 2.5: Authentication Middleware & Health Monitoring (8 hours)**
+- Implement `src/api/middleware.py` with API key authentication
+- Authentication middleware for securing all endpoints
+- Request logging and response time tracking with structured logging
+- Rate limiting and request validation middleware
+- CORS configuration for future web interface integration
+- Health monitoring endpoints with vector store and LLM status
+- Error response standardization and logging integration
 
 #### **Day 10: Integration Testing & Documentation**
 
-**Task 2.6: Integration Testing (6 hours)**
-- End-to-end workflow testing with multiple repositories
-- Vector store switching validation (Chroma ↔ Pinecone)
-- LangGraph workflow execution testing
-- Query accuracy verification with various query types
-- Authentication and middleware testing
-- Performance testing with concurrent requests
-- Validate metadata integrity: ensure chunks return correct class/function/component labels
-- Verify LLM response includes correct source attribution with metadata
-- Test chunk boundary handling (e.g., class/function wrapping, overlap logic)
+**Task 2.6: Comprehensive Integration Testing (8 hours)**
+- End-to-end workflow testing with multiple repositories from appSettings.json
+- Vector store runtime switching validation (Chroma ↔ Pinecone)
+- LangGraph stateful workflow execution and state persistence testing
+- Language-aware chunking validation for .NET and React files
+- Metadata integrity testing: verify correct code symbol extraction
+- Authentication middleware testing with API key validation
+- RAG query accuracy verification with various query types
+- Performance testing with concurrent requests and repository indexing
 
-**Task 2.7: Documentation & Deployment (10 hours)**
-- Create comprehensive `README.md` with quick start guide
-- API documentation with request/response examples
-- Environment configuration guide with all variables
+**Task 2.7: Documentation & Deployment Configuration (8 hours)**
+- Create comprehensive `README.md` with MVP quick start guide
+- API documentation with detailed request/response examples
+- Environment configuration guide with all MVP variables
+- AppSettings.json configuration examples for multiple repositories
 - Docker setup with both development and production configurations
-- AppSettings.json configuration examples
-- Basic troubleshooting guide and FAQ
-- Deployment instructions for different environments
+- Basic troubleshooting guide with common issues and solutions
+- Deployment instructions for different environments with health checks
+
 
 ## API Specification
 
@@ -569,7 +578,7 @@ Response:
 
 | Risk | Impact | Probability | Mitigation Strategy |
 |------|--------|-------------|-------------------|
-| GitHub MCP tool integration complexity | High | Medium | Use proven GitHub API patterns, implement fallback mechanisms |
+| GitHub integration complexity | High | Medium | Use proven GitHub API patterns, implement fallback mechanisms |
 | LangGraph workflow complexity | Medium | Medium | Start with simple workflows, build incrementally |
 | Vector store switching reliability | High | Low | Thorough testing of both Chroma and Pinecone, implement health checks |
 | GitHub API rate limits | High | Medium | Implement exponential backoff, use test repositories, monitor quotas |
@@ -617,6 +626,9 @@ Response:
 - Performance optimization and caching
 - Incremental indexing capabilities
 - Web user interface for repository management
+- Pluggable chunking strategy upgrades (semantic parsing, AST chunkers, LLM-based chunking)
+- LangGraph visual workflow tracing and history API
+- Incremental indexing: detect file changes via Git commit diffing or checksums
 
 ### Week 5-6: Production Readiness
 - Comprehensive monitoring and metrics dashboard
@@ -681,7 +693,7 @@ We recommend starting with small, well-documented repositories:
 This 2-week MVP implementation plan delivers a comprehensive Knowledge Graph Agent that demonstrates significant value while establishing a robust foundation for future development. The updated plan incorporates all requirements from the knowledge-graph-overview.md including:
 
 - **LangChain with LangGraph workflows** for sophisticated AI agent orchestration
-- **GitHub MCP tool integration** for reliable repository access
+- **GitHub integration** for reliable repository access
 - **Multiple repository support** via appSettings.json configuration
 - **Runtime vector store switching** between Chroma and Pinecone
 - **Factory patterns for LLM and embedding providers** enabling future extensibility
