@@ -18,11 +18,11 @@ services:
     command: python main.py
 
   chroma:
-    image: ghcr.io/chroma-core/chroma:latest
+    image: chromadb/chroma:latest
     ports:
       - "8001:8000"
     volumes:
-      - chroma-data:/chroma/chroma
+      - ./chroma_db:/data  # Mount to Chroma's default data directory
     environment:
       - ALLOW_RESET=true
       - CHROMA_API_IMPL=rest
