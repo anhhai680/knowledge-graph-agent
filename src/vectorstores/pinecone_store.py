@@ -4,15 +4,12 @@ Pinecone vector store module for the Knowledge Graph Agent.
 This module provides a Pinecone implementation of the vector store.
 """
 
-import os
-import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import pinecone
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
 from langchain.vectorstores import Pinecone as LangchainPinecone
-from langchain.vectorstores.base import VectorStore
 from loguru import logger
 from tenacity import (
     retry,
@@ -23,6 +20,7 @@ from tenacity import (
 
 from src.config.settings import settings
 from src.llm.embedding_factory import EmbeddingFactory
+from src.llm.llm_constants import LLM_CONSTANTS
 from src.vectorstores.base_store import BaseStore
 
 
@@ -70,7 +68,7 @@ class PineconeStore(BaseStore):
                 # Dimension based on the embedding model (OpenAI ada = 1536)
                 pinecone.create_index(
                     name=self.collection_name,
-                    dimension=1536,  # Dimension of OpenAI embeddings
+                    dimension=LLM_CONSTANTS.EMBEDDING_DIMENSION,  # Dimension of OpenAI embeddings
                     metric="cosine"
                 )
             
