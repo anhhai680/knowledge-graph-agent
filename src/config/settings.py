@@ -65,7 +65,7 @@ class WorkflowStateBackend(str, Enum):
 class OpenAISettings(BaseModel):
     """OpenAI API settings."""
     api_key: str = Field(..., description="OpenAI API key")
-    model: str = Field("gpt-4o-mini", description="OpenAI model to use")
+    model: str = Field("GPT-4o-mini", description="OpenAI model to use", alias="model")
     temperature: float = Field(0.7, description="Temperature for OpenAI API calls")
     max_tokens: int = Field(4000, description="Maximum tokens for OpenAI API calls")
     

@@ -105,12 +105,14 @@ class LLMFactory:
         logger.debug(f"Creating OpenAI LLM with model {model_name}")
         
         return ChatOpenAI(
-            model=model_name,
+            model="GPT-4o-mini",  # Hardcode model name for compatibility
             temperature=temperature,
             max_tokens=max_tokens,
             streaming=streaming,
             callbacks=callbacks,
             openai_api_key=settings.openai.api_key,
+            base_url=settings.llm_api_base_url,
+            default_headers={"User-Agent": "Knowledge-Graph-Agent"},
             **kwargs
         )
     

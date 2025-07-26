@@ -87,6 +87,8 @@ class EmbeddingFactory:
             model=model_name,
             chunk_size=batch_size,
             openai_api_key=settings.openai.api_key,
+            base_url=settings.llm_api_base_url,
+            default_headers={"User-Agent": "Knowledge-Graph-Agent"},
             **kwargs
         )
     

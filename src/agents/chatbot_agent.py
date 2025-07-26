@@ -19,7 +19,7 @@ from loguru import logger
 
 from src.config.settings import settings
 from src.llm.prompt_templates import PromptTemplates
-from src.vectorstores.store_factory import StoreFactory
+from src.vectorstores.store_factory import VectorStoreFactory
 from src.llm.embedding_factory import EmbeddingFactory
 
 
@@ -102,16 +102,20 @@ class ChatbotAgent:
             max_tokens: Maximum tokens for response
         """
         self.api_key = api_key or settings.openai.api_key
-        self.model = model or settings.openai.model
+        self.model = model or "GPT-4o-mini"  # Hardcode model name for compatibility
         self.temperature = temperature or settings.openai.temperature
         self.max_tokens = max_tokens or settings.openai.max_tokens
         
         # Initialize OpenAI client
-        self.client = AsyncOpenAI(api_key=self.api_key)
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=settings.llm_api_base_url,
+            default_headers={"User-Agent": "Knowledge-Graph-Agent"}
+        )
         
         # Initialize vector store and embeddings
-        self.vector_store = StoreFactory.create_store()
-        self.embeddings = EmbeddingFactory.create_embeddings()
+        self.vector_store = VectorStoreFactory.create()
+        self.embeddings = EmbeddingFactory.create()
         
         # Conversation storage
         self.conversations: Dict[str, Conversation] = {}
