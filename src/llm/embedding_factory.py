@@ -11,6 +11,7 @@ from langchain.embeddings.base import Embeddings
 from loguru import logger
 
 from src.config.settings import EmbeddingProvider, settings
+from src.llm.llm_constants import LLM_CONSTANTS
 
 
 class EmbeddingFactory:
@@ -189,8 +190,8 @@ class EmbeddingFactory:
                             except Exception as e3:
                                 logger.error(f"Error embedding individual document: {str(e3)}")
                                 # Add a zero vector as placeholder
-                                all_embeddings.append([0.0] * 1536)  # Assuming OpenAI's embedding size
-                    
+                                all_embeddings.append([0.0] * LLM_CONSTANTS.EMBEDDING_DIMENSION.value)  # Assuming OpenAI's embedding size
+
                     try:
                         second_embeddings = embeddings.embed_documents(second_half)
                         all_embeddings.extend(second_embeddings)
@@ -205,12 +206,12 @@ class EmbeddingFactory:
                             except Exception as e3:
                                 logger.error(f"Error embedding individual document: {str(e3)}")
                                 # Add a zero vector as placeholder
-                                all_embeddings.append([0.0] * 1536)  # Assuming OpenAI's embedding size
+                                all_embeddings.append([0.0] * LLM_CONSTANTS.EMBEDDING_DIMENSION.value)  # Assuming OpenAI's embedding size
                 else:
                     # If batch size is 1, we can't split further, so add a zero vector
                     logger.error(f"Cannot split batch further, adding zero vectors for {len(batch)} documents")
-                    all_embeddings.extend([[0.0] * 1536] * len(batch))  # Assuming OpenAI's embedding size
-        
+                    all_embeddings.extend([[0.0] * LLM_CONSTANTS.EMBEDDING_DIMENSION.value] * len(batch))  # Assuming OpenAI's embedding size
+
         logger.info(f"Embedded {len(all_embeddings)}/{len(documents)} documents")
         
         return all_embeddings
