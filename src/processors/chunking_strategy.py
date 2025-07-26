@@ -4,19 +4,15 @@ Chunking strategy module for the Knowledge Graph Agent.
 This module provides language-aware chunking strategies for documents.
 """
 
-import os
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from langchain.schema import Document
 from langchain.text_splitter import (
     RecursiveCharacterTextSplitter,
-    Language,
-    TextSplitter
+    Language
 )
-from loguru import logger
-
 
 class ChunkingStrategy(ABC):
     """
@@ -127,9 +123,7 @@ class GenericChunkingStrategy(ChunkingStrategy):
             "jsx": Language.JS,
             "tsx": Language.TS,
             "html": Language.HTML,
-            "css": Language.CSS,
             "csharp": Language.CSHARP,
-            "php": Language.PHP,
             "markdown": Language.MARKDOWN,
             "json": Language.JSON,
             "yaml": Language.YAML,
@@ -247,10 +241,33 @@ class CSharpChunkingStrategy(ChunkingStrategy):
             Dictionary mapping class names to class content
         """
         # Regex pattern for C# classes
-        class_pattern = r"(public|private|protected|internal)?\s*(static|abstract|sealed)?\s*class\s+(\w+)(?:<.+?>)?\s*(?::\s*\w+(?:\s*,\s*\w+)*)?\s*\{([\s\S]*?)(?=\}\s*(?:public|private|protected|internal)?\s*(?:static|abstract|sealed)?\s*class|\}\s*$|\z)"
-        
+        class_pattern = r"""
+            # Access modifiers (optional)
+            (public|private|protected|internal)?\s*
+
+            # Class modifiers (optional)
+            (static|abstract|sealed)?\s*
+
+            # Class keyword and name
+            class\s+(\w+)
+
+            # Generic type parameters (optional)
+            (?:<\s*\w+(?:\s*,\s*\w+)*\s*>)?\s*
+
+            # Base class/interfaces (optional)
+            (?::\s*\w+(?:\s*,\s*\w+)*)?\s*
+
+            # Class body (non-greedy capture until closing brace)
+            \{\s*([\s\S]*?)\s*
+
+            # Lookahead for next class or end
+            (?=\}\s*(?:[a-z]+\s+)*class|\}\s*$)
+        """
+
+        pattern = re.compile(class_pattern, re.VERBOSE)
+
         classes = {}
-        for match in re.finditer(class_pattern, content):
+        for match in re.finditer(pattern, content):
             class_name = match.group(3)
             class_content = match.group(0)
             classes[class_name] = class_content
@@ -268,10 +285,36 @@ class CSharpChunkingStrategy(ChunkingStrategy):
             Dictionary mapping method names to method content
         """
         # Regex pattern for C# methods
-        method_pattern = r"(public|private|protected|internal)?\s*(static|virtual|abstract|override|async)?\s*\w+(?:<.+?>)?\s+(\w+)\s*\([\s\S]*?\)\s*(?:where\s+.+?(?=\{))?\s*\{([\s\S]*?)(?=\}\s*(?:public|private|protected|internal)?\s*|\}\s*$|\z)"
-        
+        # method_pattern = r"(public|private|protected|internal)?\s*(static|virtual|abstract|override|async)?\s*\w+(?:<.+?>)?\s+(\w+)\s*\([\s\S]*?\)\s*(?:where\s+.+?(?=\{))?\s*\{([\s\S]*?)(?=\}\s*(?:public|private|protected|internal)?\s*|\}\s*$|\z)"
+        method_pattern = r"""
+            # Access modifiers (optional)
+            (public|private|protected|internal)?\s*
+            
+            # Method modifiers (optional)
+            (static|virtual|abstract|override|async)?\s*
+            
+            # Return type (with optional generic)
+            (\w+)(?:<\s*\w+(?:\s*,\s*\w+)*\s*>)?\s+
+            
+            # Method name
+            (\w+)\s*
+            
+            # Parameters
+            \(([\s\S]*?)\)\s*
+            
+            # Generic constraints (optional)
+            (?:where\s+.+?(?=\s*\{))?\s*
+            
+            # Method body (non-greedy capture until closing brace)
+            \{\s*([\s\S]*?)\s*
+            
+            # Lookahead for next method or end
+            (?=\}\s*(?:[a-z]+\s+)*\w|\}\s*$)
+        """
+        pattern = re.compile(method_pattern, re.VERBOSE)
+
         methods = {}
-        for match in re.finditer(method_pattern, class_content):
+        for match in re.finditer(pattern, class_content):
             method_name = match.group(3)
             method_content = match.group(0)
             methods[method_name] = method_content
