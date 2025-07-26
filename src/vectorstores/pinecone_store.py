@@ -68,7 +68,7 @@ class PineconeStore(BaseStore):
                 # Dimension based on the embedding model (OpenAI ada = 1536)
                 pinecone.create_index(
                     name=self.collection_name,
-                    dimension=LLM_CONSTANTS.EMBEDDING_DIMENSION,  # Dimension of OpenAI embeddings
+                    dimension=LLM_CONSTANTS.EMBEDDING_DIMENSION.value,  # Dimension of OpenAI embeddings
                     metric="cosine"
                 )
             
@@ -253,7 +253,7 @@ class PineconeStore(BaseStore):
                 
                 # Fetch IDs matching the filter
                 query_results = self.index.query(
-                    vector=[0] * 1536,  # Dummy vector for metadata-only query
+                    vector=[0] * LLM_CONSTANTS.EMBEDDING_DIMENSION.value,  # Dummy vector for metadata-only query
                     filter=formatted_filter,
                     top_k=10000,
                     include_metadata=False
