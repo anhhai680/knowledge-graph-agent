@@ -417,8 +417,37 @@ class ReactChunkingStrategy(ChunkingStrategy):
             Dictionary mapping component names to component content
         """
         # Regex pattern for React function components
-        func_component_pattern = r"(?:export\s+)?(?:const|function)\s+(\w+)\s*(?:=\s*(?:\(\s*\{[^}]*\}\s*\)|\([^)]*\))\s*=>|=>\s*\{|\([^)]*\)\s*\{|\{)"
-        
+        #func_component_pattern = r"(?:export\s+)?(?:const|function)\s+(\w+)\s*(?:=\s*(?:\(\s*\{[^}]*\}\s*\)|\([^)]*\))\s*=>|=>\s*\{|\([^)]*\)\s*\{|\{)"
+        func_component_pattern = r"""
+            # Optional 'export' keyword
+            (?:export\s+)?
+            
+            # Component declaration (const or function)
+            (?:const|function)\s+
+            
+            # Component name (captured)
+            (\w+)\s*
+            
+            # Variants of arrow functions and regular functions:
+            (?:
+                # 1. const Name = ({ props }) => { ... }
+                =\s*(?:
+                    \(\s*\{[^}]*\}\s*\)\s*=>  # Destructured props arrow fn
+                    |\([^)]*\)\s*=>           # Regular params arrow fn
+                )
+                
+                # 2. const Name = () => { ... }
+                |=>\s*\{                      # No-params arrow fn
+                
+                # 3. function Name(props) { ... }
+                |\([^)]*\)\s*\{              # Regular function
+                
+                # 4. const Name = { ... } (immediate return)
+                |\{                           # Direct object return
+            )
+        """
+        func_component_pattern = re.compile(func_component_pattern, re.VERBOSE)
+
         # Regex pattern for React class components
         class_component_pattern = r"(?:export\s+)?class\s+(\w+)\s+extends\s+React\.Component"
         
@@ -487,8 +516,31 @@ class ReactChunkingStrategy(ChunkingStrategy):
             Dictionary mapping function names to function content
         """
         # Regex pattern for functions
-        function_pattern = r"(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\([^)]*\)\s*\{|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>"
-        
+        #function_pattern = r"(?:export\s+)?(?:async\s+)?function\s+(\w+)\s*\([^)]*\)\s*\{|(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>"
+        function_pattern = r"""
+            # Optional 'export' keyword
+            (?:export\s+)?
+            
+            # Function variants:
+            (?:
+                # Traditional function declaration
+                (?:async\s+)?function\s+       # Optional async keyword
+                (\w+)                          # Function name (captured)
+                \s*\([^)]*\)\s*                # Parameters
+                \{                             # Opening brace
+                
+                |                              # OR
+                
+                # Arrow function declaration
+                const\s+                       # Const keyword
+                (\w+)                         # Function name (captured)
+                \s*=\s*                        # Assignment
+                (?:async\s+)?                 # Optional async keyword
+                \([^)]*\)\s*=>                # Parameters and arrow
+            )
+        """
+        function_pattern = re.compile(function_pattern, re.VERBOSE)
+
         functions = {}
         
         for match in re.finditer(function_pattern, content):
