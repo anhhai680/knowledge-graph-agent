@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=development
+      - LOG_LEVEL=DEBUG
+      - DATABASE_TYPE=chroma
+    depends_on:
+      - chroma
+    command: python main.py
+
+  chroma:
+    image: chromadb/chroma:latest
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./chroma_db:/data  # Mount to Chroma's default data directory
+    environment:
+      - ALLOW_RESET=true
+      - CHROMA_API_IMPL=rest
+      - CHROMA_SERVER_HOST=chroma
+      - CHROMA_SERVER_HTTP_PORT=8000
+
+volumes:
+  chroma-data:
