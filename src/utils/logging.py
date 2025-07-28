@@ -200,3 +200,16 @@ def get_workflow_logger(workflow_id: str, workflow_type: str) -> WorkflowLogger:
         WorkflowLogger instance
     """
     return WorkflowLogger(workflow_id, workflow_type)
+
+
+def get_logger(name: str):
+    """
+    Get a logger instance for the given name.
+    
+    Args:
+        name: Name of the logger (typically module name)
+        
+    Returns:
+        Loguru logger instance
+    """
+    return logger.bind(module=name)
