@@ -404,10 +404,18 @@ class FileStateManager(StateManager):
                 f.write(serialized_data)
                 
             # Save metadata
-            if metadata is None:
-                metadata = WorkflowStateMetadata(workflow_id=workflow_id)
-            else:
-                metadata.updated_at = time.time()
+            if metadata is None:  
+                metadata = self.get_state_metadata(workflow_id)  
+                if metadata:  
+                    # Existing metadata found, update it  
+                    metadata.updated_at = time.time()  
+                    metadata.state_version += 1  
+                else:  
+                    # No existing metadata, create new  
+                    metadata = WorkflowStateMetadata(workflow_id=workflow_id, state_checksum=None)  
+            else:  
+                # Metadata was passed in, update it  
+                metadata.updated_at = time.time()  
                 metadata.state_version += 1
                 
             metadata_file = self._get_metadata_file_path(workflow_id)
