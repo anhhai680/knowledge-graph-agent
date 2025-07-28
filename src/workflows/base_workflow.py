@@ -190,7 +190,7 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
         self.enable_persistence = enable_persistence
         self.logger = get_logger(self.__class__.__name__)
         
-        # Initialize vector store factory for runtime switching
+        # Initialize vector store factory for switching collections within the same factory at runtime
         self.vector_store_factory = VectorStoreFactory()
         
     @property
