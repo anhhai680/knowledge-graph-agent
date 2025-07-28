@@ -8,7 +8,7 @@ indexing and query workflows, providing type safety and structure validation.
 from typing import Any, Dict, List, Optional, TypedDict, Union
 from enum import Enum
 import time
-
+from src.config.settings import AppSettings
 
 class WorkflowType(str, Enum):
     """Workflow type enumeration."""
@@ -361,9 +361,9 @@ def create_query_state(
             generated_response=None,
             generation_time=None,
             token_usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-            model_name="gpt-4o-mini",
-            temperature=0.7,
-            max_tokens=4000
+            model_name=AppSettings.openai.model,
+            temperature=AppSettings.openai.temperature,
+            max_tokens=AppSettings.openai.max_tokens
         ),
         response_quality_score=None,
         response_confidence=None,
