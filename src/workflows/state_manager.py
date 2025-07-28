@@ -6,16 +6,15 @@ including state validation, serialization, and recovery mechanisms.
 """
 
 import json
-import os
 import pickle
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Type, TypeVar, Union
+from typing import Any, Dict, List, Optional, TypeVar
 from enum import Enum
 from pathlib import Path
 
 from loguru import logger
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from src.config.settings import settings
 from src.utils.logging import get_logger
@@ -559,6 +558,10 @@ class StateManagerFactory:
         if backend is None:
             # Get from settings or default to memory
             backend_str = getattr(settings, 'WORKFLOW_STATE_BACKEND', 'memory')
+            if hasattr(settings, 'WORKFLOW_STATE_BACKEND'):  
+                backend_str = settings.workflow.state_backend  
+            else:  
+                backend_str = 'memory'
             backend = StateBackend(backend_str)
             
         if backend == StateBackend.MEMORY:
