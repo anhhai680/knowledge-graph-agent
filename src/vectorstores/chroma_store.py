@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import chromadb
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
 from langchain.vectorstores.base import VectorStore
 from loguru import logger
 from tenacity import (
@@ -34,7 +34,7 @@ class ChromaStore(BaseStore):
     
     def __init__(
         self,
-        client: Optional[chromadb.api.API] = None,
+        client: Optional[Any] = None,
         collection_name: Optional[str] = None,
         embeddings: Optional[Embeddings] = None,
         persist_directory: Optional[str] = None,

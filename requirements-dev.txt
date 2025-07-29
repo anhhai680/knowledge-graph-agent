@@ -6,6 +6,7 @@ pytest>=7.4.0
 pytest-asyncio>=0.21.1
 pytest-mock>=3.11.1
 pytest-cov>=4.1.0
+pytest-xdist>=3.3.1  # For parallel test execution
 httpx>=0.24.0
 
 # Development
@@ -15,3 +16,5 @@ mypy>=1.5.1
 flake8>=6.1.0
 pydocstyle>=6.3.0
 pre-commit>=3.3.3
+safety>=2.3.0  # Security vulnerability scanner
+bandit>=1.7.5  # Security static analysis
