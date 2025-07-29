@@ -14,10 +14,11 @@ from enum import Enum
 from langchain.schema.runnable import Runnable
 from loguru import logger
 from tenacity import (
-    retry,
+    Retrying,
+    RetryCallState,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type
+    retry_if_exception_type,
 )
 
 from src.utils.logging import get_logger
@@ -85,9 +86,11 @@ class WorkflowMetadata:
         self.end_time = time.time()
         self.status = WorkflowStatus.COMPLETED
         self.progress_percentage = 100.0
-        if self.start_time:
-            self.duration = self.end_time - self.start_time
-        logger.info(f"Workflow {self.id} completed in {self.duration:.2f}s")
+        if self.start_time:  
+            self.duration = self.end_time - self.start_time  
+            logger.info(f"Workflow {self.id} completed in {self.duration:.2f}s")  
+        else:  
+            logger.info(f"Workflow {self.id} completed")
         
     def fail(self, error: Exception, step: Optional[str] = None) -> None:
         """
@@ -109,8 +112,9 @@ class WorkflowMetadata:
             "error_message": str(error),
             "retry_count": self.retry_count
         }
-        self.errors.append(error_info)
-        logger.error(f"Workflow {self.id} failed at step {step}: {error}")
+        step_info = f" at step {step}" if step else ""  
+        self.errors.append(error_info)  
+        logger.error(f"Workflow {self.id} failed{step_info}: {error}")
         
     def add_step(self, step: str) -> None:
         """
@@ -193,6 +197,15 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
         # Initialize vector store factory for switching collections within the same factory at runtime
         self.vector_store_factory = VectorStoreFactory()
         
+        # Initialize retry configuration using instance attributes
+        self.retrier = Retrying(
+            stop=stop_after_attempt(self.max_retries),
+            wait=wait_exponential(min=self.retry_delay, max=60),
+            retry=retry_if_exception_type((ConnectionError, TimeoutError)),
+            before_sleep=self._log_before_retry,
+            reraise=True
+        )
+        
     @property
     def workflow_id(self) -> str:
         """Get workflow ID."""
@@ -207,6 +220,18 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
     def progress(self) -> float:
         """Get current progress percentage."""
         return self.metadata.progress_percentage
+        
+    def _log_before_retry(self, retry_state: RetryCallState) -> None:
+        """
+        Log before retry callback for tenacity.
+        
+        Args:
+            retry_state: The retry state information
+        """
+        self.metadata.increment_retry()
+        step = retry_state.args[0] if retry_state.args else "unknown"
+        exception = retry_state.outcome.exception() if retry_state.outcome else "unknown error"
+        self.logger.warning(f"Retrying step {step} due to: {exception}")
         
     @abstractmethod
     def define_steps(self) -> List[str]:
@@ -284,7 +309,7 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
         for i, step in enumerate(steps):
             try:
                 self.metadata.add_step(step)
-                current_state = self._execute_step_with_retry(step, current_state)
+                current_state = self.retrier(self.execute_step, step, current_state)
                 
                 # Update progress
                 progress = ((i + 1) / total_steps) * 100
@@ -301,29 +326,6 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
         self.metadata.complete()
         return current_state
         
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=1, max=60),
-        retry=retry_if_exception_type((ConnectionError, TimeoutError))
-    )
-    def _execute_step_with_retry(self, step: str, state: StateType) -> StateType:
-        """
-        Execute step with retry logic.
-        
-        Args:
-            step: Step name to execute
-            state: Current workflow state
-            
-        Returns:
-            Updated workflow state
-        """
-        try:
-            return self.execute_step(step, state)
-        except Exception as e:
-            self.metadata.increment_retry()
-            self.logger.warning(f"Retrying step {step} due to: {e}")
-            raise
-            
     def _handle_step_error(
         self,
         step: str,
