@@ -156,7 +156,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 return False
                 
             if not state.get("repositories"):
-                self.logger.error("Missing repositories in state")
+                self.logger.error("Repositories list is empty. No repositories to process.")
                 return False
                 
             if state["workflow_type"] != WorkflowType.INDEXING:
