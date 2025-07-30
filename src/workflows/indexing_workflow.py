@@ -5,7 +5,6 @@ This module implements a complete stateful indexing workflow using LangGraph
 for processing multiple GitHub repositories, document chunking, and vector storage.
 """
 
-import asyncio
 import json
 import os
 import time
@@ -13,18 +12,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
 from langchain.schema import Document
-from loguru import logger
 
 from src.config.settings import settings
 from src.loaders.github_loader import GitHubLoader
 from src.processors.document_processor import DocumentProcessor
 from src.llm.embedding_factory import EmbeddingFactory
 from src.vectorstores.store_factory import VectorStoreFactory
-from src.workflows.base_workflow import BaseWorkflow, WorkflowStep
+from src.workflows.base_workflow import BaseWorkflow
 from src.workflows.workflow_states import (
     IndexingState,
-    RepositoryState,
-    FileProcessingState,
     ProcessingStatus,
     WorkflowType,
     create_indexing_state,
