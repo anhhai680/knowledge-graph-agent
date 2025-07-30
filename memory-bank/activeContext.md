@@ -39,7 +39,7 @@ Based on project exploration, the system appears to have:
 1. **Complete Memory Bank**: Finish creating remaining core files:
    - `progress.md`: Current implementation status and what's working
    - `activeContext.md`: This file - current focus and decisions
-   - `tasks/_index.md`: Task management system initialization
+   - `tasks/task-list.md`: Task management system initialization
 
 2. **Project Assessment**: Analyze current codebase to understand:
    - Which components are fully implemented
