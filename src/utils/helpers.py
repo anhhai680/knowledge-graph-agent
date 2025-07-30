@@ -18,7 +18,7 @@ from loguru import logger
 def generate_unique_id() -> str:
     """
     Generate a unique identifier.
-    
+
     Returns:
         Unique identifier string
     """
@@ -28,7 +28,7 @@ def generate_unique_id() -> str:
 def get_timestamp() -> str:
     """
     Get a formatted timestamp for the current time.
-    
+
     Returns:
         Formatted timestamp string
     """
@@ -38,7 +38,7 @@ def get_timestamp() -> str:
 def create_directory_if_not_exists(directory_path: str) -> None:
     """
     Create a directory if it doesn't exist.
-    
+
     Args:
         directory_path: Path to the directory to create
     """
@@ -50,19 +50,19 @@ def create_directory_if_not_exists(directory_path: str) -> None:
 def load_json_file(file_path: str) -> Dict[str, Any]:
     """
     Load a JSON file.
-    
+
     Args:
         file_path: Path to the JSON file
-        
+
     Returns:
         Dictionary with the JSON contents
-        
+
     Raises:
         FileNotFoundError: If the file doesn't exist
         json.JSONDecodeError: If the file isn't valid JSON
     """
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
         logger.error(f"File not found: {file_path}")
@@ -75,12 +75,12 @@ def load_json_file(file_path: str) -> Dict[str, Any]:
 def save_json_file(data: Dict[str, Any], file_path: str) -> None:
     """
     Save data to a JSON file.
-    
+
     Args:
         data: Data to save
         file_path: Path to the JSON file
     """
-    with open(file_path, 'w') as f:
+    with open(file_path, "w") as f:
         json.dump(data, f, indent=2)
     logger.debug(f"Saved JSON file: {file_path}")
 
@@ -88,11 +88,11 @@ def save_json_file(data: Dict[str, Any], file_path: str) -> None:
 def check_service_health(url: str, timeout: int = 5) -> Tuple[bool, str]:
     """
     Check if a service is healthy.
-    
+
     Args:
         url: URL to check
         timeout: Timeout in seconds
-        
+
     Returns:
         Tuple of (is_healthy, message)
     """
@@ -111,24 +111,24 @@ def check_service_health(url: str, timeout: int = 5) -> Tuple[bool, str]:
 def chunk_list(items: List[Any], chunk_size: int) -> List[List[Any]]:
     """
     Split a list into chunks of specified size.
-    
+
     Args:
         items: List to split
         chunk_size: Size of each chunk
-        
+
     Returns:
         List of chunks
     """
-    return [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
+    return [items[i : i + chunk_size] for i in range(0, len(items), chunk_size)]
 
 
 def format_document_for_prompt(doc: Document) -> str:
     """
     Format a document for inclusion in a prompt.
-    
+
     Args:
         doc: LangChain Document
-        
+
     Returns:
         Formatted document string
     """
@@ -137,14 +137,14 @@ def format_document_for_prompt(doc: Document) -> str:
     file_path = doc.metadata.get("file_path", "Unknown File")
     language = doc.metadata.get("language", "")
     chunk_type = doc.metadata.get("chunk_type", "")
-    
+
     # Format metadata header
     header = f"Source: {repo} - {file_path}"
     if language:
         header += f" (Language: {language})"
     if chunk_type:
         header += f" (Type: {chunk_type})"
-    
+
     # Format content with header
     return f"{header}\n{'-' * 80}\n{doc.page_content}\n{'-' * 80}\n"
 
@@ -152,14 +152,14 @@ def format_document_for_prompt(doc: Document) -> str:
 def truncate_text(text: str, max_length: int = 100) -> str:
     """
     Truncate text to a maximum length.
-    
+
     Args:
         text: Text to truncate
         max_length: Maximum length
-        
+
     Returns:
         Truncated text
     """
     if len(text) <= max_length:
         return text
-    return text[:max_length - 3] + "..."
+    return text[: max_length - 3] + "..."

@@ -30,27 +30,27 @@ def main():
     """Main validation function."""
     print("🚀 Validating CI/CD Setup for Knowledge Graph Agent")
     print("=" * 60)
-    
+
     # Check if we're in the right directory
     if not Path("pyproject.toml").exists():
         print("❌ Please run this script from the project root directory")
         return 1
-    
+
     success_count = 0
     total_checks = 0
-    
+
     # Configuration file checks
     config_files = [
         "pyproject.toml",
-        "pytest.ini", 
+        "pytest.ini",
         "setup.cfg",
         ".pre-commit-config.yaml",
         "Makefile",
         ".github/workflows/ci.yml",
         ".github/workflows/security.yml",
-        ".github/workflows/release.yml"
+        ".github/workflows/release.yml",
     ]
-    
+
     print("\n📁 Checking configuration files...")
     for file_path in config_files:
         total_checks += 1
@@ -59,10 +59,10 @@ def main():
             success_count += 1
         else:
             print(f"❌ {file_path} - MISSING")
-    
+
     # Tool availability checks
     print("\n🛠 Checking development tools...")
-    
+
     tools = [
         (["python", "--version"], "Python availability"),
         (["black", "--version"], "Black code formatter"),
@@ -73,28 +73,29 @@ def main():
         (["safety", "--version"], "Safety security scanner"),
         (["bandit", "--version"], "Bandit security linter"),
     ]
-    
+
     for cmd, description in tools:
         total_checks += 1
         if run_command(cmd, description):
             success_count += 1
-    
+
     # GitHub Actions workflow validation
     print("\n⚡ Validating GitHub Actions workflows...")
-    
+
     workflow_files = [
         ".github/workflows/ci.yml",
-        ".github/workflows/security.yml", 
-        ".github/workflows/release.yml"
+        ".github/workflows/security.yml",
+        ".github/workflows/release.yml",
     ]
-    
+
     for workflow in workflow_files:
         total_checks += 1
         if Path(workflow).exists():
             # Basic YAML validation
             try:
                 import yaml
-                with open(workflow, 'r') as f:
+
+                with open(workflow, "r") as f:
                     yaml.safe_load(f)
                 print(f"✅ {workflow} - VALID YAML")
                 success_count += 1
@@ -105,11 +106,11 @@ def main():
                 print(f"❌ {workflow} - INVALID YAML: {e}")
         else:
             print(f"❌ {workflow} - MISSING")
-    
+
     # Summary
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print(f"📊 Validation Summary: {success_count}/{total_checks} checks passed")
-    
+
     if success_count == total_checks:
         print("🎉 CI/CD setup is complete and ready!")
         print("\n🚀 Next steps:")

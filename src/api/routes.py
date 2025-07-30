@@ -7,6 +7,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
 @app.get("/")
 def index():
     return {"message": "Welcome to the Knowledge Graph Agent API!"}

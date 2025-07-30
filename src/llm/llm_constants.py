@@ -1,5 +1,5 @@
-
 from enum import Enum
+
 
 class LLM_CONSTANTS(Enum):
     EMBEDDING_DIMENSION = 1536
