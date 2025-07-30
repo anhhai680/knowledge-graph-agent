@@ -65,7 +65,7 @@ flowchart TD
 7. `tasks/` folder
    - Contains individual markdown files for each task
    - Each task has its own dedicated file with format `TASKID-taskname.md`
-   - Includes task index file (`task-list.md`) listing all tasks with their statuses
+-   - Includes task index file (`task-list.md`) listing all tasks with their statuses
    - Preserves complete thought process and history for each task
 
 ### Additional Context
