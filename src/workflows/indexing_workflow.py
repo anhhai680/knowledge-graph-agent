@@ -98,7 +98,11 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.app_settings_path = app_settings_path
         self.target_repositories = repositories
         self.vector_store_type = vector_store_type or settings.database_type.value
-        self.collection_name = collection_name or settings.chroma.collection_name
+        self.collection_name = collection_name or (
+            settings.pinecone.collection_name
+            if self.vector_store_type == "pinecone" and settings.pinecone
+            else settings.chroma.collection_name
+        )
         self.batch_size = batch_size
         self.max_workers = max_workers
         
