@@ -158,10 +158,10 @@
 
 ### **Day 6-7: LangGraph Stateful Workflows & Base Agent Architecture**
 
-#### Task 2.1: LangGraph Base Workflow Infrastructure (12 hours) ⭕
-- [ ] Create `src/workflows/base_workflow.py` implementing LangChain Runnable interface for LangGraph integration
-- [ ] Create `src/workflows/state_manager.py` for workflow state persistence and management
-- [ ] Implement workflow state schemas using TypedDict for indexing and query workflows:
+#### Task 2.1: LangGraph Base Workflow Infrastructure (12 hours) ✅
+- [x] Create `src/workflows/base_workflow.py` implementing LangChain Runnable interface for LangGraph integration
+- [x] Create `src/workflows/state_manager.py` for workflow state persistence and management
+- [x] Implement workflow state schemas using TypedDict for indexing and query workflows:
   ```python
   class IndexingState(TypedDict):
       repositories: List[str]
@@ -172,19 +172,20 @@
       embeddings_generated: int
       status: str
   ```
-- [ ] Error handling and retry logic infrastructure with exponential backoff
-- [ ] Progress tracking and structured logging integration
-- [ ] Workflow metadata tracking (ID, status, executed steps, duration)
-- [ ] Integration with vector store factory for runtime switching context
-- [ ] Unit tests for workflow logic
-- [ ] Integration tests for end-to-end workflow execution
+- [x] Error handling and retry logic infrastructure with exponential backoff
+- [x] Progress tracking and structured logging integration
+- [x] Workflow metadata tracking (ID, status, executed steps, duration)
+- [x] Integration with vector store factory for runtime switching context
+- [x] Unit tests for workflow logic
+- [x] Integration tests for end-to-end workflow execution
 
 **Deliverables:**
-- src/workflows/base_workflow.py with LangChain Runnable interface
-- src/workflows/state_manager.py with state persistence
-- State management and persistence mechanisms
-- Comprehensive error handling and retry logic
-- Unit and integration tests
+- src/workflows/base_workflow.py with LangChain Runnable interface ✅
+- src/workflows/state_manager.py with state persistence ✅
+- src/workflows/workflow_states.py with TypedDict schemas ✅
+- State management and persistence mechanisms ✅
+- Comprehensive error handling and retry logic ✅
+- Unit and integration tests ✅
 
 #### Task 2.2: LangGraph Indexing Workflow Implementation (14 hours) ⭕
 - [ ] Create `src/workflows/indexing_workflow.py` with complete stateful indexing workflow
