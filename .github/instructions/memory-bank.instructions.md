@@ -65,7 +65,7 @@ flowchart TD
 7. `tasks/` folder
    - Contains individual markdown files for each task
    - Each task has its own dedicated file with format `TASKID-taskname.md`
-   - Includes task index file (`_index.md`) listing all tasks with their statuses
+-   - Includes task index file (`task-list.md`) listing all tasks with their statuses
    - Preserves complete thought process and history for each task
 
 ### Additional Context
@@ -108,11 +108,11 @@ flowchart TD
     Start[New Task] --> NewFile[Create Task File in tasks/ folder]
     NewFile --> Think[Document Thought Process]
     Think --> Plan[Create Implementation Plan]
-    Plan --> Index[Update _index.md]
+    Plan --> Index[Update task-list.md]
     
     Execute[Execute Task] --> Update[Add Progress Log Entry]
     Update --> StatusChange[Update Task Status]
-    StatusChange --> IndexUpdate[Update _index.md]
+    StatusChange --> IndexUpdate[Update task-list.md]
     IndexUpdate --> Complete{Completed?}
     Complete -->|Yes| Archive[Mark as Completed]
     Complete -->|No| Execute
@@ -142,7 +142,7 @@ flowchart TD
     Start --> Process
 ```
 
-Note: When triggered by **update memory bank**, I MUST review every memory bank file, even if some don't require updates. Focus particularly on activeContext.md, progress.md, and the tasks/ folder (including _index.md) as they track current state.
+Note: When triggered by **update memory bank**, I MUST review every memory bank file, even if some don't require updates. Focus particularly on activeContext.md, progress.md, and the tasks/ folder (including task-list.md) as they track current state.
 
 ## Project Intelligence (instructions)
 
@@ -182,12 +182,12 @@ The format is flexible - focus on capturing valuable insights that help me work 
 
 The `tasks/` folder contains individual markdown files for each task, along with an index file:
 
-- `tasks/_index.md` - Master list of all tasks with IDs, names, and current statuses
+- `tasks/task-list.md` - Master list of all tasks with IDs, names, and current statuses
 - `tasks/TASKID-taskname.md` - Individual files for each task (e.g., `TASK001-implement-login.md`)
 
 ### Task Index Structure
 
-The `_index.md` file maintains a structured record of all tasks sorted by status:
+The `task-list.md` file maintains a structured record of all tasks sorted by status:
 
 ```markdown
 # Tasks Index
@@ -258,7 +258,7 @@ Each task file follows this format:
 1. Update the overall task status and completion percentage
 2. Update the status of relevant subtasks with the current date
 3. Add a new entry to the progress log with specific details about what was accomplished, challenges encountered, and decisions made
-4. Update the task status in the _index.md file to reflect current progress
+4. Update the task status in the task-list.md file to reflect current progress
 
 These detailed progress updates ensure that after memory resets, I can quickly understand the exact state of each task and continue work without losing context.
 
@@ -269,7 +269,7 @@ When you request **add task** or use the command **create task**, I will:
 2. Document our thought process about the approach
 3. Develop an implementation plan
 4. Set an initial status
-5. Update the _index.md file to include the new task
+5. Update the task-list.md file to include the new task
 
 For existing tasks, the command **update task [ID]** will prompt me to:
 1. Open the specific task file 
