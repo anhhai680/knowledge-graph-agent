@@ -48,7 +48,7 @@ The memory bank approach should:
 | 1.6 | Create activeContext.md with current focus | Complete | July 30 | Established current session goals and development context |
 | 1.7 | Analyze implementation status for progress.md | Complete | July 30 | Discovered indexing workflow complete, query workflow missing |
 | 1.8 | Create progress.md with working components | Complete | July 30 | Documented 60% MVP completion with clear next steps |
-| 1.9 | Initialize task management system | Complete | July 30 | Created tasks/_index.md with current project state |
+| 1.9 | Initialize task management system | Complete | July 30 | Created tasks/task-list.md with current project state |
 | 1.10 | Create TASK001 documentation | Complete | July 30 | Documented complete memory bank initialization process |
 | 1.11 | Final validation and memory bank completion | Complete | July 30 | All memory bank files created and validated
 
