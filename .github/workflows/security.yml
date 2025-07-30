@@ -5,12 +5,12 @@ on:
     # Run security scan daily at 2 AM UTC
     - cron: '0 2 * * *'
   push:
-    branches: [ dev ]
+    branches: [ main ]
     paths:
       - 'requirements*.txt'
       - '.github/workflows/security.yml'
   pull_request:
-    branches: [ dev ]
+    branches: [ main ]
     paths:
       - 'requirements*.txt'
 
