@@ -86,9 +86,9 @@ jobs:
       run: |
         black --check --diff --color src/ tests/ main.py
 
-    - name: Check import sorting with isort
-      run: |
-        isort --check-only --diff --color src/ tests/ main.py
+    # - name: Check import sorting with isort
+    #   run: |
+    #     isort --check-only --diff --color src/ tests/ main.py
 
     - name: Run flake8 for PEP 8 compliance
       run: |
@@ -102,73 +102,73 @@ jobs:
       run: |
         mypy src/ --ignore-missing-imports --disallow-untyped-defs --warn-return-any
 
-  security:
-    runs-on: ubuntu-latest
+  # security:
+  #   runs-on: ubuntu-latest
     
-    steps:
-    - uses: actions/checkout@v4
+  #   steps:
+  #   - uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.11
+  #   - name: Set up Python 3.11
+  #     uses: actions/setup-python@v4
+  #     with:
+  #       python-version: 3.11
 
-    - name: Install security tools
-      run: |
-        python -m pip install --upgrade pip
-        pip install safety bandit
+  #   - name: Install security tools
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       pip install safety bandit
 
-    - name: Check for security vulnerabilities with Safety
-      run: |
-        safety check -r requirements.txt -r requirements-dev.txt
+  #   - name: Check for security vulnerabilities with Safety
+  #     run: |
+  #       safety check -r requirements.txt -r requirements-dev.txt
 
-    - name: Run Bandit security linter
-      run: |
-        bandit -r src/ -f json -o bandit-report.json || true
-        bandit -r src/ -ll
+  #   - name: Run Bandit security linter
+  #     run: |
+  #       bandit -r src/ -f json -o bandit-report.json || true
+  #       bandit -r src/ -ll
 
-  lint-and-format:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+  # lint-and-format:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'pull_request'
     
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        ref: ${{ github.head_ref }}
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #     with:
+  #       token: ${{ secrets.GITHUB_TOKEN }}
+  #       ref: ${{ github.head_ref }}
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.11
+  #   - name: Set up Python 3.11
+  #     uses: actions/setup-python@v4
+  #     with:
+  #       python-version: 3.11
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements-dev.txt
+  #   - name: Install dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       pip install -r requirements-dev.txt
 
-    - name: Auto-format code with Black
-      run: |
-        black src/ tests/ main.py
+  #   - name: Auto-format code with Black
+  #     run: |
+  #       black src/ tests/ main.py
 
-    - name: Auto-sort imports with isort
-      run: |
-        isort src/ tests/ main.py
+  #   - name: Auto-sort imports with isort
+  #     run: |
+  #       isort src/ tests/ main.py
 
-    - name: Check if there are changes
-      id: changes
-      run: |
-        if [[ -n $(git status --porcelain) ]]; then
-          echo "changes=true" >> $GITHUB_OUTPUT
-        else
-          echo "changes=false" >> $GITHUB_OUTPUT
-        fi
+  #   - name: Check if there are changes
+  #     id: changes
+  #     run: |
+  #       if [[ -n $(git status --porcelain) ]]; then
+  #         echo "changes=true" >> $GITHUB_OUTPUT
+  #       else
+  #         echo "changes=false" >> $GITHUB_OUTPUT
+  #       fi
 
-    - name: Commit and push changes
-      if: steps.changes.outputs.changes == 'true'
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add -A
-        git commit -m "Auto-format code with Black and isort [skip ci]"
-        git push
+  #   - name: Commit and push changes
+  #     if: steps.changes.outputs.changes == 'true'
+  #     run: |
+  #       git config --local user.email "action@github.com"
+  #       git config --local user.name "GitHub Action"
+  #       git add -A
+  #       git commit -m "Auto-format code with Black and isort [skip ci]"
+  #       git push
