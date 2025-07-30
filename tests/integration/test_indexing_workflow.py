@@ -316,13 +316,13 @@ python hello.py
             mock_vector_store.add_documents.assert_called_once()
             
             # Log performance information
-            print(f"\\nIntegration Test Performance:")
-            print(f"Execution time: {execution_time:.2f}s")
-            print(f"Files processed: {final_state['processed_files']}")
-            print(f"Chunks created: {final_state['total_chunks']}")
-            print(f"Embeddings generated: {final_state['successful_embeddings']}")
-            print(f"Processing rate: {final_state.get('documents_per_second', 0):.2f} docs/sec")
-            print(f"Embedding rate: {final_state.get('embeddings_per_second', 0):.2f} embeddings/sec")
+            logging.info("\\nIntegration Test Performance:")
+            logging.info(f"Execution time: {execution_time:.2f}s")
+            logging.info(f"Files processed: {final_state['processed_files']}")
+            logging.info(f"Chunks created: {final_state['total_chunks']}")
+            logging.info(f"Embeddings generated: {final_state['successful_embeddings']}")
+            logging.info(f"Processing rate: {final_state.get('documents_per_second', 0):.2f} docs/sec")
+            logging.info(f"Embedding rate: {final_state.get('embeddings_per_second', 0):.2f} embeddings/sec")
     
     def test_workflow_error_recovery(self):
         """Test workflow error recovery mechanisms."""
