@@ -126,7 +126,6 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             IndexingWorkflowSteps.VALIDATE_REPOS,
             IndexingWorkflowSteps.LOAD_FILES_FROM_GITHUB,
             IndexingWorkflowSteps.PROCESS_DOCUMENTS,
-            IndexingWorkflowSteps.LANGUAGE_AWARE_CHUNKING,
             IndexingWorkflowSteps.EXTRACT_METADATA,
             IndexingWorkflowSteps.GENERATE_EMBEDDINGS,
             IndexingWorkflowSteps.STORE_IN_VECTOR_DB,
@@ -197,8 +196,6 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 state = self._load_files_from_github(state)
             elif step == IndexingWorkflowSteps.PROCESS_DOCUMENTS:
                 state = self._process_documents(state)
-            elif step == IndexingWorkflowSteps.LANGUAGE_AWARE_CHUNKING:
-                state = self._language_aware_chunking(state)
             elif step == IndexingWorkflowSteps.EXTRACT_METADATA:
                 state = self._extract_metadata(state)
             elif step == IndexingWorkflowSteps.GENERATE_EMBEDDINGS:
@@ -254,7 +251,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         # Determine error handling strategy based on step
         if step in [IndexingWorkflowSteps.LOAD_FILES_FROM_GITHUB]:
             return self._handle_file_errors(state, error)
-        elif step in [IndexingWorkflowSteps.PROCESS_DOCUMENTS, IndexingWorkflowSteps.LANGUAGE_AWARE_CHUNKING]:
+        elif step in [IndexingWorkflowSteps.PROCESS_DOCUMENTS]:
             return self._handle_processing_errors(state, error)
         elif step == IndexingWorkflowSteps.GENERATE_EMBEDDINGS:
             return self._handle_embedding_errors(state, error)
@@ -498,27 +495,19 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         if processing_stats["processing_errors"] > 0:
             self.logger.warning(f"Processing errors occurred for {processing_stats['processing_errors']} documents")
         
-        return update_workflow_progress(state, 50.0, IndexingWorkflowSteps.PROCESS_DOCUMENTS)
-    
-    def _language_aware_chunking(self, state: IndexingState) -> IndexingState:
-        """Apply language-aware chunking (already done in _process_documents)."""
-        self.logger.info("Language-aware chunking completed in document processing step")
-        
-        # This step is conceptually separate but implemented as part of document processing
-        # for efficiency. We validate that chunking was successful.
-        
-        processed_documents = state["metadata"].get("processed_documents", [])
+        # Validate language-aware chunking was successful
         if not processed_documents:
-            raise ValueError("No processed documents available after chunking")
+            raise ValueError("No processed documents available after language-aware chunking")
         
-        # Validate chunk metadata
+        # Validate chunk metadata quality
         chunks_with_metadata = 0
         for doc in processed_documents:
             if doc.metadata.get("chunk_type") or doc.metadata.get("language"):
                 chunks_with_metadata += 1
         
         self.logger.info(f"Language-aware chunking produced {len(processed_documents)} chunks, {chunks_with_metadata} with metadata")
-        return update_workflow_progress(state, 55.0, IndexingWorkflowSteps.LANGUAGE_AWARE_CHUNKING)
+        
+        return update_workflow_progress(state, 50.0, IndexingWorkflowSteps.PROCESS_DOCUMENTS)
     
     def _extract_metadata(self, state: IndexingState) -> IndexingState:
         """Extract and validate metadata from processed chunks."""
@@ -565,7 +554,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.logger.info(f"Extracted metadata from {metadata_stats['chunks_with_metadata']}/{metadata_stats['total_chunks']} chunks")
         self.logger.info(f"Found {len(metadata_stats['repositories'])} repositories, {len(metadata_stats['languages'])} languages")
         
-        return update_workflow_progress(state, 60.0, IndexingWorkflowSteps.EXTRACT_METADATA)
+        return update_workflow_progress(state, 55.0, IndexingWorkflowSteps.EXTRACT_METADATA)
     
     def _generate_embeddings(self, state: IndexingState) -> IndexingState:
         """Generate embeddings for processed documents."""
@@ -623,7 +612,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 state = add_workflow_error(state, error_msg, IndexingWorkflowSteps.GENERATE_EMBEDDINGS)
             
             # Update progress
-            progress = 60.0 + (i + len(batch)) / len(processed_documents) * 20.0
+            progress = 55.0 + (i + len(batch)) / len(processed_documents) * 25.0
             state = update_workflow_progress(state, progress, IndexingWorkflowSteps.GENERATE_EMBEDDINGS)
         
         # Store embedded documents and statistics
