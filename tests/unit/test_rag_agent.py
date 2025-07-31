@@ -6,14 +6,14 @@ with query workflows and prompt manager.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 from langchain.schema import Document
 
 from src.agents.rag_agent import RAGAgent
 from src.utils.prompt_manager import PromptManager
 from src.workflows.query_workflow import QueryWorkflow
-from src.workflows.workflow_states import QueryIntent, QueryState
+from src.workflows.workflow_states import QueryIntent
 
 
 @pytest.fixture
@@ -272,7 +272,7 @@ class TestRAGAgent:
         assert agent.language_filter == ["typescript"]
 
     
-@pytest.mark.asyncio
+    @pytest.mark.asyncio
     async def test_query_with_context(self, mock_prompt_manager):
         """Test context-specific querying."""
         agent = RAGAgent(prompt_manager=mock_prompt_manager)
