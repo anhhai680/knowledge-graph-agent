@@ -712,8 +712,8 @@ Answer:"""
             elif step == QueryWorkflowSteps.RETURN_SUCCESS:
                 # Finalize successful response
                 state["status"] = ProcessingStatus.COMPLETED
-                start_time_val = state.get("start_time")
-                state["total_query_time"] = time.time() - start_time_val if start_time_val else None
+                start_time = state.get("start_time")
+                state["total_query_time"] = time.time() - start_time if start_time else None
                 self.logger.info(f"Query completed successfully with quality score: {state['response_quality_score']}")
 
             # Error handling steps
