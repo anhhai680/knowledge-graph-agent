@@ -787,7 +787,7 @@ Answer:"""
                     documents = self._perform_vector_search(
                         state["processed_query"],
                         SearchStrategy.HYBRID,
-                        min(self.max_k, state["document_retrieval"]["retrieved_documents"] * 2),
+                        min(self.max_k, len(state["document_retrieval"]["retrieved_documents"]) * 2),
                         {}
                     )
                     
