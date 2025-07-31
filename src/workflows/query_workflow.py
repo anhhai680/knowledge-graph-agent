@@ -885,7 +885,7 @@ Answer:"""
             retrieval_config={"k": k or self.default_k}
         )
         
-        state["start_time"] = time.time()
+        state['start_time'] = time.time()
 
         # Define workflow steps
         workflow_steps = [
@@ -909,7 +909,7 @@ Answer:"""
         retry_count = 0
 
         try:
-            while current_step_index < len(workflow_steps) and state["status"] != ProcessingStatus.COMPLETED:
+            while current_step_index < len(workflow_steps) and state['status'] != ProcessingStatus.COMPLETED:
                 step = workflow_steps[current_step_index]
                 
                 # Update progress
@@ -921,15 +921,15 @@ Answer:"""
                     state = await self._process_query_step(state, step)
                     
                     # Check if step redirected workflow
-                    if "current_step" in state and state["current_step"] != step:
+                    if 'current_step' in state and state['current_step'] != step:
                         # Find the redirected step in workflow
                         try:
-                            redirect_index = workflow_steps.index(state["current_step"])
+                            redirect_index = workflow_steps.index(state['current_step'])
                             current_step_index = redirect_index
                         except ValueError:
                             # Step not in main workflow, handle specially
-                            state = await self._process_query_step(state, state["current_step"])
-                            del state["current_step"]
+                            state = await self._process_query_step(state, state['current_step'])
+                            del state['current_step']
                         continue
                     
                     current_step_index += 1
@@ -946,11 +946,11 @@ Answer:"""
                         raise
 
             # Ensure workflow is completed
-            if state["status"] != ProcessingStatus.COMPLETED:
-                state.status = ProcessingStatus.COMPLETED
-                state["total_query_time"] = time.time() - state["start_time"]
+            if state['status'] != ProcessingStatus.COMPLETED:
+                state['status'] = ProcessingStatus.COMPLETED
+                state['total_query_time'] = time.time() - state['start_time']
 
-            self.logger.info(f"Query workflow completed in {state.total_query_time:.2f}s")
+            self.logger.info(f"Query workflow completed in {state['total_query_time']:.2f}s")
             return state
 
         except Exception as e:
