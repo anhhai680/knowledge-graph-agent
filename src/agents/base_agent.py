@@ -9,12 +9,9 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
 from langchain.schema.runnable import Runnable, RunnableConfig
-from langchain.schema import Document
 from loguru import logger
 
 from src.workflows.base_workflow import BaseWorkflow
-from src.workflows.workflow_states import WorkflowState
-from src.config.settings import settings
 
 
 class BaseAgent(Runnable, ABC):
@@ -75,52 +72,11 @@ class BaseAgent(Runnable, ABC):
         """
         pass
 
-    def invoke(
-        self, 
-        input: Union[str, Dict[str, Any]], 
-        config: Optional[RunnableConfig] = None
-    ) -> Dict[str, Any]:
-        """
-        Invoke the agent with input data (synchronous).
-
-        Args:
-            input: Input data to process
-            config: Optional configuration
-
-        Returns:
-            Agent response
-        """
-        try:
-            # Validate input
-            if not self._validate_input(input):
-                return {
-                    "success": False,
-                    "error": "Invalid input format",
-                    "agent": self.agent_name,
-                }
-
-            # Process synchronously
-            import asyncio
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(self._process_input(input, config))
-                return result
-            finally:
-                loop.close()
-
-        except Exception as e:
-            self.logger.error(f"Error in agent invoke: {str(e)}")
-            return {
-                "success": False,
-                "error": str(e),
-                "agent": self.agent_name,
-            }
-
     async def ainvoke(
         self, 
         input: Union[str, Dict[str, Any]], 
-        config: Optional[RunnableConfig] = None
+        config: Optional[RunnableConfig] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         Invoke the agent with input data (asynchronous).
