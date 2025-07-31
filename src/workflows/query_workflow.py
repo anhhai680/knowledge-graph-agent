@@ -826,7 +826,7 @@ Answer:"""
                 except Exception as e:
                     self.logger.warning(f"Retry with different context failed: {str(e)}")
                     # Accept current response
-                    pass
+                    add_workflow_error(state, f"Retry with different context failed: {str(e)}", QueryWorkflowSteps.RETRY_WITH_DIFFERENT_CONTEXT)
                 
                 # Complete regardless of retry outcome
                 state["status"] = ProcessingStatus.COMPLETED
