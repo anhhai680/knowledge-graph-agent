@@ -4,7 +4,6 @@ Unit tests for workflow infrastructure.
 Tests for base workflow, state manager, and workflow state schemas.
 """
 
-import json
 import tempfile
 import time
 import uuid
@@ -17,23 +16,17 @@ import pytest
 from src.workflows.base_workflow import (
     BaseWorkflow,
     WorkflowStatus,
-    WorkflowStep,
     WorkflowMetadata,
 )
 from src.workflows.state_manager import (
-    StateManager,
     MemoryStateManager,
     FileStateManager,
     StateBackend,
-    StateSerializationFormat,
-    WorkflowStateMetadata,
     StateManagerFactory,
 )
 from src.workflows.workflow_states import (
     WorkflowType,
     ProcessingStatus,
-    IndexingState,
-    QueryState,
     create_indexing_state,
     create_query_state,
     update_workflow_progress,
