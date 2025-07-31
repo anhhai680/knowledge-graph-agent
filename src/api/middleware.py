@@ -18,7 +18,7 @@ from collections import defaultdict, deque
 
 from fastapi import Request, Response, HTTPException, status
 from fastapi.security import HTTPBearer
-from fastapi.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import JSONResponse
