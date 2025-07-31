@@ -625,7 +625,7 @@ Answer:"""
                     }
                     for doc in documents
                 ]
-                state["document_retrieval"]["retrieved_documents"] = len(documents)
+                state["document_retrieval"]["retrieved_documents"] = state["context_documents"]
 
             elif step == QueryWorkflowSteps.PREPARE_LLM_CONTEXT:
                 # Prepare context for LLM
