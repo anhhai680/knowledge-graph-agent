@@ -5,18 +5,15 @@ This module implements all MVP endpoints for repository indexing, query processi
 workflow management, and system monitoring with full LangGraph workflow integration.
 """
 
-import asyncio
 import json
 import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query, Security
-from fastapi.responses import JSONResponse
 
 from src.api.models import (
     IndexRepositoryRequest,
-    BatchIndexRequest,
     QueryRequest,
     QueryResponse,
     IndexingResponse,
@@ -26,7 +23,6 @@ from src.api.models import (
     HealthResponse,
     WorkflowState,
     WorkflowStatus,
-    ErrorResponse,
     RepositoryInfo,
     DocumentResult,
     DocumentMetadata,
@@ -38,7 +34,6 @@ from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
-from src.workflows.workflow_states import IndexingState, QueryState
 
 logger = get_logger(__name__)
 
