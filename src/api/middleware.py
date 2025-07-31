@@ -12,13 +12,12 @@ This module implements comprehensive security and monitoring features including:
 
 import time
 import uuid
-import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Callable, Any
+from typing import Dict, Optional, Any
 from collections import defaultdict, deque
 
 from fastapi import Request, Response, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
 from fastapi.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import RequestResponseEndpoint
