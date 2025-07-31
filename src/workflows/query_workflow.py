@@ -913,7 +913,7 @@ Answer:"""
         retry_count = 0
 
         try:
-            while current_step_index < len(workflow_steps) and state.status != ProcessingStatus.COMPLETED:
+            while current_step_index < len(workflow_steps) and state["status"] != ProcessingStatus.COMPLETED:
                 step = workflow_steps[current_step_index]
                 
                 # Update progress
