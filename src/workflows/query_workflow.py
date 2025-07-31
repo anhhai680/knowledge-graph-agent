@@ -950,7 +950,7 @@ Answer:"""
                         raise
 
             # Ensure workflow is completed
-            if state.status != ProcessingStatus.COMPLETED:
+            if state["status"] != ProcessingStatus.COMPLETED:
                 state.status = ProcessingStatus.COMPLETED
                 state.total_query_time = time.time() - state.start_time
 
