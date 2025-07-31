@@ -952,7 +952,7 @@ Answer:"""
             # Ensure workflow is completed
             if state["status"] != ProcessingStatus.COMPLETED:
                 state.status = ProcessingStatus.COMPLETED
-                state.total_query_time = time.time() - state.start_time
+                state["total_query_time"] = time.time() - state["start_time"]
 
             self.logger.info(f"Query workflow completed in {state.total_query_time:.2f}s")
             return state
