@@ -772,7 +772,7 @@ Answer:"""
                 self.logger.info("Response quality below threshold, attempting improvement")
                 
                 # Try with different context or expanded search
-                if state["document_retrieval"]["retrieved_documents"] < self.max_k:
+                if len(state["document_retrieval"]["retrieved_documents"]) < self.max_k:
                     state["current_step"] = QueryWorkflowSteps.RETRY_WITH_DIFFERENT_CONTEXT
                 else:
                     # Accept current response if we can't improve
