@@ -124,7 +124,7 @@ class QueryWorkflow(BaseWorkflow):
         """Get or create vector store instance."""
         if self._vector_store is None:
             # Convert string to DatabaseType enum
-            db_type = DatabaseType.CHROMA if self.vector_store_type == "chroma" else DatabaseType.PINECONE
+            db_type = DatabaseType(self.vector_store_type)
             self._vector_store = self.vector_store_factory.create(
                 database_type=db_type,
                 collection_name=self.collection_name,
