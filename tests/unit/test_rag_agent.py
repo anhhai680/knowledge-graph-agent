@@ -311,7 +311,7 @@ class TestRAGAgent:
         assert all("answer" in result for result in results)
 
     @pytest.mark.asyncio
-    async def test_batch_query(self):
+    async def test_batch_workflow_query(self):
         """Test batch query processing."""
         mock_workflow = MagicMock(spec=QueryWorkflow)
         mock_workflow.invoke.return_value = {
