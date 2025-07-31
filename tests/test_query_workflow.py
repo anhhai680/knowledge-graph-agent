@@ -12,11 +12,14 @@ async def test_basic_workflow():
     print("Query workflow created successfully")
     
     # Test simple query
-    try:
-        result = await execute_query("What is this project about?")
-        print(f"Query result: {result}")
-    except Exception as e:
-        print(f"Query failed: {e}")
+    result = await execute_query("What is this project about?")
+    print(f"Query result: {result}")
+
+    assert isinstance(result, dict)
+    assert "response" in result
+    assert "sources" in result
+    assert isinstance(result["response"], str)
+    assert len(result["response"]) > 0
 
 
 if __name__ == "__main__":
