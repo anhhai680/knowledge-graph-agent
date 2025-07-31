@@ -667,9 +667,9 @@ Answer:"""
                 state["llm_generation"]["status"] = ProcessingStatus.COMPLETED
                 state["llm_generation"]["generated_response"] = response_text
                 state["llm_generation"]["generation_time"] = state["generation_time"]
-                state["llm_generation"]["model_name"] = settings.llm.model
-                state["llm_generation"]["temperature"] = settings.app.temperature
-                state["llm_generation"]["max_tokens"] = settings.app.max_tokens
+                state["llm_generation"]["model_name"] = settings.openai.model
+                state["llm_generation"]["temperature"] = settings.openai.temperature
+                state["llm_generation"]["max_tokens"] = settings.openai.max_tokens
 
             elif step == QueryWorkflowSteps.FORMAT_RESPONSE:
                 # Format final response with sources
