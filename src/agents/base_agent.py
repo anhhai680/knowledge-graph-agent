@@ -72,6 +72,57 @@ class BaseAgent(Runnable, ABC):
         """
         pass
 
+    def invoke(
+        self, 
+        input: Union[str, Dict[str, Any]], 
+        config: Optional[RunnableConfig] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """
+        Invoke the agent with input data (synchronous).
+
+        Args:
+            input: Input data to process
+            config: Optional configuration
+
+        Returns:
+            Agent response
+        """
+        try:
+            # Validate input
+            if not self._validate_input(input):
+                return {
+                    "success": False,
+                    "error": "Invalid input format",
+                    "agent": self.agent_name,
+                }
+
+            # Process synchronously - use asyncio to run async method
+            import asyncio
+            
+            # Check if we're already in an event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # If we're in a loop, we need to handle it differently
+                # This is a fallback for when we can't run async code
+                self.logger.warning("Cannot run async code in existing event loop, returning placeholder")
+                return {
+                    "success": False,
+                    "error": "Cannot execute synchronous invoke in async context. Use ainvoke instead.",
+                    "agent": self.agent_name,
+                }
+            except RuntimeError:
+                # No event loop running, create one
+                return asyncio.run(self._process_input(input, config))
+
+        except Exception as e:
+            self.logger.error(f"Error in agent invoke: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "agent": self.agent_name,
+            }
+
     async def ainvoke(
         self, 
         input: Union[str, Dict[str, Any]], 
