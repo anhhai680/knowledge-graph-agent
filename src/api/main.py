@@ -260,6 +260,26 @@ def get_query_workflow() -> QueryWorkflow:
     return workflow_instances["query"]
 
 
+def get_vector_store():
+    """
+    Dependency to get the vector store instance.
+    
+    Returns:
+        BaseStore: The vector store instance
+        
+    Raises:
+        HTTPException: If vector store instance is not available
+    """
+    try:
+        vector_store_factory = VectorStoreFactory()
+        return vector_store_factory.create()
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Vector store not available: {str(e)}"
+        )
+
+
 # Create the FastAPI app instance
 app = create_app()
 

@@ -68,6 +68,13 @@ def get_query_workflow() -> QueryWorkflow:
     return get_query_workflow()
 
 
+def get_vector_store():
+    """Dependency injection for vector store."""
+    # This will be implemented in main.py as a dependency
+    from src.api.main import get_vector_store
+    return get_vector_store()
+
+
 @router.get("/")
 async def root():
     """Welcome endpoint with API information."""
@@ -352,42 +359,97 @@ async def process_query(
 
 @router.get("/repositories", response_model=RepositoriesResponse)
 async def list_repositories(
-    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow)
+    vector_store=Depends(get_vector_store)
 ):
     """
-    List indexed repositories with metadata from workflow state.
+    List indexed repositories with metadata from vector store.
     
     Returns comprehensive information about all indexed repositories,
     including file counts, languages, and indexing status.
     """
     try:
-        logger.info("Retrieving repository list with metadata")
+        logger.info("Retrieving repository list with metadata from vector store")
         
         # Get repository information from vector store
-        # This would typically query the vector store for repository metadata
-        repositories = []
+        repository_metadata = vector_store.get_repository_metadata()
         
-        # For now, return mock data - in production this would query the actual vector store
-        mock_repositories = [
-            RepositoryInfo(
-                name="example/repo1",
-                url="https://github.com/example/repo1",
-                branch="main",
-                last_indexed=datetime.now(),
-                file_count=150,
-                document_count=500,
-                languages=["python", "javascript"],
-                size_mb=25.6
-            )
-        ]
+        # Convert repository metadata to RepositoryInfo objects
+        repositories = []
+        for repo_data in repository_metadata:
+            try:
+                # Parse last_indexed date if it's a string
+                last_indexed = repo_data.get("last_indexed")
+                if isinstance(last_indexed, str):
+                    try:
+                        from dateutil import parser
+                        last_indexed = parser.parse(last_indexed)
+                    except Exception:
+                        last_indexed = datetime.now()
+                elif not last_indexed:
+                    last_indexed = datetime.now()
+                
+                repository_info = RepositoryInfo(
+                    name=repo_data.get("name", "Unknown"),
+                    url=repo_data.get("url", ""),
+                    branch=repo_data.get("branch", "main"),
+                    last_indexed=last_indexed,
+                    file_count=repo_data.get("file_count", 0),
+                    document_count=repo_data.get("document_count", 0),
+                    languages=repo_data.get("languages", []),
+                    size_mb=repo_data.get("size_mb", 0.0)
+                )
+                repositories.append(repository_info)
+                
+            except Exception as e:
+                logger.warning(f"Error processing repository metadata: {e}")
+                # Skip malformed repository entries
+                continue
+        
+        # If no repositories found, try to check from appSettings.json as fallback
+        if not repositories:
+            logger.info("No repositories found in vector store, checking appSettings.json")
+            try:
+                with open("appSettings.json", "r") as f:
+                    app_settings = json.load(f)
+                    
+                configured_repos = app_settings.get("repositories", [])
+                for repo_config in configured_repos:
+                    # Create placeholder entries for configured but not yet indexed repositories
+                    repo_url = repo_config.get("url", "")
+                    repo_name = repo_url.split("/")[-2:] if "/" in repo_url else [repo_url]
+                    if len(repo_name) >= 2:
+                        repo_name = f"{repo_name[-2]}/{repo_name[-1]}"
+                    else:
+                        repo_name = repo_url
+                    
+                    repositories.append(RepositoryInfo(
+                        name=repo_name,
+                        url=repo_url,
+                        branch=repo_config.get("branch", "main"),
+                        last_indexed=datetime.now(),  # Placeholder
+                        file_count=0,  # Not indexed yet
+                        document_count=0,  # Not indexed yet
+                        languages=[],  # Unknown until indexed
+                        size_mb=0.0  # Unknown until indexed
+                    ))
+                    
+            except FileNotFoundError:
+                logger.warning("No appSettings.json found and no repositories in vector store")
+            except Exception as e:
+                logger.error(f"Error reading appSettings.json: {e}")
         
         return RepositoriesResponse(
-            repositories=mock_repositories,
-            total_count=len(mock_repositories),
+            repositories=repositories,
+            total_count=len(repositories),
             last_updated=datetime.now()
         )
         
     except Exception as e:
+        logger.error(f"Failed to list repositories: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list repositories: {str(e)}"
+        )
         logger.error(f"Failed to list repositories: {e}")
         raise HTTPException(
             status_code=500,
@@ -398,21 +460,30 @@ async def list_repositories(
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
     indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow),
-    query_workflow: QueryWorkflow = Depends(get_query_workflow)
+    query_workflow: QueryWorkflow = Depends(get_query_workflow),
+    vector_store=Depends(get_vector_store)
 ):
     """
-    Health check with LangGraph workflow status and LangChain component health.
+    Health check with LangGraph workflow status and vector store component health.
     
     Provides comprehensive system health information including workflow
     availability, component status, and system metrics.
     """
     try:
+        # Check vector store health
+        vector_store_healthy = True
+        try:
+            is_healthy, _ = vector_store.health_check()
+            vector_store_healthy = is_healthy
+        except Exception:
+            vector_store_healthy = False
+        
         components = {
             "workflows": {
                 "indexing": indexing_workflow is not None,
                 "query": query_workflow is not None
             },
-            "vector_store": True,  # Would check actual vector store connection
+            "vector_store": vector_store_healthy,
             "llm_provider": True,  # Would check OpenAI API connection
             "embedding_provider": True  # Would check embedding service
         }
@@ -443,33 +514,56 @@ async def health_check(
 
 @router.get("/stats", response_model=StatsResponse)
 async def get_statistics(
-    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow)
+    vector_store=Depends(get_vector_store)
 ):
     """
-    Index statistics and repository metrics from workflow persistence.
+    Index statistics and repository metrics from vector store.
     
     Returns comprehensive statistics about the indexed content,
     including document counts, language distribution, and system metrics.
     """
     try:
-        logger.info("Retrieving system statistics")
+        logger.info("Retrieving system statistics from vector store")
         
-        # Mock statistics - in production this would query actual data
+        # Get collection statistics
+        collection_stats = vector_store.get_collection_stats()
+        total_documents = collection_stats.get("count", 0)
+        
+        # Get repository metadata
+        repository_metadata = vector_store.get_repository_metadata()
+        total_repositories = len(repository_metadata)
+        
+        # Aggregate statistics from repository metadata
+        total_files = sum(repo.get("file_count", 0) for repo in repository_metadata)
+        total_size_mb = sum(repo.get("size_mb", 0.0) for repo in repository_metadata)
+        
+        # Aggregate language distribution
+        language_counts = {}
+        for repo in repository_metadata:
+            for language in repo.get("languages", []):
+                if language:
+                    language_counts[language] = language_counts.get(language, 0) + repo.get("document_count", 0)
+        
+        # Get active workflows count
+        active_workflow_count = len([w for w in active_workflows.values() 
+                                   if w["status"] == WorkflowStatus.RUNNING])
+        
+        # Determine system health based on vector store availability
+        try:
+            is_healthy, health_message = vector_store.health_check()
+            system_health = "healthy" if is_healthy else "degraded"
+        except Exception:
+            system_health = "degraded"
+        
         stats = StatsResponse(
-            total_repositories=5,
-            total_documents=2500,
-            total_files=750,
-            index_size_mb=128.5,
-            languages={
-                "python": 300,
-                "javascript": 200,
-                "typescript": 150,
-                "markdown": 100
-            },
-            recent_queries=45,
-            active_workflows=len([w for w in active_workflows.values() 
-                                if w["status"] == WorkflowStatus.RUNNING]),
-            system_health="healthy"
+            total_repositories=total_repositories,
+            total_documents=total_documents,
+            total_files=total_files,
+            index_size_mb=round(total_size_mb, 2),
+            languages=language_counts,
+            recent_queries=0,  # TODO: Implement query tracking
+            active_workflows=active_workflow_count,
+            system_health=system_health
         )
         
         return stats

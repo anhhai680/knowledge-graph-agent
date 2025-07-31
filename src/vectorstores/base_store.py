@@ -101,6 +101,16 @@ class BaseStore(ABC):
         pass
 
     @abstractmethod
+    def get_repository_metadata(self) -> List[Dict[str, Any]]:
+        """
+        Get repository metadata from all indexed documents.
+
+        Returns:
+            List of dictionaries containing repository metadata
+        """
+        pass
+
+    @abstractmethod
     def health_check(self) -> Tuple[bool, str]:
         """
         Check if the vector store is healthy.
