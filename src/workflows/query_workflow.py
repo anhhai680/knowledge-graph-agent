@@ -889,7 +889,7 @@ Answer:"""
             retrieval_config={"k": k or self.default_k}
         )
         
-        state.start_time = time.time()
+        state["start_time"] = time.time()
 
         # Define workflow steps
         workflow_steps = [
