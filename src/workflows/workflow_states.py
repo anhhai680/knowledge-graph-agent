@@ -8,7 +8,34 @@ indexing and query workflows, providing type safety and structure validation.
 from typing import Any, Dict, List, Optional, TypedDict, Union
 from enum import Enum
 import time
-from src.config.settings import AppSettings
+
+try:
+    from src.config.settings import AppSettings
+    _app_settings_available = True
+except ImportError:
+    AppSettings = None
+    _app_settings_available = False
+
+
+def get_openai_model_name() -> str:
+    """Get OpenAI model name with fallback."""
+    if _app_settings_available and AppSettings:
+        return AppSettings.openai.model
+    return "gpt-4o-mini"
+
+
+def get_openai_temperature() -> float:
+    """Get OpenAI temperature with fallback."""
+    if _app_settings_available and AppSettings:
+        return AppSettings.openai.temperature
+    return 0.7
+
+
+def get_openai_max_tokens() -> int:
+    """Get OpenAI max tokens with fallback."""
+    if _app_settings_available and AppSettings:
+        return AppSettings.openai.max_tokens
+    return 4000
 
 
 class WorkflowType(str, Enum):
@@ -371,9 +398,9 @@ def create_query_state(
             generated_response=None,
             generation_time=None,
             token_usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-            model_name=AppSettings.openai.model,
-            temperature=AppSettings.openai.temperature,
-            max_tokens=AppSettings.openai.max_tokens,
+            model_name=get_openai_model_name(),
+            temperature=get_openai_temperature(),
+            max_tokens=get_openai_max_tokens(),
         ),
         response_quality_score=None,
         response_confidence=None,

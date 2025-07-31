@@ -288,6 +288,129 @@ class ChromaStore(BaseStore):
             logger.error(f"Error getting Chroma collection stats: {str(e)}")
             return {"name": self.collection_name, "error": str(e)}
 
+    def get_repository_metadata(self) -> List[Dict[str, Any]]:
+        """
+        Get repository metadata from all indexed documents.
+
+        Returns:
+            List of dictionaries containing repository metadata
+        """
+        try:
+            # Query all documents to analyze repository metadata
+            # We'll get a sample of documents and aggregate repository information
+            query_results = self.collection.query(
+                query_texts=[""],  # Empty query to get all documents
+                n_results=10000,  # Large number to get all documents
+                include=["metadatas", "documents"]
+            )
+
+            if not query_results or "metadatas" not in query_results:
+                logger.warning("No documents found in Chroma collection")
+                return []
+
+            # Aggregate repository information from document metadata
+            repo_stats = {}
+            metadatas_list = query_results.get("metadatas")
+            documents_list = query_results.get("documents")
+            
+            metadatas = metadatas_list[0] if metadatas_list and len(metadatas_list) > 0 else []
+            documents = documents_list[0] if documents_list and len(documents_list) > 0 else []
+
+            for i, metadata in enumerate(metadatas):
+                if not metadata:
+                    continue
+
+                repo_url = metadata.get("repository_url", "")
+                repo_name = metadata.get("repository", "")
+                
+                # Ensure we have string values
+                if not isinstance(repo_url, str):
+                    repo_url = str(repo_url) if repo_url else ""
+                if not isinstance(repo_name, str):
+                    repo_name = str(repo_name) if repo_name else ""
+                
+                # Skip if no repository information
+                if not repo_url and not repo_name:
+                    continue
+
+                # Use repository URL as key, fallback to name
+                repo_key = repo_url or repo_name
+                
+                if repo_key not in repo_stats:
+                    # Extract repository display name
+                    display_name = repo_name
+                    if not display_name and repo_url and isinstance(repo_url, str) and "/" in repo_url:
+                        url_parts = repo_url.rstrip("/").split("/")
+                        if len(url_parts) >= 2:
+                            display_name = f"{url_parts[-2]}/{url_parts[-1]}"
+                    
+                    repo_stats[repo_key] = {
+                        "name": display_name or repo_key,
+                        "url": repo_url,
+                        "branch": metadata.get("branch", "main"),
+                        "file_count": 0,
+                        "document_count": 0,
+                        "languages": set(),
+                        "total_size": 0,
+                        "last_indexed": None,
+                        "files": set()
+                    }
+
+                # Update statistics
+                repo_data = repo_stats[repo_key]
+                repo_data["document_count"] += 1
+                
+                # Track unique files
+                source_file = metadata.get("source", "")
+                if source_file and isinstance(source_file, str):
+                    repo_data["files"].add(source_file)
+
+                # Track languages
+                language = metadata.get("language", "")
+                if language and isinstance(language, str):
+                    repo_data["languages"].add(language)
+
+                # Track file size
+                file_size = metadata.get("size", 0)
+                if isinstance(file_size, (int, float)):
+                    repo_data["total_size"] += file_size
+
+                # Track last modification (use as proxy for indexing time)
+                last_modified = metadata.get("last_modified")
+                if last_modified:
+                    if not repo_data["last_indexed"] or last_modified > repo_data["last_indexed"]:
+                        repo_data["last_indexed"] = last_modified
+
+            # Convert to final format
+            repositories = []
+            for repo_key, repo_data in repo_stats.items():
+                # Calculate file count from unique files
+                repo_data["file_count"] = len(repo_data["files"])
+                
+                # Convert languages set to list
+                repo_data["languages"] = list(repo_data["languages"])
+                
+                # Convert size to MB
+                size_mb = repo_data["total_size"] / (1024 * 1024) if repo_data["total_size"] > 0 else 0.0
+                
+                repositories.append({
+                    "name": repo_data["name"],
+                    "url": repo_data["url"],
+                    "branch": repo_data["branch"],
+                    "last_indexed": repo_data["last_indexed"],
+                    "file_count": repo_data["file_count"],
+                    "document_count": repo_data["document_count"],
+                    "languages": repo_data["languages"],
+                    "size_mb": round(size_mb, 2)
+                })
+
+            logger.info(f"Retrieved metadata for {len(repositories)} repositories from Chroma")
+            return repositories
+
+        except Exception as e:
+            logger.error(f"Error getting repository metadata from Chroma: {str(e)}")
+            return []
+
     def health_check(self) -> Tuple[bool, str]:
         """
         Check if the vector store is healthy.

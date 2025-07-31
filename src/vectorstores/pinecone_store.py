@@ -293,6 +293,44 @@ class PineconeStore(BaseStore):
             logger.error(f"Error getting Pinecone index stats: {str(e)}")
             return {"name": self.collection_name, "error": str(e)}
 
+    def get_repository_metadata(self) -> List[Dict[str, Any]]:
+        """
+        Get repository metadata from all indexed documents.
+
+        Returns:
+            List of dictionaries containing repository metadata
+        """
+        try:
+            # Note: Pinecone doesn't support querying all vectors directly
+            # This is a limitation - we'd need to implement a different approach
+            # For example, maintaining a separate metadata index or using namespaces
+            
+            logger.warning("Repository metadata retrieval not fully implemented for Pinecone")
+            
+            # For now, return basic information from index stats
+            stats = self.index.describe_index_stats()
+            namespaces = stats.get("namespaces", {})
+            
+            repositories = []
+            for namespace_name, namespace_info in namespaces.items():
+                if namespace_name != "":  # Skip default namespace
+                    repositories.append({
+                        "name": namespace_name,
+                        "url": f"pinecone://{namespace_name}",
+                        "branch": "unknown",
+                        "last_indexed": None,
+                        "file_count": 0,
+                        "document_count": namespace_info.get("vector_count", 0),
+                        "languages": [],
+                        "size_mb": 0.0
+                    })
+            
+            return repositories
+
+        except Exception as e:
+            logger.error(f"Error getting repository metadata from Pinecone: {str(e)}")
+            return []
+
     def health_check(self) -> Tuple[bool, str]:
         """
         Check if the vector store is healthy.

@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, TypeVar
 from enum import Enum
 
-from langchain.schema.runnable import Runnable
+from langchain.schema.runnable import Runnable, RunnableConfig
 from loguru import logger
 from tenacity import (
     Retrying,
@@ -275,21 +275,25 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
         pass
 
     def invoke(
-        self, input_state: StateType, config: Optional[Dict[str, Any]] = None
+        self, 
+        input: StateType, 
+        config: Optional[RunnableConfig] = None,
+        **kwargs
     ) -> StateType:
         """
         Execute the workflow (LangChain Runnable interface).
 
         Args:
-            input_state: Initial workflow state
+            input: Initial workflow state
             config: Optional configuration
+            **kwargs: Additional arguments for Runnable compatibility
 
         Returns:
             Final workflow state
         """
         try:
             self.metadata.start()
-            return self._execute_workflow(input_state)
+            return self._execute_workflow(input)
         except Exception as e:
             self.metadata.fail(e)
             raise
@@ -304,7 +308,9 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
         Returns:
             Final workflow state
         """
-        current_state = state.copy()
+        current_state = state
+        if hasattr(state, 'copy'):
+            current_state = state.copy()  # type: ignore
         steps = self.define_steps()
         total_steps = len(steps)
 
@@ -323,9 +329,20 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
 
             except Exception as e:
                 self.logger.error(f"Step {step} failed: {e}")
-                current_state = self._handle_step_error(step, current_state, e)
+                # Mark workflow as failed before handling error
+                self.metadata.fail(e, step)
+                # Handle the error - this may re-raise the exception
+                try:
+                    current_state = self._handle_step_error(step, current_state, e)  # type: ignore
+                except Exception:
+                    # If error handling re-raises, stop execution and propagate
+                    raise
+                # If we get here, error was handled but workflow is still failed
+                break
 
-        self.metadata.complete()
+        # Only mark as complete if not already failed
+        if self.metadata.status != WorkflowStatus.FAILED:
+            self.metadata.complete()
         return current_state
 
     def _handle_step_error(
@@ -342,17 +359,23 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
         Returns:
             Updated workflow state with error handling
         """
-        error_state = state.copy()
-        error_state.setdefault("errors", []).append(
-            {"step": step, "error": str(error), "timestamp": time.time()}
-        )
+        # Work with the original state type
+        error_state = state
+        if hasattr(state, 'copy'):
+            error_state = state.copy()  # type: ignore
+            
+        if isinstance(error_state, dict):
+            error_state.setdefault("errors", []).append(
+                {"step": step, "error": str(error), "timestamp": time.time()}
+            )
 
         # Allow subclasses to implement custom error handling
         try:
-            return self.handle_error(step, error_state, error)
+            return self.handle_error(step, error_state, error)  # type: ignore
         except Exception as handle_error:
-            self.logger.error(f"Error handler failed: {handle_error}")
-            return error_state
+            # If handle_error raises an exception, it means we should propagate it
+            self.logger.error(f"Error handler re-raised: {handle_error}")
+            raise  # Re-raise the exception from handle_error
 
     def handle_error(self, step: str, state: StateType, error: Exception) -> StateType:
         """
@@ -365,8 +388,16 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
 
         Returns:
             Updated workflow state
+
+        Raises:
+            Exception: Re-raises the original exception for critical errors
         """
-        # Default implementation - mark error and continue
+        # Default implementation - for critical errors like ValueError, re-raise
+        if isinstance(error, (ValueError, TypeError, AttributeError)):
+            self.logger.error(f"Critical error in step {step}: {error}")
+            raise error
+        
+        # For other errors, mark error and continue
         self.logger.warning(f"Using default error handling for step {step}")
         return state
 
