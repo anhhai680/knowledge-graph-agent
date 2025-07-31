@@ -11,11 +11,11 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 from langchain.schema import Document
 
-from src.agents.base_agent import AgentResponse, BaseAgent
+from src.agents.base_agent import BaseAgent
 from src.utils.logging import get_logger
 from src.utils.prompt_manager import PromptManager
 from src.workflows.query_workflow import QueryWorkflow
-from src.workflows.workflow_states import QueryIntent, QueryState
+from src.workflows.workflow_states import QueryIntent
 
 logger = get_logger(__name__)
 
@@ -157,11 +157,12 @@ class RAGAgent(BaseAgent):
             logger.info(f"Processing query: {query_text[:100]}...")
             
             # For now, create a mock result - will be replaced with actual workflow
-            result = {
-                "retrieved_documents": [],
-                "answer": f"Mock response for: {query_text}",
-                "processing_time": 0.1,
-            }
+            # result = {
+            #     "retrieved_documents": [],
+            #     "answer": f"Mock response for: {query_text}",
+            #     "processing_time": 0.1,
+            # }
+            result = await self.workflow._execute_workflow(query_data)
 
             # Get retrieved documents
             retrieved_docs = result.get("retrieved_documents", [])
