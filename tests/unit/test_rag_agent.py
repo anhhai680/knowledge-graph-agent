@@ -279,8 +279,8 @@ class TestRAGAgent:
         
         context_docs = [
             Document(
-                page_content="def test_function():
-    return True",
+                page_content="""def test_function():
+    return True""",
                 metadata={
                     "file_path": "test.py",
                     "repository": "specific_repo",

@@ -271,7 +271,7 @@ class TestRAGAgent:
     async def test_batch_query(self, mock_prompt_manager):
         """Test batch query processing."""
         agent = RAGAgent(prompt_manager=mock_prompt_manager)
-        queries = ["query 1", "query 2"]  # List of strings which is valid Union[str, Dict[str, Any]]
+        queries = ["query 1", "query 2"]
         
         results = await agent.batch_query(queries, max_concurrent=2)
         
