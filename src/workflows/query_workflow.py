@@ -740,7 +740,7 @@ Answer:"""
                         }
                         for doc in documents
                     ]
-                    state["document_retrieval"]["retrieved_documents"] = len(documents)
+                    state["document_retrieval"]["retrieved_documents"] = state["context_documents"]
                     state["document_retrieval"]["status"] = ProcessingStatus.COMPLETED
                 except Exception as e:
                     state["document_retrieval"]["status"] = ProcessingStatus.FAILED
