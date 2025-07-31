@@ -925,15 +925,15 @@ Answer:"""
                     state = await self._process_query_step(state, step)
                     
                     # Check if step redirected workflow
-                    if hasattr(state, 'current_step') and state.current_step != step:
+                    if "current_step" in state and state["current_step"] != step:
                         # Find the redirected step in workflow
                         try:
-                            redirect_index = workflow_steps.index(state.current_step)
+                            redirect_index = workflow_steps.index(state["current_step"])
                             current_step_index = redirect_index
                         except ValueError:
                             # Step not in main workflow, handle specially
-                            state = await self._process_query_step(state, state.current_step)
-                            delattr(state, 'current_step')
+                            state = await self._process_query_step(state, state["current_step"])
+                            del state["current_step"]
                         continue
                     
                     current_step_index += 1
