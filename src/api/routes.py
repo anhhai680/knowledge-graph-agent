@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query, Security
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query
 
 from src.api.models import (
     IndexRepositoryRequest,
@@ -33,17 +33,25 @@ from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
+from fastapi.middleware.cors import CORSMiddleware
+
 
 logger = get_logger(__name__)
 
-# Create router instance
-router = APIRouter(
-    tags=["Knowledge Graph Agent API"],
-    responses={
-        404: {"description": "Not found"},
-        422: {"description": "Validation error"},
-        500: {"description": "Internal server error"}
-    }
+# Create FastAPI instance
+app = FastAPI(
+    title="Knowledge Graph Agent API",
+    description="API for indexing GitHub repositories and querying knowledge base",
+    version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Global workflow tracking
@@ -74,8 +82,8 @@ def get_vector_store():
     return get_vector_store()
 
 
-@router.get("/")
-async def root():
+@app.get("/")
+async def main_app():
     """Welcome endpoint with API information."""
     return {
         "message": "Welcome to the Knowledge Graph Agent API!",
@@ -92,7 +100,7 @@ async def root():
     }
 
 
-@router.post("/index", response_model=BatchIndexingResponse)
+@app.post("/index", response_model=BatchIndexingResponse)
 async def index_all_repositories(
     background_tasks: BackgroundTasks,
     indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow)
@@ -185,7 +193,7 @@ async def index_all_repositories(
         )
 
 
-@router.post("/index/repository", response_model=IndexingResponse)
+@app.post("/index/repository", response_model=IndexingResponse)
 async def index_repository(
     request: IndexRepositoryRequest,
     background_tasks: BackgroundTasks,
@@ -235,7 +243,7 @@ async def index_repository(
         )
 
 
-@router.post("/query", response_model=QueryResponse)
+@app.post("/query", response_model=QueryResponse)
 async def process_query(
     request: QueryRequest,
     query_workflow: QueryWorkflow = Depends(get_query_workflow),
@@ -353,7 +361,7 @@ async def process_query(
         )
 
 
-@router.get("/repositories", response_model=RepositoriesResponse)
+@app.get("/repositories", response_model=RepositoriesResponse)
 async def list_repositories(
     vector_store=Depends(get_vector_store)
 ):
@@ -453,7 +461,7 @@ async def list_repositories(
         )
 
 
-@router.get("/health", response_model=HealthResponse)
+@app.get("/health", response_model=HealthResponse)
 async def health_check(
     indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow),
     query_workflow: QueryWorkflow = Depends(get_query_workflow),
@@ -508,7 +516,7 @@ async def health_check(
         )
 
 
-@router.get("/stats", response_model=StatsResponse)
+@app.get("/stats", response_model=StatsResponse)
 async def get_statistics(
     vector_store=Depends(get_vector_store)
 ):
@@ -572,7 +580,7 @@ async def get_statistics(
         )
 
 
-@router.get("/workflows/{workflow_id}/status", response_model=WorkflowState)
+@app.get("/workflows/{workflow_id}/status", response_model=WorkflowState)
 async def get_workflow_status(workflow_id: str):
     """
     Get LangGraph workflow execution status and progress.
@@ -610,7 +618,7 @@ async def get_workflow_status(workflow_id: str):
         )
 
 
-@router.get("/workflows", response_model=List[WorkflowState])
+@app.get("/workflows", response_model=List[WorkflowState])
 async def list_workflows(
     status: Optional[WorkflowStatus] = Query(None, description="Filter by workflow status"),
     workflow_type: Optional[str] = Query(None, description="Filter by workflow type"),
