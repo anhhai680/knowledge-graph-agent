@@ -68,6 +68,67 @@ class GitHubLoader(BaseLoader):
 
         logger.debug(f"Initialized GitHub loader for {repo_owner}/{repo_name}")
 
+    def _check_rate_limit_safely(self, threshold: int = 10) -> bool:
+        """
+        Safely check GitHub API rate limit with backward compatibility.
+        
+        Args:
+            threshold: Minimum remaining requests before rate limiting
+            
+        Returns:
+            True if rate limit check passed or couldn't be determined, False if rate limited
+        """
+        try:
+            rate_limit = self.client.get_rate_limit()
+            core_rate = getattr(rate_limit, 'core', None)
+            if core_rate and hasattr(core_rate, 'remaining'):
+                remaining = core_rate.remaining
+                logger.debug(f"GitHub API rate limit remaining: {remaining}")
+                return remaining >= threshold
+            else:
+                # If we can't determine the structure, assume it's OK
+                logger.debug("Unable to determine rate limit structure, proceeding")
+                return True
+        except Exception as e:
+            logger.debug(f"Error checking rate limit: {e}")
+            # If we can't check, assume it's OK to proceed
+            return True
+
+    def _handle_rate_limit_safely(self) -> None:
+        """
+        Safely handle GitHub API rate limiting with backward compatibility.
+        """
+        try:
+            rate_limit = self.client.get_rate_limit()
+            core_rate = getattr(rate_limit, 'core', None)
+            if core_rate and hasattr(core_rate, 'reset'):
+                reset_time = core_rate.reset
+                # Handle both timezone-aware and naive datetime objects
+                try:
+                    if reset_time.tzinfo is not None:
+                        # reset_time is timezone-aware, use timezone-aware utcnow
+                        from datetime import timezone
+                        current_time = datetime.now(timezone.utc)
+                    else:
+                        # reset_time is naive, use naive utcnow
+                        current_time = datetime.utcnow()
+                    
+                    sleep_time = max(0, (reset_time - current_time).total_seconds() + 1)
+                    logger.warning(
+                        f"GitHub API rate limit reached. Sleeping for {sleep_time} seconds"
+                    )
+                    time.sleep(sleep_time)
+                except Exception as dt_error:
+                    logger.warning(f"Datetime calculation error: {dt_error}, waiting 60 seconds")
+                    time.sleep(60)
+            else:
+                # Fallback: wait a fixed time if rate limit structure is unknown
+                logger.warning("Rate limit reached but cannot determine reset time, waiting 60 seconds")
+                time.sleep(60)
+        except Exception as rate_limit_error:
+            logger.warning(f"Rate limit handling error: {rate_limit_error}, waiting 60 seconds")
+            time.sleep(60)
+
     def _get_repository(self) -> Repository.Repository:
         """
         Get the GitHub repository.
@@ -115,8 +176,9 @@ class GitHubLoader(BaseLoader):
         branch = self.branch or self.default_branch
 
         try:
-            # Get file content
-            file_content = repo.get_contents(file_path, ref=branch)
+            # Get file content with proper branch handling
+            ref_param = branch or self.default_branch or "main"
+            file_content = repo.get_contents(file_path, ref=ref_param)
 
             # Handle case where file_content is a list (directory)
             if isinstance(file_content, list):
@@ -136,29 +198,15 @@ class GitHubLoader(BaseLoader):
 
             logger.debug(f"Successfully loaded content from {file_path}")
 
-            # Handle rate limiting
-            if self.client.get_rate_limit().core.remaining < 10:
-                reset_time = self.client.get_rate_limit().core.reset
-                sleep_time = max(
-                    0, (reset_time - datetime.utcnow()).total_seconds() + 1
-                )
-                logger.warning(
-                    f"GitHub API rate limit almost reached. Sleeping for {sleep_time} seconds"
-                )
-                time.sleep(sleep_time)
+            # Handle rate limiting with safe backward compatibility
+            if not self._check_rate_limit_safely():
+                self._handle_rate_limit_safely()
 
             return content, metadata
 
         except GithubException as e:
             if e.status == 403 and "rate limit" in str(e).lower():
-                reset_time = self.client.get_rate_limit().core.reset
-                sleep_time = max(
-                    0, (reset_time - datetime.utcnow()).total_seconds() + 1
-                )
-                logger.warning(
-                    f"GitHub API rate limit reached. Sleeping for {sleep_time} seconds"
-                )
-                time.sleep(sleep_time)
+                self._handle_rate_limit_safely()
                 # The retry decorator will retry this call
                 raise
             elif e.status == 404:
@@ -189,9 +237,16 @@ class GitHubLoader(BaseLoader):
         language = self._detect_language(file_extension)
 
         try:
-            # Get last commit information
-            commits = list(repo.get_commits(path=file_path, sha=branch, max_pages=1))
-            last_commit = commits[0] if commits else None
+            # Get last commit information with PyGithub 2.x compatible approach
+            # Ensure branch is not None before passing to API
+            sha_param = branch or self.default_branch or "main"
+            commits_paginated = repo.get_commits(path=file_path, sha=sha_param)
+            # Get only the first commit to avoid loading all commits
+            last_commit = None
+            try:
+                last_commit = next(iter(commits_paginated))
+            except StopIteration:
+                pass
 
             commit_info = {}
             if last_commit:
@@ -315,8 +370,14 @@ class GitHubLoader(BaseLoader):
 
         def traverse_directory(path: str) -> List[str]:
             try:
-                contents = repo.get_contents(path, ref=branch)
+                # Get directory contents with proper branch handling
+                ref_param = branch or self.default_branch or "main"
+                contents = repo.get_contents(path, ref=ref_param)
                 file_paths = []
+                
+                # Handle both single file and directory contents
+                if not isinstance(contents, list):
+                    contents = [contents]
 
                 for content in contents:
                     if content.type == "dir":
@@ -325,29 +386,15 @@ class GitHubLoader(BaseLoader):
                         if self._should_load_file(content.path):
                             file_paths.append(content.path)
 
-                # Handle rate limiting
-                if self.client.get_rate_limit().core.remaining < 10:
-                    reset_time = self.client.get_rate_limit().core.reset
-                    sleep_time = max(
-                        0, (reset_time - datetime.utcnow()).total_seconds() + 1
-                    )
-                    logger.warning(
-                        f"GitHub API rate limit almost reached. Sleeping for {sleep_time} seconds"
-                    )
-                    time.sleep(sleep_time)
+                # Handle rate limiting with safe backward compatibility
+                if not self._check_rate_limit_safely():
+                    self._handle_rate_limit_safely()
 
                 return file_paths
 
             except GithubException as e:
                 if e.status == 403 and "rate limit" in str(e).lower():
-                    reset_time = self.client.get_rate_limit().core.reset
-                    sleep_time = max(
-                        0, (reset_time - datetime.utcnow()).total_seconds() + 1
-                    )
-                    logger.warning(
-                        f"GitHub API rate limit reached. Sleeping for {sleep_time} seconds"
-                    )
-                    time.sleep(sleep_time)
+                    self._handle_rate_limit_safely()
                     # The retry decorator will retry this call
                     raise
                 else:

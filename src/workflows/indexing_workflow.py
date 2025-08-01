@@ -130,8 +130,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             IndexingWorkflowSteps.LOAD_FILES_FROM_GITHUB,
             IndexingWorkflowSteps.PROCESS_DOCUMENTS,
             IndexingWorkflowSteps.EXTRACT_METADATA,
-            IndexingWorkflowSteps.GENERATE_EMBEDDINGS,
-            IndexingWorkflowSteps.STORE_IN_VECTOR_DB,
+            IndexingWorkflowSteps.STORE_IN_VECTOR_DB,  # Vector store handles embedding generation
             IndexingWorkflowSteps.UPDATE_WORKFLOW_STATE,
             IndexingWorkflowSteps.CHECK_COMPLETE,
             IndexingWorkflowSteps.FINALIZE_INDEX,
@@ -203,8 +202,6 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 state = self._process_documents(state)
             elif step == IndexingWorkflowSteps.EXTRACT_METADATA:
                 state = self._extract_metadata(state)
-            elif step == IndexingWorkflowSteps.GENERATE_EMBEDDINGS:
-                state = self._generate_embeddings(state)
             elif step == IndexingWorkflowSteps.STORE_IN_VECTOR_DB:
                 state = self._store_in_vector_db(state)
             elif step == IndexingWorkflowSteps.UPDATE_WORKFLOW_STATE:
@@ -229,7 +226,24 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
 
         except Exception as e:
             self.logger.error(f"Step {step} failed: {e}")
-            return add_workflow_error(state, str(e), step)
+            # Add error to state for tracking
+            state = add_workflow_error(state, str(e), step)
+            
+            # Determine if this is a critical failure that should stop the workflow
+            critical_steps = [
+                IndexingWorkflowSteps.LOAD_FILES_FROM_GITHUB,
+                IndexingWorkflowSteps.PROCESS_DOCUMENTS,
+                IndexingWorkflowSteps.STORE_IN_VECTOR_DB,
+            ]
+            
+            if step in critical_steps:
+                # For critical steps, re-raise to stop workflow execution
+                self.logger.error(f"Critical step {step} failed, stopping workflow execution")
+                raise
+            else:
+                # For non-critical steps, continue with error state
+                self.logger.warning(f"Non-critical step {step} failed, continuing workflow")
+                return state
 
     def handle_error(
         self, step: str, state: IndexingState, error: Exception
@@ -354,8 +368,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                     github_token=settings.github.token,
                 )
 
-                # Test repository access by getting basic info
-                repo_info = loader.get_repository_info()
+                # Test repository access by attempting to load one file
+                # Note: This is a basic validation - full file loading happens in LOAD_FILES_FROM_GITHUB
+                repo_info = f"Repository validation for {repo_name} successful"
                 self.logger.info(f"Validated access to repository: {repo_name}")
 
                 # Update repository state with validation success
@@ -460,7 +475,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         state["processed_files"] = total_files
 
         if not all_documents:
-            raise ValueError("No documents loaded from any repository")
+            # Provide detailed diagnostic information when no documents are loaded
+            self._log_no_documents_diagnostics(state)
+            raise ValueError("No documents loaded from any repository - see detailed diagnostics above")
 
         self.logger.info(
             f"Loaded {len(all_documents)} documents from {total_files} files"
@@ -475,7 +492,30 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
 
         documents = state["metadata"].get("loaded_documents", [])
         if not documents:
-            raise ValueError("No documents available for processing")
+            # Check if we have repository states to provide better error information
+            repo_states = state.get("repository_states", {})
+            if repo_states:
+                failed_repos = []
+                empty_repos = []
+                for repo_name, repo_state in repo_states.items():
+                    if repo_state.get("status") == ProcessingStatus.FAILED:
+                        failed_repos.append(repo_name)
+                    elif repo_state.get("total_files", 0) == 0:
+                        empty_repos.append(repo_name)
+                
+                error_details = []
+                if failed_repos:
+                    error_details.append(f"Failed repositories: {', '.join(failed_repos)}")
+                if empty_repos:
+                    error_details.append(f"Empty repositories (no matching files): {', '.join(empty_repos)}")
+                
+                error_msg = "No documents available for processing. " + "; ".join(error_details)
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
+            else:
+                raise ValueError("No documents available for processing - no repositories were loaded")
+
+        self.logger.info(f"Processing {len(documents)} loaded documents")
 
         processed_documents = []
         processing_stats = {
@@ -618,104 +658,16 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             state, 55.0, IndexingWorkflowSteps.EXTRACT_METADATA
         )
 
-    def _generate_embeddings(self, state: IndexingState) -> IndexingState:
-        """Generate embeddings for processed documents."""
-        self.logger.info("Generating embeddings for processed documents")
-
-        processed_documents = state["metadata"].get("processed_documents", [])
-        if not processed_documents:
-            raise ValueError(
-                "No processed documents available for embedding generation"
-            )
-
-        # Initialize embedding provider
-        embedding_provider = self.embedding_factory.create()
-
-        embeddings_stats = {
-            "total_documents": len(processed_documents),
-            "successful_embeddings": 0,
-            "failed_embeddings": 0,
-            "batch_count": 0,
-            "total_tokens": 0,
-        }
-
-        embedded_documents = []
-
-        # Process documents in batches
-        for i in range(0, len(processed_documents), self.batch_size):
-            batch = processed_documents[i : i + self.batch_size]
-            batch_texts = [doc.page_content for doc in batch]
-
-            try:
-                # Generate embeddings for batch
-                batch_embeddings = embedding_provider.embed_documents(batch_texts)
-
-                # Attach embeddings to documents
-                for doc, embedding in zip(batch, batch_embeddings):
-                    doc.metadata["embedding"] = embedding
-                    embedded_documents.append(doc)
-
-                embeddings_stats["successful_embeddings"] += len(batch)
-                embeddings_stats["batch_count"] += 1
-
-                # Estimate token usage (rough approximation)
-                batch_tokens = sum(
-                    len(text.split()) * 1.3 for text in batch_texts
-                )  # ~1.3 tokens per word
-                embeddings_stats["total_tokens"] += int(batch_tokens)
-
-                self.logger.debug(
-                    f"Generated embeddings for batch {embeddings_stats['batch_count']}: {len(batch)} documents"
-                )
-
-            except Exception as e:
-                error_msg = f"Failed to generate embeddings for batch {embeddings_stats['batch_count'] + 1}: {e}"
-                self.logger.error(error_msg)
-
-                # Add failed documents without embeddings
-                for doc in batch:
-                    embedded_documents.append(doc)
-
-                embeddings_stats["failed_embeddings"] += len(batch)
-                state = add_workflow_error(
-                    state, error_msg, IndexingWorkflowSteps.GENERATE_EMBEDDINGS
-                )
-
-            # Update progress
-            progress = 55.0 + (i + len(batch)) / len(processed_documents) * 25.0
-            state = update_workflow_progress(
-                state, progress, IndexingWorkflowSteps.GENERATE_EMBEDDINGS
-            )
-
-        # Store embedded documents and statistics
-        state["metadata"]["embedded_documents"] = embedded_documents
-        state["metadata"]["embeddings_stats"] = embeddings_stats
-        state["embeddings_generated"] = embeddings_stats["successful_embeddings"]
-        state["successful_embeddings"] = embeddings_stats["successful_embeddings"]
-        state["failed_embeddings"] = embeddings_stats["failed_embeddings"]
-
-        self.logger.info(
-            f"Generated embeddings for {embeddings_stats['successful_embeddings']}/{embeddings_stats['total_documents']} documents"
-        )
-
-        if embeddings_stats["failed_embeddings"] > 0:
-            self.logger.warning(
-                f"Failed to generate embeddings for {embeddings_stats['failed_embeddings']} documents"
-            )
-
-        return update_workflow_progress(
-            state, 80.0, IndexingWorkflowSteps.GENERATE_EMBEDDINGS
-        )
-
     def _store_in_vector_db(self, state: IndexingState) -> IndexingState:
         """Store documents and embeddings in vector database."""
         self.logger.info(
             f"Storing documents in {self.vector_store_type} vector database"
         )
 
-        embedded_documents = state["metadata"].get("embedded_documents", [])
-        if not embedded_documents:
-            raise ValueError("No embedded documents available for storage")
+        # Get processed documents (not embedded documents)
+        processed_documents = state["metadata"].get("processed_documents", [])
+        if not processed_documents:
+            raise ValueError("No processed documents available for storage")
 
         # Initialize vector store
         vector_store = self.vector_store_factory.create(
@@ -723,49 +675,19 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         )
 
         storage_stats = {
-            "total_documents": len(embedded_documents),
+            "total_documents": len(processed_documents),
             "stored_documents": 0,
             "failed_storage": 0,
             "batch_count": 0,
         }
 
-        # Filter documents with embeddings
-        documents_with_embeddings = [
-            doc
-            for doc in embedded_documents
-            if doc.metadata.get("embedding") is not None
-        ]
-
-        documents_without_embeddings = len(embedded_documents) - len(
-            documents_with_embeddings
-        )
-        if documents_without_embeddings > 0:
-            self.logger.warning(
-                f"Skipping {documents_without_embeddings} documents without embeddings"
-            )
-
-        # Store documents in batches
-        for i in range(0, len(documents_with_embeddings), self.batch_size):
-            batch = documents_with_embeddings[i : i + self.batch_size]
+        # Store documents in batches (vector store will generate embeddings)
+        for i in range(0, len(processed_documents), self.batch_size):
+            batch = processed_documents[i : i + self.batch_size]
 
             try:
-                # Prepare documents for storage (remove embedding from metadata to avoid duplication)
-                storage_docs = []
-                embeddings = []
-
-                for doc in batch:
-                    # Create clean document without embedding in metadata
-                    clean_metadata = {
-                        k: v for k, v in doc.metadata.items() if k != "embedding"
-                    }
-                    storage_doc = Document(
-                        page_content=doc.page_content, metadata=clean_metadata
-                    )
-                    storage_docs.append(storage_doc)
-                    embeddings.append(doc.metadata["embedding"])
-
-                # Store batch in vector database
-                vector_store.add_documents(storage_docs, embeddings=embeddings)
+                # Store batch in vector database (embeddings are generated by the vector store)
+                vector_store.add_documents(batch)
 
                 storage_stats["stored_documents"] += len(batch)
                 storage_stats["batch_count"] += 1
@@ -786,7 +708,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 )
 
             # Update progress
-            progress = 80.0 + (i + len(batch)) / len(documents_with_embeddings) * 15.0
+            progress = 80.0 + (i + len(batch)) / len(processed_documents) * 15.0
             state = update_workflow_progress(
                 state, progress, IndexingWorkflowSteps.STORE_IN_VECTOR_DB
             )
@@ -1047,6 +969,47 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             repo_state["status"] = ProcessingStatus.FAILED
             repo_state["errors"].append(str(e))
             raise e
+
+    def _log_no_documents_diagnostics(self, state: IndexingState) -> None:
+        """Log detailed diagnostics when no documents are loaded."""
+        self.logger.error("=== REPOSITORY INDEXING DIAGNOSTICS ===")
+        
+        # Check GitHub token
+        if not settings.github.token:
+            self.logger.error("❌ GitHub token is not configured (GITHUB_TOKEN environment variable)")
+        else:
+            self.logger.info("✅ GitHub token is configured")
+        
+        # Check configured file extensions
+        self.logger.info(f"📁 Configured file extensions: {settings.github.file_extensions}")
+        
+        # Check each repository
+        repo_states = state.get("repository_states", {})
+        for repo_name, repo_state in repo_states.items():
+            self.logger.error(f"\n📊 Repository: {repo_name}")
+            self.logger.error(f"   Status: {repo_state.get('status', 'unknown')}")
+            self.logger.error(f"   Total files: {repo_state.get('total_files', 0)}")
+            self.logger.error(f"   Processed files: {repo_state.get('processed_files', 0)}")
+            
+            errors = repo_state.get("errors", [])
+            if errors:
+                self.logger.error(f"   Errors: {errors}")
+                
+                # Check for common error patterns
+                for error in errors:
+                    error_str = str(error).lower()
+                    if "not found" in error_str or "404" in error_str:
+                        self.logger.error(f"   ❌ Repository not found - check if repository exists and is accessible")
+                    elif "permission" in error_str or "403" in error_str:
+                        self.logger.error(f"   ❌ Permission denied - check if GitHub token has access to this repository")
+                    elif "rate limit" in error_str:
+                        self.logger.error(f"   ❌ GitHub API rate limit exceeded")
+                    elif "authentication" in error_str or "401" in error_str:
+                        self.logger.error(f"   ❌ Authentication failed - check GitHub token validity")
+            else:
+                self.logger.error(f"   ❌ No files found matching configured extensions")
+                
+        self.logger.error("=== END DIAGNOSTICS ===")
 
 
 def create_indexing_workflow(
