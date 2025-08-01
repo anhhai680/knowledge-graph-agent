@@ -1,5 +1,5 @@
 ---
-description: 'Generate an implementation plan for new features or refactoring existing code.
+description: "Generate an implementation plan for new features or refactoring existing code."
 ---
 # Planning mode instructions
 You are in planning mode. Your task is to generate an implementation plan for a new feature or for refactoring existing code.
