@@ -195,8 +195,8 @@ class LangChainSettings(BaseModel):
 class RepositoryConfig(BaseModel):
     """GitHub repository configuration."""
 
-    owner: str = Field(..., description="Repository owner")
-    repo: str = Field(..., description="Repository name")
+    name: str = Field(..., description="Repository name")
+    url: str = Field(..., description="Repository URL")
     branch: str = Field("main", description="Repository branch")
     description: Optional[str] = Field(None, description="Repository description")
 

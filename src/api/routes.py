@@ -29,7 +29,6 @@ from src.api.models import (
     QueryIntent,
     SearchStrategy
 )
-from src.api.middleware import APIKeyAuthentication
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
@@ -51,7 +50,7 @@ router = APIRouter(
 active_workflows: Dict[str, Dict] = {}
 
 # Authentication dependency
-auth = APIKeyAuthentication()
+# auth = APIKeyAuthentication()
 
 
 def get_indexing_workflow() -> IndexingWorkflow:
@@ -96,8 +95,7 @@ async def root():
 @router.post("/index", response_model=BatchIndexingResponse)
 async def index_all_repositories(
     background_tasks: BackgroundTasks,
-    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow),
-    api_key: str = Security(auth)
+    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow)
 ):
     """
     Trigger LangGraph indexing workflow for all repositories from appSettings.json.
@@ -191,8 +189,7 @@ async def index_all_repositories(
 async def index_repository(
     request: IndexRepositoryRequest,
     background_tasks: BackgroundTasks,
-    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow),
-    api_key: str = Security(auth)
+    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow)
 ):
     """
     Trigger LangGraph indexing workflow for a specific repository.
@@ -242,7 +239,6 @@ async def index_repository(
 async def process_query(
     request: QueryRequest,
     query_workflow: QueryWorkflow = Depends(get_query_workflow),
-    api_key: str = Security(auth)
 ):
     """
     Execute LangGraph query workflow with adaptive RAG processing.
