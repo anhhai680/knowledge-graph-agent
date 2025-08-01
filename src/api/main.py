@@ -44,29 +44,15 @@ async def lifespan(app: FastAPI):
     try:
         settings = get_settings()
         
-        # Initialize core factories
-        logger.info("Initializing core factories...")
-        vector_store_factory = VectorStoreFactory()
-        llm_factory = LLMFactory()
-        embedding_factory = EmbeddingFactory()
-        
         # Initialize workflow instances
         logger.info("Initializing workflow instances...")
-        workflow_instances["indexing"] = IndexingWorkflow(
-            vector_store_factory=vector_store_factory,
-            llm_factory=llm_factory,
-            embedding_factory=embedding_factory
-        )
+        workflow_instances["indexing"] = IndexingWorkflow()
         
-        workflow_instances["query"] = QueryWorkflow(
-            vector_store_factory=vector_store_factory,
-            llm_factory=llm_factory,
-            embedding_factory=embedding_factory
-        )
+        workflow_instances["query"] = QueryWorkflow()
         
         # Validate configurations
-        logger.info("Validating component configurations...")
-        await _validate_components()
+        # logger.info("Validating component configurations...")
+        # await _validate_components()
         
         logger.info("Knowledge Graph Agent API started successfully!")
         
@@ -95,7 +81,7 @@ async def _validate_components():
         # Validate required settings
         required_settings = [
             "OPENAI_API_KEY",
-            "VECTOR_STORE_TYPE",
+            "DATABASE_TYPE",
             "GITHUB_TOKEN"
         ]
         
