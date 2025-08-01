@@ -132,8 +132,6 @@ def create_app() -> FastAPI:
         - Real-time workflow progress tracking
         - Comprehensive error handling and retry mechanisms
         
-        **Authentication:**
-        All endpoints require API key authentication via the `X-API-Key` header.
         """,
         version="1.0.0",
         docs_url="/docs",

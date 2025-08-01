@@ -13,6 +13,7 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator, model_validator, ValidationError
 import logging
+from .git_settings import GitSettings
 
 # Load environment variables from .env file
 load_dotenv()
@@ -222,10 +223,17 @@ class AppSettings(BaseModel):
     chroma: ChromaSettings
     pinecone: Optional[PineconeSettings] = None
     github: GitHubSettings
+    git: GitSettings = GitSettings()
     embedding: EmbeddingSettings
     document_processing: DocumentProcessingSettings
     workflow: WorkflowSettings
     langchain: LangChainSettings
+
+    # Configuration flags
+    use_git_loader: bool = Field(
+        True, 
+        description="Use Git-based loader instead of API-based loader"
+    )
 
     # Repository configurations from appSettings.json
     repositories: List[RepositoryConfig] = Field(
