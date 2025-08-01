@@ -630,7 +630,7 @@ Answer:"""
                     for doc in state["context_documents"]
                 ]
                 context = self._prepare_context_for_llm(documents)
-                state["context_preparation_time"] = time.time() - start_time
+                state["context_preparation_time"] = (time.time() - start_time) if start_time else 0
                 
                 # Store context in state for next step
                 state["context_size"] = len(context)
@@ -709,7 +709,7 @@ Answer:"""
                 # Finalize successful response
                 state["status"] = ProcessingStatus.COMPLETED
                 start_time = state.get("start_time")
-                state["total_query_time"] = time.time() - start_time if start_time else None
+                state["total_query_time"] = (time.time() - start_time) if start_time else None
                 self.logger.info(f"Query completed successfully with quality score: {state['response_quality_score']}")
 
             # Error handling steps
@@ -774,7 +774,7 @@ Answer:"""
                     # Accept current response if we can't improve
                     state["status"] = ProcessingStatus.COMPLETED
                     start_time_val = state.get("start_time")
-                    state["total_query_time"] = time.time() - start_time_val if start_time_val else None
+                    state["total_query_time"] = (time.time() - start_time_val) if start_time_val else None
 
             elif step == QueryWorkflowSteps.RETRY_WITH_DIFFERENT_CONTEXT:
                 # Retry with different context
@@ -827,10 +827,10 @@ Answer:"""
                 # Complete regardless of retry outcome
                 state["status"] = ProcessingStatus.COMPLETED
                 start_time_val = state.get("start_time")
-                state["total_query_time"] = time.time() - start_time_val if start_time_val else None
+                state["total_query_time"] = (time.time() - start_time_val) if start_time_val else None
 
             # Update step completion
-            step_time = time.time() - start_time
+            step_time = (time.time() - start_time) if start_time else 0
             self.logger.info(f"Completed step '{step}' in {step_time:.2f}s")
 
         except Exception as e:
@@ -948,9 +948,11 @@ Answer:"""
             # Ensure workflow is completed
             if state['status'] != ProcessingStatus.COMPLETED:
                 state['status'] = ProcessingStatus.COMPLETED
-                state['total_query_time'] = time.time() - state['start_time']
+                start_time = state.get('start_time')
+                state['total_query_time'] = (time.time() - start_time) if start_time else None
 
-            self.logger.info(f"Query workflow completed in {state['total_query_time']:.2f}s")
+            total_time = state.get('total_query_time', 0) or 0
+            self.logger.info(f"Query workflow completed in {total_time:.2f}s")
             return state
 
         except Exception as e:
