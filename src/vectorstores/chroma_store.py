@@ -4,14 +4,12 @@ Chroma vector store module for the Knowledge Graph Agent.
 This module provides a Chroma implementation of the vector store.
 """
 
-import os
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import chromadb
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
 from langchain_community.vectorstores import Chroma
-from langchain.vectorstores.base import VectorStore
 from loguru import logger
 from tenacity import (
     retry,

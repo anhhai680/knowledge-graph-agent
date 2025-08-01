@@ -251,8 +251,11 @@ def get_vector_store():
     """
     try:
         vector_store_factory = VectorStoreFactory()
-        return vector_store_factory.create()
+        vector_store = vector_store_factory.create()
+        logger.debug("Successfully created vector store instance")
+        return vector_store
     except Exception as e:
+        logger.error(f"Failed to create vector store: {str(e)}")
         raise HTTPException(
             status_code=503,
             detail=f"Vector store not available: {str(e)}"
