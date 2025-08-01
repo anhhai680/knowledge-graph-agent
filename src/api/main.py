@@ -16,13 +16,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api.routes import router
-from src.api.middleware import (
-    APIKeyAuthentication,
-    RequestLoggingMiddleware,
-    WorkflowMonitoringMiddleware,
-    HealthMonitoringMiddleware,
-    configure_cors_middleware
-)
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
@@ -164,9 +157,9 @@ def create_app() -> FastAPI:
     
     
     # Add comprehensive middleware stack
-    app.add_middleware(HealthMonitoringMiddleware)
-    app.add_middleware(WorkflowMonitoringMiddleware)
-    app.add_middleware(RequestLoggingMiddleware)
+    # app.add_middleware(HealthMonitoringMiddleware)
+    # app.add_middleware(WorkflowMonitoringMiddleware)
+    # app.add_middleware(RequestLoggingMiddleware)
     
     # Configure CORS (simplified for now)
     app.add_middleware(
