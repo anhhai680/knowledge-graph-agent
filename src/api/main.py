@@ -139,12 +139,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan
     )
     
-    
-    # Add comprehensive middleware stack
-    # app.add_middleware(HealthMonitoringMiddleware)
-    # app.add_middleware(WorkflowMonitoringMiddleware)
-    # app.add_middleware(RequestLoggingMiddleware)
-    
     # Configure CORS (simplified for now)
     app.add_middleware(
         CORSMiddleware,

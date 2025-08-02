@@ -75,9 +75,6 @@ router = APIRouter(
     }
 )
 
-# Authentication dependency
-# auth = APIKeyAuthentication()
-
 
 def get_indexing_workflow() -> IndexingWorkflow:
     """Dependency injection for indexing workflow."""

@@ -26,7 +26,7 @@ This implementation plan delivers a focused 2-week MVP for the Knowledge Graph A
 - ✅ Pinecone and Chroma vector storage with runtime switching (DATABASE_TYPE)
 - ✅ RAG query processing with OpenAI integration
 - ✅ LLM and Embedding factory patterns for provider abstraction
-- ✅ REST API with authentication middleware (API key)
+- ❌ REST API with authentication middleware (API key) - Not Implemented
 - ✅ Prompt Manager for context injection and formatting
 - ✅ Environment-based configuration with comprehensive validation
 - ✅ Structured logging and health monitoring
@@ -187,7 +187,7 @@ knowledge-graph-agent/
 │       ├── main.py                 # FastAPI application entry point
 │       ├── routes.py               # REST API endpoints
 │       ├── models.py               # Pydantic request/response models
-│       └── middleware.py           # Authentication middleware (API key)
+│       └── middleware.py           # Authentication middleware (Not Implemented)
 ├── web/
 │   ├── Dockerfile                  # Container configuration
 │   ├── index.html                  # Main chatbot UI interface

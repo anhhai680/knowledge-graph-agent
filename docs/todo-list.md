@@ -304,16 +304,16 @@
 - Unit and integration tests
 
 #### Task 2.7: Authentication Middleware & Workflow Monitoring (10 hours) ⭕
-- [x] Implement `src/api/middleware.py` with API key authentication and workflow request tracking
-- [x] Authentication middleware for securing all endpoints including workflow status endpoints
-- [x] Request logging and response time tracking with LangGraph workflow execution metrics
-- [x] Rate limiting and request validation middleware with workflow queue management
-- [x] CORS configuration for future web interface integration
-- [x] Health monitoring endpoints with LangGraph workflow status and LangChain component connectivity
-- [x] Error response standardization and logging integration with workflow state persistence
-- [x] LangGraph workflow progress tracking endpoints with real-time status updates
-- [x] Unit tests for middleware functionality
-- [x] Integration tests for authentication flow
+- [ ] Implement `src/api/middleware.py` with API key authentication and workflow request tracking
+- [ ] Authentication middleware for securing all endpoints including workflow status endpoints
+- [ ] Request logging and response time tracking with LangGraph workflow execution metrics
+- [ ] Rate limiting and request validation middleware with workflow queue management
+- [ ] CORS configuration for future web interface integration
+- [ ] Health monitoring endpoints with LangGraph workflow status and LangChain component connectivity
+- [ ] Error response standardization and logging integration with workflow state persistence
+- [ ] LangGraph workflow progress tracking endpoints with real-time status updates
+- [ ] Unit tests for middleware functionality
+- [ ] Integration tests for authentication flow
 
 **Deliverables:**
 - src/api/middleware.py with authentication middleware and workflow tracking
