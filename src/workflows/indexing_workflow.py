@@ -332,9 +332,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             )
 
         self.logger.info(f"Initialized state for {len(repositories)} repositories")
-        return update_workflow_progress(
+        return cast(IndexingState, update_workflow_progress(
             state, 5.0, IndexingWorkflowSteps.INITIALIZE_STATE
-        )
+        ))
 
     def _load_repositories(self, state: IndexingState) -> IndexingState:
         """Load repository configurations from appSettings."""
@@ -353,9 +353,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.logger.info(
             f"Loaded configurations for {len(state['repositories'])} repositories"
         )
-        return update_workflow_progress(
+        return cast(IndexingState, update_workflow_progress(
             state, 10.0, IndexingWorkflowSteps.LOAD_REPOSITORIES
-        )
+        ))
 
     def _validate_repositories(self, state: IndexingState) -> IndexingState:
         """Validate repository access and configurations."""
@@ -402,9 +402,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         if validation_errors:
             # Add validation errors to state but continue with valid repositories
             for error in validation_errors:
-                state = add_workflow_error(
+                state = cast(IndexingState, add_workflow_error(
                     state, error, IndexingWorkflowSteps.VALIDATE_REPOS
-                )
+                ))
 
         valid_repos = [
             repo
@@ -418,9 +418,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.logger.info(
             f"Validated {len(valid_repos)}/{len(state['repositories'])} repositories"
         )
-        return update_workflow_progress(
+        return cast(IndexingState, update_workflow_progress(
             state, 15.0, IndexingWorkflowSteps.VALIDATE_REPOS
-        )
+        ))
 
     def _load_files_from_github(self, state: IndexingState) -> IndexingState:
         """Load files from GitHub repositories with parallel processing."""
@@ -635,9 +635,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
 
             # Update progress for batch
             progress = 30.0 + (i + len(batch)) / len(documents) * 20.0
-            state = update_workflow_progress(
+            state = cast(IndexingState, update_workflow_progress(
                 state, progress, IndexingWorkflowSteps.PROCESS_DOCUMENTS
-            )
+            ))
 
         # Store processed documents and update statistics
         state["metadata"]["processed_documents"] = processed_documents
@@ -669,9 +669,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             f"Language-aware chunking produced {len(processed_documents)} chunks, {chunks_with_metadata} with metadata"
         )
 
-        return update_workflow_progress(
+        return cast(IndexingState, update_workflow_progress(
             state, 50.0, IndexingWorkflowSteps.PROCESS_DOCUMENTS
-        )
+        ))
 
     def _extract_metadata(self, state: IndexingState) -> IndexingState:
         """Extract and validate metadata from processed chunks."""
@@ -722,9 +722,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             f"Found {len(metadata_stats['repositories'])} repositories, {len(metadata_stats['languages'])} languages"
         )
 
-        return update_workflow_progress(
+        return cast(IndexingState, update_workflow_progress(
             state, 55.0, IndexingWorkflowSteps.EXTRACT_METADATA
-        )
+        ))
 
     def _store_in_vector_db(self, state: IndexingState) -> IndexingState:
         """Store documents and embeddings in vector database."""
@@ -771,15 +771,15 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 self.logger.error(error_msg)
 
                 storage_stats["failed_storage"] += len(batch)
-                state = add_workflow_error(
+                state = cast(IndexingState, add_workflow_error(
                     state, error_msg, IndexingWorkflowSteps.STORE_IN_VECTOR_DB
-                )
+                ))
 
             # Update progress
             progress = 80.0 + (i + len(batch)) / len(processed_documents) * 15.0
-            state = update_workflow_progress(
+            state = cast(IndexingState, update_workflow_progress(
                 state, progress, IndexingWorkflowSteps.STORE_IN_VECTOR_DB
-            )
+            ))
 
         # Store storage statistics
         state["metadata"]["storage_stats"] = storage_stats
@@ -793,9 +793,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 f"Failed to store {storage_stats['failed_storage']} documents"
             )
 
-        return update_workflow_progress(
+        return cast(IndexingState, update_workflow_progress(
             state, 95.0, IndexingWorkflowSteps.STORE_IN_VECTOR_DB
-        )
+        ))
 
     def _update_workflow_state(self, state: IndexingState) -> IndexingState:
         """Update workflow state with final statistics."""
@@ -822,9 +822,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 # Note: processing_duration calculation removed due to TypedDict constraints
 
         self.logger.info("Workflow state updated with final statistics")
-        return update_workflow_progress(
+        return cast(IndexingState, update_workflow_progress(
             state, 97.0, IndexingWorkflowSteps.UPDATE_WORKFLOW_STATE
-        )
+        ))
 
     def _check_complete(self, state: IndexingState) -> IndexingState:
         """Check if indexing workflow is complete."""
@@ -854,9 +854,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.logger.info(
             f"Workflow completion check passed: {stored_documents} documents stored"
         )
-        return update_workflow_progress(
+        return cast(IndexingState, update_workflow_progress(
             state, 99.0, IndexingWorkflowSteps.CHECK_COMPLETE
-        )
+        ))
 
     def _finalize_index(self, state: IndexingState) -> IndexingState:
         """Finalize indexing workflow."""
@@ -892,9 +892,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             del state["metadata"]["embedded_documents"]
 
         self.logger.info("Indexing workflow finalized successfully")
-        return update_workflow_progress(
+        return cast(IndexingState, update_workflow_progress(
             state, 100.0, IndexingWorkflowSteps.FINALIZE_INDEX
-        )
+        ))
 
     # Error handling methods
 
