@@ -608,8 +608,8 @@ Answer:"""
                     expanded_k,
                     {}  # Remove filters for broader search
                 )
-                if "retrieval_time" not in state:
-                    state["retrieval_time"] = 0
+                if "retrieval_time" not in state or state["retrieval_time"] is None:
+                    state["retrieval_time"] = 0.0
                 state["retrieval_time"] += time.time() - retrieval_start
                 
                 # Update context
@@ -643,7 +643,7 @@ Answer:"""
                 prompt = self._generate_contextual_prompt(
                     state["processed_query"],
                     context,
-                    state["query_intent"]
+                    state["query_intent"] or QueryIntent.CODE_SEARCH
                 )
                 # Store prompt for LLM call
                 state["retrieval_config"]["llm_prompt"] = prompt
@@ -665,6 +665,11 @@ Answer:"""
                 
                 # Update LLM generation state
                 state["llm_generation"]["status"] = ProcessingStatus.COMPLETED
+                # Ensure response_text is always a string
+                if isinstance(response_text, list):
+                    response_text = "\n".join(str(item) for item in response_text)
+                elif not isinstance(response_text, str):
+                    response_text = str(response_text)
                 state["llm_generation"]["generated_response"] = response_text
                 state["llm_generation"]["generation_time"] = state["generation_time"]
                 state["llm_generation"]["model_name"] = settings.openai.model
@@ -694,7 +699,7 @@ Answer:"""
                 context = state["retrieval_config"].get("prepared_context", "")
                 
                 quality_score = self._evaluate_response_quality(
-                    response, state["processed_query"], context
+                    response or "", state["processed_query"], context
                 )
                 state["response_quality_score"] = quality_score
                 state["response_confidence"] = min(quality_score * 1.2, 1.0)  # Boost confidence slightly
@@ -756,6 +761,11 @@ Answer:"""
                     
                     response = llm.invoke(simple_prompt)
                     response_text = response.content if hasattr(response, 'content') else str(response)
+                    # Ensure response_text is always a string
+                    if isinstance(response_text, list):
+                        response_text = "\n".join(str(item) for item in response_text)
+                    elif not isinstance(response_text, str):
+                        response_text = str(response_text)
                     
                     state["llm_generation"]["generated_response"] = response_text
                     state["llm_generation"]["status"] = ProcessingStatus.COMPLETED
@@ -804,12 +814,17 @@ Answer:"""
                     ])
                     
                     prompt = self._generate_contextual_prompt(
-                        state["processed_query"], context, state["query_intent"]
+                        state["processed_query"], context, state["query_intent"] or QueryIntent.CODE_SEARCH
                     )
                     
                     llm = self._get_llm()
                     response = llm.invoke(prompt)
                     response_text = response.content if hasattr(response, 'content') else str(response)
+                    # Ensure response_text is always a string
+                    if isinstance(response_text, list):
+                        response_text = "\n".join(str(item) for item in response_text)
+                    elif not isinstance(response_text, str):
+                        response_text = str(response_text)
                     
                     state["llm_generation"]["generated_response"] = response_text
                     
@@ -839,6 +854,7 @@ Answer:"""
             self.logger.error(error_msg)
             
             state = add_workflow_error(state, error_msg, step)
+            state = QueryState(**state)  # Ensure state is of type QueryState
             
             # Route to appropriate error handler
             if step in [QueryWorkflowSteps.VECTOR_SEARCH, QueryWorkflowSteps.EXPAND_SEARCH_PARAMETERS]:
@@ -876,16 +892,19 @@ Answer:"""
             Final QueryState
         """
         # Initialize workflow state
+        workflow_id = kwargs.get("workflow_id")
+        if workflow_id is None:
+            workflow_id = ""
         state = create_query_state(
-            workflow_id=kwargs.get("workflow_id"),
+            workflow_id=workflow_id,
             original_query=query,
             target_repositories=repositories,
             target_languages=languages,
             target_file_types=file_types,
             retrieval_config={"k": k or self.default_k}
         )
-        
-        state['start_time'] = time.time()
+
+        state["start_time"] = time.time()
 
         # Define workflow steps
         workflow_steps = [
@@ -988,7 +1007,10 @@ Answer:"""
         except RuntimeError:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        return loop.run_until_complete(self._process_query_step(state, step))
+        # Convert dict to QueryState before passing, and back to dict after
+        query_state = QueryState(**state)
+        result_state = loop.run_until_complete(self._process_query_step(query_state, step))
+        return dict(result_state)
 
     def validate_state(self, state: Dict[str, Any]) -> bool:
         """Validate workflow state."""
