@@ -4,7 +4,7 @@ Embedding factory module for the Knowledge Graph Agent.
 This module provides a factory pattern for creating embedding instances.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import List, Optional
 
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.embeddings.base import Embeddings
