@@ -5,8 +5,6 @@ This module implements a complete stateful indexing workflow using LangGraph
 for processing multiple GitHub repositories, document chunking, and vector storage.
 """
 
-# type: ignore  # Disable type checking for this file due to complex typing issues
-
 import json
 import os
 import time
@@ -132,7 +130,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             IndexingWorkflowSteps.LOAD_FILES_FROM_GITHUB,
             IndexingWorkflowSteps.PROCESS_DOCUMENTS,
             IndexingWorkflowSteps.EXTRACT_METADATA,
-            IndexingWorkflowSteps.STORE_IN_VECTOR_DB,  # Vector store handles embedding generation
+            IndexingWorkflowSteps.STORE_IN_VECTOR_DB,  # Vector store now handles embedding generation
             IndexingWorkflowSteps.UPDATE_WORKFLOW_STATE,
             IndexingWorkflowSteps.CHECK_COMPLETE,
             IndexingWorkflowSteps.FINALIZE_INDEX,
@@ -272,7 +270,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.logger.error(f"Handling error in step {step}: {error}")
 
         # Add error to state
-        state = add_workflow_error(state, str(error), step)
+        state = cast(IndexingState, add_workflow_error(state, str(error), step))
 
         # Determine error handling strategy based on step
         if step in [IndexingWorkflowSteps.LOAD_FILES_FROM_GITHUB]:
@@ -953,6 +951,14 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         return state
 
     # Helper methods
+    def _has_repositories(self) -> bool:
+        """Check if repositories are loaded in app settings."""
+        return (
+            self._app_settings is not None
+            and "repositories" in self._app_settings
+            and isinstance(self._app_settings["repositories"], list)
+            and len(self._app_settings["repositories"]) > 0
+        )
 
     def _load_app_settings(self) -> None:
         """Load repository configurations from appSettings.json."""
