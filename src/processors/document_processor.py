@@ -4,19 +4,14 @@ Document processor module for the Knowledge Graph Agent.
 This module provides functionality for processing documents with language-aware chunking.
 """
 
-import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional
 
 from langchain.schema import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from loguru import logger
 
 from src.config.settings import settings
 from src.processors.chunking_strategy import (
     get_chunking_strategy,
-    CSharpChunkingStrategy,
-    ReactChunkingStrategy,
-    GenericChunkingStrategy,
 )
 from src.processors.metadata_extractor import extract_metadata
 

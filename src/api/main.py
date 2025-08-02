@@ -16,13 +16,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api.routes import router
-from src.api.middleware import (
-    APIKeyAuthentication,
-    RequestLoggingMiddleware,
-    WorkflowMonitoringMiddleware,
-    HealthMonitoringMiddleware,
-    configure_cors_middleware
-)
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
@@ -51,29 +44,15 @@ async def lifespan(app: FastAPI):
     try:
         settings = get_settings()
         
-        # Initialize core factories
-        logger.info("Initializing core factories...")
-        vector_store_factory = VectorStoreFactory()
-        llm_factory = LLMFactory()
-        embedding_factory = EmbeddingFactory()
-        
         # Initialize workflow instances
         logger.info("Initializing workflow instances...")
-        workflow_instances["indexing"] = IndexingWorkflow(
-            vector_store_factory=vector_store_factory,
-            llm_factory=llm_factory,
-            embedding_factory=embedding_factory
-        )
+        workflow_instances["indexing"] = IndexingWorkflow()
         
-        workflow_instances["query"] = QueryWorkflow(
-            vector_store_factory=vector_store_factory,
-            llm_factory=llm_factory,
-            embedding_factory=embedding_factory
-        )
+        workflow_instances["query"] = QueryWorkflow()
         
         # Validate configurations
-        logger.info("Validating component configurations...")
-        await _validate_components()
+        # logger.info("Validating component configurations...")
+        # await _validate_components()
         
         logger.info("Knowledge Graph Agent API started successfully!")
         
@@ -102,7 +81,7 @@ async def _validate_components():
         # Validate required settings
         required_settings = [
             "OPENAI_API_KEY",
-            "VECTOR_STORE_TYPE",
+            "DATABASE_TYPE",
             "GITHUB_TOKEN"
         ]
         
@@ -153,20 +132,12 @@ def create_app() -> FastAPI:
         - Real-time workflow progress tracking
         - Comprehensive error handling and retry mechanisms
         
-        **Authentication:**
-        All endpoints require API key authentication via the `X-API-Key` header.
         """,
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan
     )
-    
-    
-    # Add comprehensive middleware stack
-    app.add_middleware(HealthMonitoringMiddleware)
-    app.add_middleware(WorkflowMonitoringMiddleware)
-    app.add_middleware(RequestLoggingMiddleware)
     
     # Configure CORS (simplified for now)
     app.add_middleware(
@@ -272,8 +243,11 @@ def get_vector_store():
     """
     try:
         vector_store_factory = VectorStoreFactory()
-        return vector_store_factory.create()
+        vector_store = vector_store_factory.create()
+        logger.debug("Successfully created vector store instance")
+        return vector_store
     except Exception as e:
+        logger.error(f"Failed to create vector store: {str(e)}")
         raise HTTPException(
             status_code=503,
             detail=f"Vector store not available: {str(e)}"

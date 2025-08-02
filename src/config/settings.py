@@ -13,6 +13,7 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator, model_validator, ValidationError
 import logging
+from .git_settings import GitSettings
 
 # Load environment variables from .env file
 load_dotenv()
@@ -155,6 +156,9 @@ class EmbeddingSettings(BaseModel):
     model: str = Field("text-embedding-ada-002", description="Embedding model")
     batch_size: int = Field(50, description="Batch size for embedding generation")
     max_tokens_per_batch: int = Field(250000, description="Maximum tokens per batch")
+    embedding_api_key: Optional[str] = Field(
+        None, description="API key for embedding provider (if required)"
+    )
 
 
 class DocumentProcessingSettings(BaseModel):
@@ -195,8 +199,8 @@ class LangChainSettings(BaseModel):
 class RepositoryConfig(BaseModel):
     """GitHub repository configuration."""
 
-    owner: str = Field(..., description="Repository owner")
-    repo: str = Field(..., description="Repository name")
+    name: str = Field(..., description="Repository name")
+    url: str = Field(..., description="Repository URL")
     branch: str = Field("main", description="Repository branch")
     description: Optional[str] = Field(None, description="Repository description")
 
@@ -222,10 +226,17 @@ class AppSettings(BaseModel):
     chroma: ChromaSettings
     pinecone: Optional[PineconeSettings] = None
     github: GitHubSettings
+    git: GitSettings = GitSettings()
     embedding: EmbeddingSettings
     document_processing: DocumentProcessingSettings
     workflow: WorkflowSettings
     langchain: LangChainSettings
+
+    # Configuration flags
+    use_git_loader: bool = Field(
+        True, 
+        description="Use Git-based loader instead of API-based loader"
+    )
 
     # Repository configurations from appSettings.json
     repositories: List[RepositoryConfig] = Field(
@@ -328,6 +339,7 @@ def get_settings() -> AppSettings:
                 "max_tokens_per_batch": int(
                     os.getenv("MAX_TOKENS_PER_BATCH", "250000")
                 ),
+                "embedding_api_key": os.getenv("EMBEDDING_API_KEY"),
             },
             # Document processing settings
             "document_processing": {

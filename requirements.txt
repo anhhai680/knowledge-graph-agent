@@ -20,3 +20,4 @@ tqdm>=4.66.1
 loguru>=0.7.0
 tenacity>=8.2.3
 typing-extensions>=4.8.0
+chardet>=5.0.0

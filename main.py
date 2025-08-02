@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # Add the src directory to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 
-from src.api.routes import app
+from src.api.main import app
 from src.utils.logging import setup_logging
 
 # Load environment variables

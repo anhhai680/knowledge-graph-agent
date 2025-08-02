@@ -89,7 +89,11 @@ class VectorStoreFactory:
         # Use collection name from settings if not provided
         coll_name = collection_name or settings.chroma.collection_name
 
-        logger.debug(f"Creating Chroma vector store with collection {coll_name}")
+        # Use default persist directory if not provided
+        if persist_directory is None:
+            persist_directory = "chroma_db"
+
+        logger.debug(f"Creating Chroma vector store with collection {coll_name} in {persist_directory}")
 
         return ChromaStore.from_existing(
             collection_name=coll_name,

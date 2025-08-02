@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query, Security
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
 
 from src.api.models import (
     IndexRepositoryRequest,
@@ -29,13 +29,41 @@ from src.api.models import (
     QueryIntent,
     SearchStrategy
 )
-from src.api.middleware import APIKeyAuthentication
+from src.workflows.workflow_states import QueryIntent as WorkflowQueryIntent, SearchStrategy as WorkflowSearchStrategy
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
 
+
 logger = get_logger(__name__)
+
+# Global workflow tracking
+active_workflows: Dict[str, Dict] = {}
+
+
+def _map_workflow_intent_to_api(workflow_intent: str) -> QueryIntent:
+    """Map workflow QueryIntent to API QueryIntent."""
+    mapping = {
+        "code_search": QueryIntent.CODE_SEARCH,
+        "documentation": QueryIntent.DOCUMENTATION,
+        "explanation": QueryIntent.GENERAL,  # Map explanation to general
+        "debugging": QueryIntent.DEBUGGING,
+        "architecture": QueryIntent.GENERAL,  # Map architecture to general
+    }
+    return mapping.get(workflow_intent, QueryIntent.GENERAL)
+
+
+def _map_workflow_strategy_to_api(workflow_strategy: str) -> SearchStrategy:
+    """Map workflow SearchStrategy to API SearchStrategy."""
+    mapping = {
+        "semantic": SearchStrategy.SEMANTIC,
+        "keyword": SearchStrategy.KEYWORD,
+        "hybrid": SearchStrategy.HYBRID,
+        "metadata_filtered": SearchStrategy.HYBRID,  # Map metadata_filtered to hybrid
+    }
+    return mapping.get(workflow_strategy, SearchStrategy.HYBRID)
+
 
 # Create router instance
 router = APIRouter(
@@ -46,12 +74,6 @@ router = APIRouter(
         500: {"description": "Internal server error"}
     }
 )
-
-# Global workflow tracking
-active_workflows: Dict[str, Dict] = {}
-
-# Authentication dependency
-auth = APIKeyAuthentication()
 
 
 def get_indexing_workflow() -> IndexingWorkflow:
@@ -96,8 +118,7 @@ async def root():
 @router.post("/index", response_model=BatchIndexingResponse)
 async def index_all_repositories(
     background_tasks: BackgroundTasks,
-    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow),
-    api_key: str = Security(auth)
+    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow)
 ):
     """
     Trigger LangGraph indexing workflow for all repositories from appSettings.json.
@@ -191,8 +212,7 @@ async def index_all_repositories(
 async def index_repository(
     request: IndexRepositoryRequest,
     background_tasks: BackgroundTasks,
-    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow),
-    api_key: str = Security(auth)
+    indexing_workflow: IndexingWorkflow = Depends(get_indexing_workflow)
 ):
     """
     Trigger LangGraph indexing workflow for a specific repository.
@@ -242,7 +262,6 @@ async def index_repository(
 async def process_query(
     request: QueryRequest,
     query_workflow: QueryWorkflow = Depends(get_query_workflow),
-    api_key: str = Security(auth)
 ):
     """
     Execute LangGraph query workflow with adaptive RAG processing.
@@ -329,20 +348,20 @@ async def process_query(
             )
             
             document_results.append(DocumentResult(
-                content=doc.get("page_content", ""),
+                content=doc.get("content", ""),  # Fixed: changed from "page_content" to "content"
                 metadata=doc_metadata,
-                score=doc.get("metadata", {}).get("score", 0.0),
+                score=0.0,  # Fixed: Set to 0.0 since similarity scores aren't computed in current workflow
                 chunk_index=doc.get("metadata", {}).get("chunk_index")
             ))
         
         response = QueryResponse(
             query=request.query,
-            intent=QueryIntent(result_state.get("intent", "general")),
-            strategy=SearchStrategy(result_state.get("search_strategy", "hybrid")),
+            intent=_map_workflow_intent_to_api(result_state.get("query_intent", "general")),  # Fixed: use mapping function
+            strategy=_map_workflow_strategy_to_api(result_state.get("search_strategy", "hybrid")),  # Fixed: use mapping function
             results=document_results,
             total_results=len(document_results),
             processing_time=processing_time,
-            confidence_score=result_state.get("confidence_score", 0.0),
+            confidence_score=result_state.get("response_confidence", 0.0),  # Fixed: changed from "confidence_score" to "response_confidence"
             suggestions=result_state.get("suggestions", [])
         )
         
