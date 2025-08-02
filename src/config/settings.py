@@ -156,6 +156,9 @@ class EmbeddingSettings(BaseModel):
     model: str = Field("text-embedding-ada-002", description="Embedding model")
     batch_size: int = Field(50, description="Batch size for embedding generation")
     max_tokens_per_batch: int = Field(250000, description="Maximum tokens per batch")
+    embedding_api_key: Optional[str] = Field(
+        None, description="API key for embedding provider (if required)"
+    )
 
 
 class DocumentProcessingSettings(BaseModel):
@@ -336,6 +339,7 @@ def get_settings() -> AppSettings:
                 "max_tokens_per_batch": int(
                     os.getenv("MAX_TOKENS_PER_BATCH", "250000")
                 ),
+                "embedding_api_key": os.getenv("EMBEDDING_API_KEY"),
             },
             # Document processing settings
             "document_processing": {

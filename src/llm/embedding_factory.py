@@ -89,7 +89,8 @@ class EmbeddingFactory:
         return OpenAIEmbeddings(
             model=model_name,
             chunk_size=batch_size,
-            openai_api_key=settings.openai.api_key,
+            openai_api_key=settings.embedding.embedding_api_key if settings.embedding.embedding_api_key else settings.openai.api_key,
+            base_url=settings.llm_api_base_url if settings.llm_api_base_url else None,
             **kwargs,
         )
 

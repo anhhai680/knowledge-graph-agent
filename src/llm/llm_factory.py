@@ -111,6 +111,7 @@ class LLMFactory:
             streaming=streaming,
             callbacks=callbacks,
             openai_api_key=settings.openai.api_key,
+            base_url=settings.llm_api_base_url if settings.llm_api_base_url else None,
             **kwargs,
         )
 
