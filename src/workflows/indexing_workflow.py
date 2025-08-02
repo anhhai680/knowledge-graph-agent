@@ -17,7 +17,6 @@ from langchain.schema import Document
 
 from src.config.settings import settings
 from src.loaders.enhanced_github_loader import EnhancedGitHubLoader
-from src.loaders.github_loader import GitHubLoader
 from src.processors.document_processor import DocumentProcessor
 from src.llm.embedding_factory import EmbeddingFactory
 from src.vectorstores.store_factory import VectorStoreFactory
