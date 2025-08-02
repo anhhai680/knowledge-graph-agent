@@ -300,7 +300,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         # Determine repositories to process
         if self.target_repositories:
             # Filter to only requested repositories
-            if self._app_settings and "repositories" in self._app_settings:
+            if self._has_repositories():
                 available_repos = [
                     repo["name"] for repo in self._app_settings["repositories"]
                 ]
