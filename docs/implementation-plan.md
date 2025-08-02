@@ -26,7 +26,6 @@ This implementation plan delivers a focused 2-week MVP for the Knowledge Graph A
 - ✅ Pinecone and Chroma vector storage with runtime switching (DATABASE_TYPE)
 - ✅ RAG query processing with OpenAI integration
 - ✅ LLM and Embedding factory patterns for provider abstraction
-- ❌ REST API with authentication middleware (API key) - Not Implemented
 - ✅ Prompt Manager for context injection and formatting
 - ✅ Environment-based configuration with comprehensive validation
 - ✅ Structured logging and health monitoring
@@ -34,6 +33,7 @@ This implementation plan delivers a focused 2-week MVP for the Knowledge Graph A
 - ✅ Web UI chatbot interface
 
 ### Out of Scope (Post-MVP)
+- ❌ REST API with authentication middleware (API key)
 - ❌ Advanced chunking strategies (semantic, context-aware, AST-based)
 - ❌ Multiple LLM provider support beyond OpenAI (Anthropic, Ollama, Azure OpenAI)
 - ❌ Advanced authentication (OAuth, RBAC)
