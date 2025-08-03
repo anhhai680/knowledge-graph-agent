@@ -307,21 +307,21 @@ async def process_query(
         
         # Calculate confidence score with proper fallback
         confidence_score = result_state.get("response_confidence")
-        if confidence_score is None:
-            # Calculate a basic confidence score based on retrieved documents
-            doc_count = len(document_results)
-            if doc_count == 0:
-                confidence_score = 0.0
-            else:
-                # Simple confidence calculation based on document count and content
-                base_confidence = min(doc_count / 5.0, 1.0)  # More docs = higher confidence
-                total_content_length = sum(len(doc.content) for doc in document_results)
-                content_confidence = min(total_content_length / 2000.0, 1.0)  # More content = higher confidence
-                confidence_score = (base_confidence * 0.6 + content_confidence * 0.4)
+        if confidence_score is None:  
+            # Calculate a basic confidence score based on retrieved documents  
+            doc_count = len(document_results)  
+            if doc_count == 0:  
+                confidence_score = 0.0  
+            else:  
+                # Simple confidence calculation based on document count and content  
+                base_confidence = min(doc_count / 5.0, 1.0)  # More docs = higher confidence  
+                total_content_length = sum(len(doc.content) for doc in document_results)  
+                content_confidence = min(total_content_length / 2000.0, 1.0)  # More content = higher confidence  
+                confidence_score = (base_confidence * 0.6 + content_confidence * 0.4) # Weighted average
         
         response = QueryResponse(
             query=request.query,
-            intent=_map_workflow_intent_to_api(result_state.get("query_intent", "general")),  # Fixed: use mapping function
+            intent=_map_workflow_intent_to_api(str(result_state.get("query_intent", "general") or "general")),  # Fixed: ensure string type
             strategy=_map_workflow_strategy_to_api(result_state.get("search_strategy", "hybrid")),  # Fixed: use mapping function
             results=document_results,
             total_results=len(document_results),

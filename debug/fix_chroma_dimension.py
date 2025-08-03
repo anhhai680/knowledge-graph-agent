@@ -13,9 +13,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from src.vectorstores.chroma_store import ChromaStore
-from src.llm.embedding_factory import EmbeddingFactory
 from src.config.settings import settings
-from loguru import logger
 
 
 def diagnose_chroma_issues():

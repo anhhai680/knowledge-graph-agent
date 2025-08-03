@@ -5,11 +5,9 @@ This module tests the fixes for Chroma vector store dimension mismatch issues.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from typing import Dict, Any
+from unittest.mock import Mock
 
 from src.vectorstores.chroma_store import ChromaStore
-from src.llm.embedding_factory import EmbeddingFactory
 
 
 class TestChromaDimensionFixes:

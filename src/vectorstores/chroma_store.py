@@ -21,7 +21,7 @@ from tenacity import (
 from src.config.settings import settings
 from src.llm.embedding_factory import EmbeddingFactory
 from src.vectorstores.base_store import BaseStore
-
+import re
 
 class ChromaStore(BaseStore):
     """
@@ -374,7 +374,6 @@ class ChromaStore(BaseStore):
                         # Try to extract expected dimension from error message
                         # Error format: "Collection expecting embedding with dimension of X, got Y"
                         try:
-                            import re
                             match = re.search(r'expecting embedding with dimension of (\d+), got (\d+)', error_str)
                             if match:
                                 expected_dim = int(match.group(1))
