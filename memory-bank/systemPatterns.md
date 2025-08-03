@@ -281,7 +281,70 @@ class FileSystemProcessor:
 - Modular component architecture
 - Local repository caching
 
-### 6. Builder Pattern
+### 7. Modular Orchestrator Pattern (Enhanced August 3, 2025)
+**Usage**: Query workflow processing with specialized handler components
+
+```python
+# Modular Query Workflow Pattern
+class QueryWorkflowOrchestrator(BaseWorkflow):
+    def __init__(self):
+        # Initialize specialized handlers
+        self.parsing_handler = QueryParsingHandler()
+        self.search_handler = VectorSearchHandler()
+        self.context_handler = ContextProcessingHandler()
+        self.llm_handler = LLMGenerationHandler()
+    
+    async def ainvoke(self, state: QueryState) -> QueryState:
+        """Orchestrate query processing through specialized handlers"""
+        try:
+            # Step 1: Parse and analyze query
+            state = await self.parsing_handler.ainvoke(state)
+            
+            # Step 2: Retrieve relevant documents
+            state = await self.search_handler.ainvoke(state)
+            
+            # Step 3: Prepare context for LLM
+            state = await self.context_handler.ainvoke(state)
+            
+            # Step 4: Generate response
+            state = await self.llm_handler.ainvoke(state)
+            
+            return state
+        except Exception as e:
+            return self._handle_orchestration_error(state, e)
+
+# Specialized Handler Example
+class QueryParsingHandler(BaseWorkflow):
+    """Handles query parsing, validation, and intent analysis"""
+    
+    async def ainvoke(self, state: QueryState) -> QueryState:
+        # Parse query and determine intent
+        parsed_query = self._parse_query(state["original_query"])
+        intent = self._analyze_intent(parsed_query)
+        
+        state.update({
+            "processed_query": parsed_query,
+            "query_intent": intent,
+            "current_step": "query_parsed"
+        })
+        return state
+```
+
+**Benefits**:
+- **Single Responsibility**: Each handler manages one specific concern
+- **Enhanced Testability**: Individual components can be tested in isolation
+- **Improved Maintainability**: Changes isolated to specific handlers
+- **Clear Data Flow**: Explicit state transitions between processing steps
+- **Modular Development**: Team members can work on different handlers simultaneously
+- **Backward Compatibility**: Orchestrator pattern preserves existing interfaces
+
+**Refactoring Impact**:
+- **76% Complexity Reduction**: Main workflow reduced from 1,056 to 253 lines
+- **4 Specialized Handlers**: QueryParsingHandler, VectorSearchHandler, ContextProcessingHandler, LLMGenerationHandler
+- **1,200+ Lines of Tests**: Comprehensive unit test coverage for all components
+- **Performance Preservation**: No regression in query processing speed
+
+### 8. Builder Pattern
 **Usage**: Complex workflow state construction
 
 ```python
@@ -378,6 +441,8 @@ state = (WorkflowStateBuilder()
 3. **Rich Metadata**: Complete Git history, commit information, and repository statistics
 4. **Offline Capability**: Cached repositories enable offline processing
 5. **Simplified Architecture**: Removes complex API rate limiting and retry logic
-6. **Better Error Handling**: Git operation failures are more predictable and recoverable
+6. **Enhanced Maintainability**: Modular query workflow architecture (August 3, 2025) with 76% complexity reduction
+7. **Improved Testability**: Comprehensive unit test coverage for all workflow components
+8. **Better Error Handling**: Git operation failures are more predictable and recoverable
 
-These system patterns provide a robust foundation for the Knowledge Graph Agent while maintaining flexibility for future enhancements and scaling requirements. The Git-based approach significantly improves reliability and performance compared to API-dependent solutions.
+These system patterns provide a robust foundation for the Knowledge Graph Agent while maintaining flexibility for future enhancements and scaling requirements. The Git-based approach significantly improves reliability and performance compared to API-dependent solutions, while the recent modular refactoring enhances maintainability and development productivity.

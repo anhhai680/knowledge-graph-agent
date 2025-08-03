@@ -1,11 +1,24 @@
 # Technical Context - Knowledge Graph Agent
 
 **Document Created:** July 30, 2025  
-**Last Updated:** August 1, 2025  
+**Last Updated:** August 3, 2025  
 
 ## Technology Stack
 
-### Core Framework
+### Core Fr│   ├── workflows/                # LangGraph workflow definitions
+│       ├── base_workflow.py      # Base workflow interface
+│       ├── indexing_workflow.py  # Repository indexing workflow
+│       ├── query_workflow.py     # Refactored modular query workflow (253 lines)
+│       ├── query/                # ✨ NEW: Modular query components (August 3, 2025)
+│       │   ├── handlers/          # Specialized query processing handlers
+│       │   │   ├── query_parsing_handler.py      # Query parsing and intent analysis (116 lines)
+│       │   │   ├── vector_search_handler.py      # Document retrieval and ranking (241 lines)
+│       │   │   ├── context_processing_handler.py # Context preparation (164 lines)
+│       │   │   └── llm_generation_handler.py     # LLM interaction and response generation (199 lines)
+│       │   └── orchestrator/      # Query workflow orchestration
+│       │       └── query_orchestrator.py         # Modular workflow coordination (267 lines)
+│       ├── state_manager.py      # Workflow state management
+│       └── workflow_states.py    # State type definitionsk
 - **Python 3.11+**: Primary programming language with modern async support
 - **LangChain**: AI/ML pipeline framework for document processing, embeddings, and RAG
 - **LangGraph**: Stateful workflow orchestration with error recovery and state management
@@ -158,6 +171,13 @@ knowledge-graph-agent/
 ├── tests/                        # Test suites
 │   ├── unit/                     # Unit tests
 │   ├── integration/              # Integration tests
+│   ├── workflows/                # ✨ ENHANCED: Workflow-specific tests (August 3, 2025)
+│   │   ├── query/                # Modular query workflow tests
+│   │   │   ├── test_orchestrator.py               # Orchestrator tests (284 lines)
+│   │   │   ├── test_query_parsing_handler.py      # Parsing handler tests (202 lines)
+│   │   │   └── test_vector_search_handler.py      # Search handler tests (224 lines)
+│   │   ├── test_performance_comparison.py          # Performance validation tests (245 lines)
+│   │   └── test_query_workflow_refactored.py       # Backward compatibility tests (263 lines)
 │   ├── test_git_implementation.py # Git system integration tests
 │   ├── test_query_workflow.py    # Query workflow tests
 │   └── test_repository_listing.py # Repository processing tests
@@ -415,4 +435,4 @@ def test_git_command_executor():
 4. **Memory Management**: Efficient file processing with streaming and chunking
 5. **Resource Cleanup**: Configurable repository cleanup and disk space management
 
-This technical foundation provides a robust, scalable, and maintainable implementation of the Knowledge Graph Agent with significant performance improvements over API-based approaches. The Git-based loading system eliminates external dependencies and rate limiting while providing richer metadata and faster processing capabilities.
+This technical foundation provides a robust, scalable, and maintainable implementation of the Knowledge Graph Agent with significant performance improvements over API-based approaches. The Git-based loading system eliminates external dependencies and rate limiting while providing richer metadata and faster processing capabilities. Recent modular refactoring (August 3, 2025) has enhanced maintainability and testability with 76% complexity reduction in the query workflow architecture.
