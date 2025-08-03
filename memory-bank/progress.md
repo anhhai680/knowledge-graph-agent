@@ -1,11 +1,14 @@
 # Progress - Knowledge Graph Agent
 
 **Document Created:** July 30, 2025  
-**Last Updated:** August 2, 2025  
+**Last Updated:** August 3, 2025  
 
 ## Current Implementation Status
 
 **Major Achievement**: The Knowledge Graph Agent has completed full MVP implementation with sophisticated, production-ready architecture exceeding original requirements.
+
+### Recent Bug Fix (August 3, 2025)
+**Critical QueryResponse Validation Fix**: Fixed Pydantic validation error where `confidence_score` field was receiving `None` values from workflow state, causing HTTP 500 errors. Updated `routes.py` to properly handle `None` values using `or 0.0` operator instead of relying on `dict.get()` default parameter.
 
 ## What's Working
 

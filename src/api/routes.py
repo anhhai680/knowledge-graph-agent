@@ -29,7 +29,6 @@ from src.api.models import (
     QueryIntent,
     SearchStrategy
 )
-from src.workflows.workflow_states import QueryIntent as WorkflowQueryIntent, SearchStrategy as WorkflowSearchStrategy
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
@@ -361,7 +360,7 @@ async def process_query(
             results=document_results,
             total_results=len(document_results),
             processing_time=processing_time,
-            confidence_score=result_state.get("response_confidence", 0.0),  # Fixed: changed from "confidence_score" to "response_confidence"
+            confidence_score=result_state.get("response_confidence") or 0.0,  # Fixed: handle None values properly
             suggestions=result_state.get("suggestions", [])
         )
         
