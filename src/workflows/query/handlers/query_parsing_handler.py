@@ -5,9 +5,10 @@ This module implements query parsing, validation, and intent analysis
 by extending the existing BaseWorkflow infrastructure.
 """
 
-from typing import List
+from typing import List, Optional
 from src.workflows.base_workflow import BaseWorkflow
-from src.workflows.workflow_states import QueryState, QueryIntent, update_workflow_progress
+from src.workflows.workflow_states import QueryState, QueryIntent
+from src.config.query_patterns import QueryPatternsConfig, load_query_patterns
 
 
 class QueryParsingHandler(BaseWorkflow[QueryState]):
@@ -18,9 +19,17 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
     and progress tracking while focusing on query processing concerns.
     """
     
-    def __init__(self, **kwargs):
-        """Initialize query parsing handler."""
+    def __init__(self, query_patterns_config: Optional[str] = None, **kwargs):
+        """
+        Initialize query parsing handler.
+        
+        Args:
+            query_patterns_config: Optional path to query patterns configuration file
+            **kwargs: Additional arguments passed to BaseWorkflow
+        """
         super().__init__(workflow_id="query-parsing", **kwargs)
+        # Load query patterns configuration
+        self.patterns_config = load_query_patterns(query_patterns_config)
         # All error handling, retry, progress tracking inherited from BaseWorkflow
     
     def define_steps(self) -> List[str]:
@@ -45,9 +54,8 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
             # Extract key terms for better search
             simplified_query = self._extract_key_terms(original_query)
             
-            # Store both original and simplified queries
+            # Store simplified query (original is already in state)
             state["processed_query"] = simplified_query
-            state["original_processed_query"] = original_query
             
             self.logger.info(f"Original query: {original_query}")
             self.logger.info(f"Simplified query: {simplified_query}")
@@ -85,12 +93,19 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         """
         query_lower = query.lower()
 
-        # Code search patterns
+        # Explanation patterns (check first to avoid conflicts with code search)
         if any(keyword in query_lower for keyword in [
-            "function", "method", "class", "variable", "implement", "code",
-            "algorithm", "pattern", "design pattern", "how to", "example"
+            "explain", "what is", "what does", "how does", "why",
+            "understand", "clarify", "meaning"
         ]):
-            return QueryIntent.CODE_SEARCH
+            return QueryIntent.EXPLANATION
+
+        # Debugging patterns (check before code search for fix/error terms)
+        elif any(keyword in query_lower for keyword in [
+            "error", "bug", "issue", "problem", "fix", "debug",
+            "troubleshoot", "exception", "crash"
+        ]):
+            return QueryIntent.DEBUGGING
 
         # Documentation patterns
         elif any(keyword in query_lower for keyword in [
@@ -99,26 +114,19 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         ]):
             return QueryIntent.DOCUMENTATION
 
-        # Explanation patterns
-        elif any(keyword in query_lower for keyword in [
-            "explain", "what is", "what does", "how does", "why",
-            "understand", "clarify", "meaning"
-        ]):
-            return QueryIntent.EXPLANATION
-
-        # Debugging patterns
-        elif any(keyword in query_lower for keyword in [
-            "error", "bug", "issue", "problem", "fix", "debug",
-            "troubleshoot", "exception", "crash"
-        ]):
-            return QueryIntent.DEBUGGING
-
         # Architecture patterns
         elif any(keyword in query_lower for keyword in [
             "architecture", "structure", "design", "pattern", "flow",
             "component", "module", "system", "overview"
         ]):
             return QueryIntent.ARCHITECTURE
+
+        # Code search patterns (moved to end to avoid conflicts)
+        elif any(keyword in query_lower for keyword in [
+            "function", "method", "class", "variable", "implement", "code",
+            "algorithm", "pattern", "design pattern", "how to", "example"
+        ]):
+            return QueryIntent.CODE_SEARCH
 
         # Default to code search
         else:
@@ -128,8 +136,9 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         """
         Extract key terms from complex queries for better vector search.
         
-        This method simplifies complex queries by extracting the most relevant
-        terms that are likely to match documents in the vector store.
+        This method uses configurable patterns to simplify complex queries by 
+        extracting the most relevant terms that are likely to match documents 
+        in the vector store. Focus on semantic patterns rather than specific names.
         
         Args:
             query: Original user query
@@ -138,69 +147,75 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
             Simplified query with key terms
         """
         query_lower = query.lower()
-        
-        # Define key term patterns for different query types
         key_terms = []
         
-        # Extract repository/service names
-        if "car-listing-service" in query_lower:
-            key_terms.append("car")
-            key_terms.append("listing")
-        elif "car-notification-service" in query_lower:
-            key_terms.append("car")
-            key_terms.append("notification")
-        elif "car-order-service" in query_lower:
-            key_terms.append("car")
-            key_terms.append("order")
-        elif "car-web-client" in query_lower:
-            key_terms.append("car")
-            key_terms.append("web")
+        # Extract domain-specific terms using configured patterns
+        for domain_pattern in self.patterns_config.domain_patterns:
+            if any(pattern in query_lower for pattern in domain_pattern.patterns):
+                key_terms.extend(domain_pattern.key_terms)
         
-        # Extract common technical terms
-        if "component" in query_lower or "components" in query_lower:
-            key_terms.append("class")
-            key_terms.append("service")
-        if "main" in query_lower:
-            key_terms.append("class")
-        if "structure" in query_lower:
-            key_terms.append("class")
-        if "project" in query_lower:
-            key_terms.append("class")
+        # Extract technical terms using configured patterns
+        for tech_pattern in self.patterns_config.technical_patterns:
+            if any(pattern in query_lower for pattern in tech_pattern.patterns):
+                key_terms.extend(tech_pattern.key_terms)
         
-        # Extract programming language terms
-        if "csharp" in query_lower or "c#" in query_lower:
-            key_terms.append("class")
-        if "dotnet" in query_lower or ".net" in query_lower:
-            key_terms.append("class")
+        # Extract programming language terms using configured patterns
+        for prog_pattern in self.patterns_config.programming_patterns:
+            if any(pattern in query_lower for pattern in prog_pattern.patterns):
+                key_terms.extend(prog_pattern.key_terms)
         
-        # Extract API-related terms
-        if "api" in query_lower:
-            key_terms.append("controller")
-            key_terms.append("service")
-        if "endpoint" in query_lower:
-            key_terms.append("controller")
-        if "controller" in query_lower:
-            key_terms.append("controller")
+        # Extract API-related terms using configured patterns
+        for api_pattern in self.patterns_config.api_patterns:
+            if any(pattern in query_lower for pattern in api_pattern.patterns):
+                key_terms.extend(api_pattern.key_terms)
         
-        # Extract database-related terms
-        if "database" in query_lower or "db" in query_lower:
-            key_terms.append("model")
-            key_terms.append("entity")
-        if "model" in query_lower:
-            key_terms.append("class")
+        # Extract database-related terms using configured patterns
+        for db_pattern in self.patterns_config.database_patterns:
+            if any(pattern in query_lower for pattern in db_pattern.patterns):
+                key_terms.extend(db_pattern.key_terms)
         
-        # If no specific terms found, extract general terms
+        # Extract architecture-related terms using configured patterns
+        for arch_pattern in self.patterns_config.architecture_patterns:
+            if any(pattern in query_lower for pattern in arch_pattern.patterns):
+                key_terms.extend(arch_pattern.key_terms)
+        
+        # If no specific patterns matched, extract general terms
         if not key_terms:
-            # Extract words that are likely to be in code
-            words = query_lower.split()
-            for word in words:
-                if len(word) > 2 and word not in ["the", "and", "or", "for", "with", "this", "that", "what", "are", "main", "components", "project"]:
-                    key_terms.append(word)
+            key_terms = self._extract_general_terms(query_lower)
         
         # If still no terms, use the original query
         if not key_terms:
             return query
         
-        # Return simplified query
-        simplified = " ".join(key_terms[:5])  # Limit to 5 terms
+        # Remove duplicates while preserving order
+        unique_terms = []
+        seen = set()
+        for term in key_terms:
+            if term not in seen:
+                unique_terms.append(term)
+                seen.add(term)
+        
+        # Return simplified query with configured max terms limit
+        simplified = " ".join(unique_terms[:self.patterns_config.max_terms])
         return simplified
+    
+    def _extract_general_terms(self, query_lower: str) -> List[str]:
+        """
+        Extract general terms when no specific patterns match.
+        
+        Args:
+            query_lower: Lowercased query string
+            
+        Returns:
+            List of extracted general terms
+        """
+        words = query_lower.split()
+        general_terms = []
+        
+        for word in words:
+            # Check word length and exclusion list
+            if (len(word) > self.patterns_config.min_word_length and 
+                word not in self.patterns_config.excluded_words):
+                general_terms.append(word)
+        
+        return general_terms

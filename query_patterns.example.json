@@ -1,0 +1,154 @@
+{
+  "domain_patterns": [
+    {
+      "patterns": ["listing", "inventory", "catalog"],
+      "key_terms": ["item", "product", "listing", "catalog"]
+    },
+    {
+      "patterns": ["notification", "messaging", "alert"],
+      "key_terms": ["message", "notification", "event", "alert"]
+    },
+    {
+      "patterns": ["order", "booking", "reservation"],
+      "key_terms": ["order", "transaction", "booking", "purchase"]
+    },
+    {
+      "patterns": ["user", "account", "profile", "auth"],
+      "key_terms": ["user", "account", "authentication", "profile"]
+    },
+    {
+      "patterns": ["payment", "billing", "finance"],
+      "key_terms": ["payment", "billing", "transaction", "finance"]
+    },
+    {
+      "patterns": ["client", "frontend", "ui", "web"],
+      "key_terms": ["client", "frontend", "interface", "web"]
+    }
+  ],
+  "technical_patterns": [
+    {
+      "patterns": ["component", "components"],
+      "key_terms": ["class", "service", "module"]
+    },
+    {
+      "patterns": ["main"],
+      "key_terms": ["class", "entry", "main"]
+    },
+    {
+      "patterns": ["structure", "architecture"],
+      "key_terms": ["class", "interface", "architecture"]
+    },
+    {
+      "patterns": ["project", "application"],
+      "key_terms": ["class", "module", "application"]
+    },
+    {
+      "patterns": ["service", "microservice"],
+      "key_terms": ["service", "class", "interface"]
+    }
+  ],
+  "programming_patterns": [
+    {
+      "patterns": ["csharp", "c#"],
+      "key_terms": ["class", "namespace", "method"]
+    },
+    {
+      "patterns": ["dotnet", ".net"],
+      "key_terms": ["class", "assembly", "namespace"]
+    },
+    {
+      "patterns": ["python"],
+      "key_terms": ["class", "function", "module"]
+    },
+    {
+      "patterns": ["javascript", "js", "typescript", "ts"],
+      "key_terms": ["function", "class", "interface", "component"]
+    },
+    {
+      "patterns": ["java"],
+      "key_terms": ["class", "interface", "method", "package"]
+    },
+    {
+      "patterns": ["go", "golang"],
+      "key_terms": ["func", "struct", "package", "interface"]
+    }
+  ],
+  "api_patterns": [
+    {
+      "patterns": ["api", "rest", "restful"],
+      "key_terms": ["controller", "service", "endpoint", "api"]
+    },
+    {
+      "patterns": ["endpoint", "route"],
+      "key_terms": ["controller", "handler", "route"]
+    },
+    {
+      "patterns": ["controller"],
+      "key_terms": ["controller", "action", "handler"]
+    },
+    {
+      "patterns": ["graphql", "gql"],
+      "key_terms": ["resolver", "schema", "query", "mutation"]
+    },
+    {
+      "patterns": ["grpc"],
+      "key_terms": ["service", "proto", "rpc", "method"]
+    }
+  ],
+  "database_patterns": [
+    {
+      "patterns": ["database", "db", "storage"],
+      "key_terms": ["model", "entity", "repository", "table"]
+    },
+    {
+      "patterns": ["model", "entity"],
+      "key_terms": ["class", "table", "schema"]
+    },
+    {
+      "patterns": ["repository", "dao"],
+      "key_terms": ["class", "interface", "crud", "data"]
+    },
+    {
+      "patterns": ["migration", "schema"],
+      "key_terms": ["table", "column", "index", "database"]
+    },
+    {
+      "patterns": ["nosql", "mongodb"],
+      "key_terms": ["collection", "document", "query"]
+    },
+    {
+      "patterns": ["sql", "postgres", "mysql"],
+      "key_terms": ["table", "column", "index", "query"]
+    }
+  ],
+  "architecture_patterns": [
+    {
+      "patterns": ["architecture", "design"],
+      "key_terms": ["pattern", "architecture", "design", "structure"]
+    },
+    {
+      "patterns": ["pattern", "patterns"],
+      "key_terms": ["design", "pattern", "architecture"]
+    },
+    {
+      "patterns": ["workflow", "pipeline"],
+      "key_terms": ["workflow", "process", "pipeline", "flow"]
+    },
+    {
+      "patterns": ["container", "docker"],
+      "key_terms": ["container", "docker", "deployment"]
+    },
+    {
+      "patterns": ["kubernetes", "k8s"],
+      "key_terms": ["pod", "service", "deployment", "cluster"]
+    }
+  ],
+  "excluded_words": [
+    "the", "and", "or", "for", "with", "this", "that", "what", "are",
+    "main", "components", "project", "how", "why", "when", "where",
+    "can", "will", "should", "would", "could", "does", "is", "was",
+    "have", "has", "had", "do", "did", "get", "got", "make", "made"
+  ],
+  "max_terms": 5,
+  "min_word_length": 2
+}
