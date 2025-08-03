@@ -573,11 +573,15 @@
             </div>
         </div>
     </div>
-
+    <!-- Set API base URL from environment or deployment config -->
+    <script>
+        // You can set this variable at deploy time, e.g. via server-side templating or a build tool
+        window.API_BASE_URL = window.API_BASE_URL || 'http://localhost:8000/api/v1';
+    </script>
     <script>
         class KnowledgeGraphAgent {
             constructor() {
-                this.apiBase = 'http://localhost:8000/api/v1';
+                this.apiBase = window.API_BASE_URL;
                 this.chatHistory = [];
                 this.isConnected = false;
                 this.currentWorkflows = new Map();
