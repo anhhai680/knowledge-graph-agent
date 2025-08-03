@@ -225,7 +225,6 @@ class QueryState(BaseWorkflowState):
     retrieval_time: Optional[float]
     generation_time: Optional[float]
     start_time: Optional[float]
-    total_query_time: Optional[float]
 
 
 # Maintenance workflow state schema
