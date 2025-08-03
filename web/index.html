@@ -947,7 +947,7 @@
             }
         }
 
-        function copyToClipboard(elementId) {
+        function copyToClipboard(event,elementId) {
             const element = document.getElementById(elementId);
             if (element) {
                 const text = element.textContent;
