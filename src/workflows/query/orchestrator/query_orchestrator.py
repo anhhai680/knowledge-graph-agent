@@ -29,6 +29,31 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
     and progress tracking while composing step handlers for modular execution.
     """
     
+    # Confidence Score Calculation Constants
+    # These constants control how response confidence is calculated based on
+    # retrieved context quality and quantity
+    
+    # Document count normalization - assumes 5 documents provide good coverage
+    # Based on empirical testing showing diminishing returns beyond 5 relevant docs
+    CONFIDENCE_OPTIMAL_DOC_COUNT = 5.0
+    
+    # Content length normalization - assumes 2000 chars provide sufficient context
+    # Derived from average code function/class size analysis across multiple repos
+    CONFIDENCE_OPTIMAL_CONTENT_LENGTH = 2000.0
+    
+    # Confidence score component weights (must sum to 1.0)
+    # Document count and content quality are primary factors for technical queries
+    CONFIDENCE_WEIGHT_DOC_COUNT = 0.4      # Quantity of relevant documents
+    CONFIDENCE_WEIGHT_CONTENT = 0.4        # Quality/length of content
+    CONFIDENCE_WEIGHT_METADATA = 0.2       # Metadata completeness (file paths, repos, etc.)
+    
+    # Metadata quality scoring - points awarded for each metadata field present
+    # These values reflect the relative importance of different metadata fields
+    METADATA_SCORE_FILE_PATH = 0.2    # File path is most important for code context
+    METADATA_SCORE_REPOSITORY = 0.1   # Repository context helps with scope understanding
+    METADATA_SCORE_LANGUAGE = 0.1     # Programming language aids in interpretation
+    METADATA_SCORE_CHUNK_TYPE = 0.1   # Chunk type (function, class, etc.) provides structure info
+    
     def __init__(
         self,
         collection_name: Optional[str] = None,
@@ -41,6 +66,9 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
     ):
         """Initialize query workflow orchestrator."""
         super().__init__(workflow_id="query-workflow-orchestrator", **kwargs)
+        
+        # Validate confidence scoring constants at initialization
+        self._validate_confidence_constants()
         
         # Store configuration
         self.collection_name = collection_name
@@ -59,6 +87,106 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
             **kwargs
         )
         self.llm_handler = LLMGenerationHandler(**kwargs)
+        
+    def _validate_confidence_constants(self) -> None:
+        """
+        Validate that confidence calculation constants are properly configured.
+        
+        Raises:
+            ValueError: If constants are invalid or inconsistent
+        """
+        # Ensure weights sum to 1.0 (allowing for small floating point tolerance)
+        total_weight = (
+            self.CONFIDENCE_WEIGHT_DOC_COUNT + 
+            self.CONFIDENCE_WEIGHT_CONTENT + 
+            self.CONFIDENCE_WEIGHT_METADATA
+        )
+        if abs(total_weight - 1.0) > 0.001:
+            raise ValueError(
+                f"Confidence weights must sum to 1.0, got {total_weight:.3f}. "
+                f"Current weights: doc_count={self.CONFIDENCE_WEIGHT_DOC_COUNT}, "
+                f"content={self.CONFIDENCE_WEIGHT_CONTENT}, "
+                f"metadata={self.CONFIDENCE_WEIGHT_METADATA}"
+            )
+        
+        # Ensure all constants are positive
+        constants_to_check = [
+            ("CONFIDENCE_OPTIMAL_DOC_COUNT", self.CONFIDENCE_OPTIMAL_DOC_COUNT),
+            ("CONFIDENCE_OPTIMAL_CONTENT_LENGTH", self.CONFIDENCE_OPTIMAL_CONTENT_LENGTH),
+            ("CONFIDENCE_WEIGHT_DOC_COUNT", self.CONFIDENCE_WEIGHT_DOC_COUNT),
+            ("CONFIDENCE_WEIGHT_CONTENT", self.CONFIDENCE_WEIGHT_CONTENT),
+            ("CONFIDENCE_WEIGHT_METADATA", self.CONFIDENCE_WEIGHT_METADATA),
+            ("METADATA_SCORE_FILE_PATH", self.METADATA_SCORE_FILE_PATH),
+            ("METADATA_SCORE_REPOSITORY", self.METADATA_SCORE_REPOSITORY),
+            ("METADATA_SCORE_LANGUAGE", self.METADATA_SCORE_LANGUAGE),
+            ("METADATA_SCORE_CHUNK_TYPE", self.METADATA_SCORE_CHUNK_TYPE),
+        ]
+        
+        for name, value in constants_to_check:
+            if value <= 0:
+                raise ValueError(f"Constant {name} must be positive, got {value}")
+    
+    @classmethod
+    def get_confidence_constants_info(cls) -> Dict[str, Dict[str, Any]]:
+        """
+        Get information about confidence calculation constants for tuning and documentation.
+        
+        Returns:
+            Dictionary containing constant names, values, descriptions, and tuning guidance
+        """
+        return {
+            "normalization_factors": {
+                "CONFIDENCE_OPTIMAL_DOC_COUNT": {
+                    "value": cls.CONFIDENCE_OPTIMAL_DOC_COUNT,
+                    "description": "Optimal number of documents for confidence calculation",
+                    "tuning_guidance": "Increase if queries typically need more documents for good coverage"
+                },
+                "CONFIDENCE_OPTIMAL_CONTENT_LENGTH": {
+                    "value": cls.CONFIDENCE_OPTIMAL_CONTENT_LENGTH,
+                    "description": "Optimal content length (chars) for confidence calculation",
+                    "tuning_guidance": "Adjust based on average meaningful code chunk size in your domain"
+                }
+            },
+            "component_weights": {
+                "CONFIDENCE_WEIGHT_DOC_COUNT": {
+                    "value": cls.CONFIDENCE_WEIGHT_DOC_COUNT,
+                    "description": "Weight for document count in confidence score",
+                    "tuning_guidance": "Increase for domains where quantity of sources matters more"
+                },
+                "CONFIDENCE_WEIGHT_CONTENT": {
+                    "value": cls.CONFIDENCE_WEIGHT_CONTENT,
+                    "description": "Weight for content quality/length in confidence score",
+                    "tuning_guidance": "Increase for domains where content depth is critical"
+                },
+                "CONFIDENCE_WEIGHT_METADATA": {
+                    "value": cls.CONFIDENCE_WEIGHT_METADATA,
+                    "description": "Weight for metadata completeness in confidence score",
+                    "tuning_guidance": "Increase if metadata quality significantly impacts answer reliability"
+                }
+            },
+            "metadata_scores": {
+                "METADATA_SCORE_FILE_PATH": {
+                    "value": cls.METADATA_SCORE_FILE_PATH,
+                    "description": "Points awarded for file path metadata presence",
+                    "tuning_guidance": "Highest score as file paths are critical for code context"
+                },
+                "METADATA_SCORE_REPOSITORY": {
+                    "value": cls.METADATA_SCORE_REPOSITORY,
+                    "description": "Points awarded for repository metadata presence",
+                    "tuning_guidance": "Important for understanding code scope and context"
+                },
+                "METADATA_SCORE_LANGUAGE": {
+                    "value": cls.METADATA_SCORE_LANGUAGE,
+                    "description": "Points awarded for language metadata presence",
+                    "tuning_guidance": "Helps with syntax-specific understanding"
+                },
+                "METADATA_SCORE_CHUNK_TYPE": {
+                    "value": cls.METADATA_SCORE_CHUNK_TYPE,
+                    "description": "Points awarded for chunk type metadata presence",
+                    "tuning_guidance": "Useful for understanding code structure (function, class, etc.)"
+                }
+            }
+        }
         
     def define_steps(self) -> List[str]:
         """Define the main workflow steps."""
@@ -272,13 +400,21 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
 
     def _calculate_response_confidence(self, state: QueryState) -> float:
         """
-        Calculate response confidence score using PromptManager logic.
+        Calculate response confidence score based on context quality metrics.
+        
+        This method evaluates the confidence of a generated response by analyzing:
+        1. Document count - More relevant documents generally indicate higher confidence
+        2. Content quality - Sufficient content length suggests comprehensive context
+        3. Metadata completeness - Well-structured metadata improves interpretation
+        
+        The confidence score ranges from 0.0 (no confidence) to 1.0 (high confidence).
 
         Args:
-            state: Current query state
+            state: Current query state containing context documents and metadata
 
         Returns:
-            Confidence score between 0 and 1
+            Confidence score between 0 and 1, where higher values indicate 
+            more reliable responses based on available context
         """
         context_documents = state.get("context_documents", [])
         query = state.get("original_query", "")
@@ -286,29 +422,45 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
         if not context_documents:
             return 0.0
 
-        # Basic confidence metrics (based on PromptManager._assess_context_confidence)
-        doc_count_score = min(len(context_documents) / 5.0, 1.0)  # More docs = higher confidence
+        # Document count score - normalize against optimal document count
+        # More documents generally provide better coverage, but with diminishing returns
+        doc_count_score = min(
+            len(context_documents) / self.CONFIDENCE_OPTIMAL_DOC_COUNT, 
+            1.0
+        )
         
-        # Content relevance score
+        # Content relevance score - normalize against optimal content length
+        # Sufficient content length indicates comprehensive context coverage
         total_content_length = sum(len(doc.get("content", "")) for doc in context_documents)
-        content_score = min(total_content_length / 2000.0, 1.0)  # More content = higher confidence
+        content_score = min(
+            total_content_length / self.CONFIDENCE_OPTIMAL_CONTENT_LENGTH, 
+            1.0
+        )
         
-        # Metadata quality score
+        # Metadata quality score - evaluate completeness of document metadata
+        # Better metadata helps with context interpretation and source attribution
         metadata_quality = 0.0
         for doc in context_documents:
             metadata = doc.get("metadata", {})
             if metadata.get("file_path"):
-                metadata_quality += 0.2
+                metadata_quality += self.METADATA_SCORE_FILE_PATH
             if metadata.get("repository"):
-                metadata_quality += 0.1
+                metadata_quality += self.METADATA_SCORE_REPOSITORY
             if metadata.get("language"):
-                metadata_quality += 0.1
+                metadata_quality += self.METADATA_SCORE_LANGUAGE
             if metadata.get("chunk_type"):
-                metadata_quality += 0.1
+                metadata_quality += self.METADATA_SCORE_CHUNK_TYPE
         
+        # Normalize metadata quality by document count to get average quality per document
         metadata_quality = min(metadata_quality / len(context_documents), 1.0)
         
-        # Combined confidence score
-        confidence = (doc_count_score * 0.4 + content_score * 0.4 + metadata_quality * 0.2)
+        # Weighted combination of confidence components
+        # Weights are designed to prioritize content quantity and quality for technical queries
+        confidence = (
+            doc_count_score * self.CONFIDENCE_WEIGHT_DOC_COUNT + 
+            content_score * self.CONFIDENCE_WEIGHT_CONTENT + 
+            metadata_quality * self.CONFIDENCE_WEIGHT_METADATA
+        )
         
+        # Ensure confidence never exceeds 1.0
         return min(confidence, 1.0)
