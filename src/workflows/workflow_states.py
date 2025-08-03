@@ -166,6 +166,7 @@ class DocumentRetrievalState(TypedDict):
     retrieved_documents: List[Dict[str, Any]]
     retrieval_time: Optional[float]
     relevance_scores: List[float]
+    status: ProcessingStatus
 
 
 # LLM generation state
@@ -180,6 +181,7 @@ class LLMGenerationState(TypedDict):
     model_name: str
     temperature: float
     max_tokens: int
+    status: ProcessingStatus
 
 
 # Query workflow state schema
@@ -222,6 +224,7 @@ class QueryState(BaseWorkflowState):
     total_query_time: Optional[float]
     retrieval_time: Optional[float]
     generation_time: Optional[float]
+    start_time: Optional[float]
 
 
 # Maintenance workflow state schema
@@ -348,6 +351,10 @@ def create_query_state(
     workflow_id: str,
     original_query: str,
     search_strategy: SearchStrategy = SearchStrategy.SEMANTIC,
+    target_repositories: Optional[List[str]] = None,
+    target_languages: Optional[List[str]] = None,
+    target_file_types: Optional[List[str]] = None,
+    retrieval_config: Optional[Dict[str, Any]] = None,
     top_k: int = 10,
 ) -> QueryState:
     """
@@ -365,50 +372,63 @@ def create_query_state(
     base_state = create_base_workflow_state(workflow_id, WorkflowType.QUERY)
     current_time = time.time()
 
-    return QueryState(
-        **base_state,
-        original_query=original_query,
-        processed_query=original_query,
-        query_intent=None,
-        search_strategy=search_strategy,
-        target_repositories=None,
-        target_languages=None,
-        target_file_types=None,
-        retrieval_config={
+    query_state: QueryState = {
+        "workflow_id": base_state["workflow_id"],
+        "workflow_type": base_state["workflow_type"],
+        "status": base_state["status"],
+        "created_at": base_state["created_at"],
+        "updated_at": base_state["updated_at"],
+        "progress_percentage": base_state["progress_percentage"],
+        "current_step": base_state["current_step"],
+        "errors": base_state["errors"],
+        "metadata": base_state["metadata"],
+        "original_query": original_query,
+        "processed_query": original_query,
+        "query_intent": None,
+        "search_strategy": search_strategy,
+        "target_repositories": target_repositories,
+        "target_languages": target_languages,
+        "target_file_types": target_file_types,
+        "retrieval_config": retrieval_config or {
             "top_k": top_k,
             "similarity_threshold": 0.7,
             "metadata_filters": {},
         },
-        document_retrieval=DocumentRetrievalState(
-            query_vector=None,
-            search_strategy=search_strategy,
-            top_k=top_k,
-            similarity_threshold=0.7,
-            metadata_filters={},
-            retrieved_documents=[],
-            retrieval_time=None,
-            relevance_scores=[],
-        ),
-        context_size=0,
-        context_documents=[],
-        context_preparation_time=None,
-        llm_generation=LLMGenerationState(
-            prompt_template="",
-            context_documents=[],
-            generated_response=None,
-            generation_time=None,
-            token_usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-            model_name=get_openai_model_name(),
-            temperature=get_openai_temperature(),
-            max_tokens=get_openai_max_tokens(),
-        ),
-        response_quality_score=None,
-        response_confidence=None,
-        response_sources=[],
-        total_query_time=None,
-        retrieval_time=None,
-        generation_time=None,
-    )
+        "document_retrieval": {
+            "query_vector": None,
+            "search_strategy": search_strategy,
+            "top_k": top_k,
+            "similarity_threshold": 0.7,
+            "metadata_filters": {},
+            "retrieved_documents": [],
+            "retrieval_time": None,
+            "relevance_scores": [],
+            "status": ProcessingStatus.NOT_STARTED,
+        },
+        "context_size": 0,
+        "context_documents": [],
+        "context_preparation_time": None,
+        "llm_generation": {
+            "prompt_template": "",
+            "context_documents": [],
+            "generated_response": None,
+            "generation_time": None,
+            "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            "model_name": get_openai_model_name(),
+            "temperature": get_openai_temperature(),
+            "max_tokens": get_openai_max_tokens(),
+            "status": ProcessingStatus.NOT_STARTED,
+        },
+        "response_quality_score": None,
+        "response_confidence": None,
+        "response_sources": [],
+        "total_query_time": None,
+        "retrieval_time": None,
+        "generation_time": None,
+        "start_time": current_time,
+        "total_query_time": None
+    }
+    return query_state
 
 
 def create_file_processing_state(file_path: str, language: str) -> FileProcessingState:
