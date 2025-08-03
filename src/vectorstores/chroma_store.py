@@ -353,15 +353,51 @@ class ChromaStore(BaseStore):
             if hasattr(collection_info, "metadata") and collection_info.metadata is not None:
                 expected_dimension = collection_info.metadata.get("dimension")
             
-            if expected_dimension is None:
-                return True, "No dimension information available in collection metadata"
-            
             # Test the current embeddings to get their dimension
             test_embedding = self.embeddings.embed_query("test")
             actual_dimension = len(test_embedding)
             
+            # If no expected dimension in metadata, try a test query to see if it works
+            if expected_dimension is None:
+                try:
+                    # Try a small test query to see if dimensions are compatible
+                    test_results = self.collection.query(
+                        query_embeddings=[test_embedding],
+                        n_results=1,
+                        include=["distances"]
+                    )
+                    return True, f"No dimension metadata found, but test query succeeded with dimension {actual_dimension}"
+                except Exception as query_error:
+                    # Check if the error is related to dimension mismatch
+                    error_str = str(query_error).lower()
+                    if "dimension" in error_str and "expecting" in error_str:
+                        # Try to extract expected dimension from error message
+                        # Error format: "Collection expecting embedding with dimension of X, got Y"
+                        try:
+                            import re
+                            match = re.search(r'expecting embedding with dimension of (\d+), got (\d+)', error_str)
+                            if match:
+                                expected_dim = int(match.group(1))
+                                actual_dim = int(match.group(2))
+                                return False, f"Dimension mismatch: expected {expected_dim}, got {actual_dim}"
+                        except:
+                            pass
+                        return False, f"Dimension mismatch detected: {str(query_error)}"
+                    else:
+                        return False, f"Error testing collection compatibility: {str(query_error)}"
+            
+            # Compare dimensions
             if actual_dimension == expected_dimension:
-                return True, f"Embedding dimensions match: {actual_dimension}"
+                # Also test with a query operation to be sure
+                try:
+                    test_results = self.collection.query(
+                        query_embeddings=[test_embedding],
+                        n_results=1,
+                        include=["distances"]
+                    )
+                    return True, f"Embedding dimensions match and test query succeeded: {actual_dimension}"
+                except Exception as query_error:
+                    return False, f"Dimension metadata matches ({actual_dimension}) but query failed: {str(query_error)}"
             else:
                 return False, f"Dimension mismatch: expected {expected_dimension}, got {actual_dimension}"
                 

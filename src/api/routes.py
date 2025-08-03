@@ -402,8 +402,21 @@ async def list_repositories(
     try:
         logger.info("Retrieving repository list with metadata from vector store")
         
-        # Get repository information from vector store
-        repository_metadata = vector_store.get_repository_metadata()
+        # Check for dimension mismatch first
+        try:
+            is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+            if not is_compatible:
+                logger.warning(f"Dimension mismatch detected: {compatibility_msg}")
+                logger.info("Falling back to configuration-based repository list due to dimension mismatch")
+                # Fall through to appSettings.json fallback
+                repository_metadata = []
+            else:
+                # Get repository information from vector store
+                repository_metadata = vector_store.get_repository_metadata()
+        except Exception as e:
+            logger.warning(f"Could not check embedding compatibility: {str(e)}")
+            # Try to get repository metadata anyway, let the method handle the error
+            repository_metadata = vector_store.get_repository_metadata()
         
         # Convert repository metadata to RepositoryInfo objects
         repositories = []
@@ -542,54 +555,6 @@ async def health_check(
             uptime_seconds=None,
             last_check=datetime.now()
         )
-
-
-@router.post("/fix/chroma-dimension", response_model=Dict[str, Any])
-async def fix_chroma_dimension_issue(
-    vector_store=Depends(get_vector_store)
-):
-    """
-    Fix Chroma dimension mismatch issues.
-    
-    This endpoint attempts to fix embedding dimension mismatches by
-    recreating the Chroma collection with the correct dimension.
-    """
-    try:
-        # Check if there's a dimension mismatch
-        is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
-        
-        if is_compatible:
-            return {
-                "success": True,
-                "message": "No dimension mismatch detected",
-                "action_taken": "none"
-            }
-        
-        # Attempt to fix the issue
-        success = vector_store.recreate_collection_with_correct_dimension()
-        
-        if success:
-            return {
-                "success": True,
-                "message": "Successfully recreated collection with correct dimension",
-                "action_taken": "recreated_collection",
-                "compatibility_message": compatibility_msg
-            }
-        else:
-            return {
-                "success": False,
-                "message": "Failed to recreate collection",
-                "action_taken": "failed",
-                "compatibility_message": compatibility_msg
-            }
-            
-    except Exception as e:
-        logger.error(f"Error fixing Chroma dimension issue: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fixing Chroma dimension issue: {str(e)}"
-        )
-
 
 @router.get("/stats", response_model=StatsResponse)
 async def get_statistics(
@@ -832,3 +797,119 @@ async def _run_indexing_workflow(
             "completed_at": datetime.now(),
             "error_message": str(e)
         })
+
+
+@router.post("/fix/chroma-dimension")
+async def fix_chroma_dimension(
+    vector_store=Depends(get_vector_store)
+):
+    """
+    Fix Chroma vector store dimension mismatch issues.
+    
+    This endpoint automatically detects and fixes dimension mismatches
+    between the current embedding model and the Chroma collection.
+    """
+    try:
+        logger.info("Checking for Chroma dimension mismatch")
+        
+        # Check if there's a dimension mismatch
+        is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+        
+        if is_compatible:
+            return {
+                "status": "success",
+                "message": "No dimension mismatch detected",
+                "details": compatibility_msg,
+                "action_taken": "none"
+            }
+        
+        logger.warning(f"Dimension mismatch detected: {compatibility_msg}")
+        
+        # Recreate the collection with correct dimensions
+        success = vector_store.recreate_collection_with_correct_dimension()
+        
+        if success:
+            logger.info("Chroma collection recreated successfully with correct dimensions")
+            return {
+                "status": "success", 
+                "message": "Dimension mismatch fixed successfully",
+                "details": f"Fixed: {compatibility_msg}",
+                "action_taken": "collection_recreated",
+                "warning": "All existing data has been cleared. You will need to re-index your repositories."
+            }
+        else:
+            logger.error("Failed to recreate Chroma collection")
+            return {
+                "status": "error",
+                "message": "Failed to fix dimension mismatch",
+                "details": compatibility_msg,
+                "action_taken": "none"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error fixing Chroma dimension: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fixing Chroma dimension: {str(e)}"
+        )
+
+
+@router.get("/diagnose/chroma-dimension")
+async def diagnose_chroma_dimension(
+    vector_store=Depends(get_vector_store)
+):
+    """
+    Diagnose Chroma vector store dimension compatibility.
+    
+    This endpoint checks for dimension mismatches and provides detailed
+    information about the current state without making any changes.
+    """
+    try:
+        logger.info("Diagnosing Chroma dimension compatibility")
+        
+        # Check dimension compatibility
+        is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+        
+        # Get current embedding model info
+        test_embedding = vector_store.embeddings.embed_query("test")
+        current_dimension = len(test_embedding)
+        
+        # Get collection info
+        try:
+            collection_info = vector_store.client.get_collection(vector_store.collection_name)
+            collection_exists = True
+            collection_metadata = collection_info.metadata if hasattr(collection_info, "metadata") else None
+            expected_dimension = None
+            if collection_metadata:
+                expected_dimension = collection_metadata.get("dimension")
+        except Exception as e:
+            collection_exists = False
+            collection_metadata = None
+            expected_dimension = None
+        
+        diagnosis = {
+            "compatible": is_compatible,
+            "message": compatibility_msg,
+            "current_embedding_model": getattr(vector_store.embeddings, 'model', 'unknown'),
+            "current_dimension": current_dimension,
+            "collection_exists": collection_exists,
+            "expected_dimension": expected_dimension,
+            "collection_metadata": collection_metadata,
+            "collection_name": vector_store.collection_name
+        }
+        
+        if not is_compatible:
+            diagnosis["recommended_action"] = "Use POST /fix/chroma-dimension to automatically fix this issue"
+            diagnosis["warning"] = "Fixing will recreate the collection and clear all existing data"
+        
+        return {
+            "status": "success",
+            "diagnosis": diagnosis
+        }
+        
+    except Exception as e:
+        logger.error(f"Error diagnosing Chroma dimension: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error diagnosing Chroma dimension: {str(e)}"
+        )
