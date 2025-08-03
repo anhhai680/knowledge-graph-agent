@@ -418,27 +418,21 @@ class ChromaStore(BaseStore):
                 logger.error(f"Embedding dimension mismatch: {compatibility_msg}")
                 return []
             
-            # Query all documents to analyze repository metadata
-            # We'll get a sample of documents and aggregate repository information
-            query_results = self.collection.query(
-                query_texts=[""],  # Empty query to get all documents
-                n_results=10000,  # Large number to get all documents
+            # Use get() method to retrieve all documents instead of query()
+            # This is the correct way to get all documents from Chroma
+            get_results = self.collection.get(
                 include=["metadatas", "documents"]
             )
 
-            if not query_results or "metadatas" not in query_results:
+            if not get_results or "metadatas" not in get_results:
                 logger.warning("No documents found in Chroma collection")
                 return []
 
             # Aggregate repository information from document metadata
             repo_stats = {}
-            metadatas_list = query_results.get("metadatas")
-            documents_list = query_results.get("documents")
-            
-            metadatas = metadatas_list[0] if metadatas_list and len(metadatas_list) > 0 else []
-            documents = documents_list[0] if documents_list and len(documents_list) > 0 else []
+            metadatas = get_results.get("metadatas", [])
 
-            for i, metadata in enumerate(metadatas):
+            for metadata in metadatas:
                 if not metadata:
                     continue
 
@@ -455,19 +449,24 @@ class ChromaStore(BaseStore):
                 if not repo_url and not repo_name:
                     continue
 
-                # Use repository URL as key, fallback to name
-                repo_key = repo_url or repo_name
+                # Normalize repository key - use URL if available, otherwise use name
+                # For URLs, extract the repository name for consistency
+                if repo_url and "/" in repo_url:
+                    # Extract owner/repo from URL
+                    url_parts = repo_url.rstrip("/").split("/")
+                    if len(url_parts) >= 2:
+                        repo_key = f"{url_parts[-2]}/{url_parts[-1]}"
+                        display_name = repo_key
+                    else:
+                        repo_key = repo_url
+                        display_name = repo_name or repo_url
+                else:
+                    repo_key = repo_name
+                    display_name = repo_name
                 
                 if repo_key not in repo_stats:
-                    # Extract repository display name
-                    display_name = repo_name
-                    if not display_name and repo_url and isinstance(repo_url, str) and "/" in repo_url:
-                        url_parts = repo_url.rstrip("/").split("/")
-                        if len(url_parts) >= 2:
-                            display_name = f"{url_parts[-2]}/{url_parts[-1]}"
-                    
                     repo_stats[repo_key] = {
-                        "name": display_name or repo_key,
+                        "name": display_name,
                         "url": repo_url,
                         "branch": metadata.get("branch", "main"),
                         "file_count": 0,
@@ -482,19 +481,24 @@ class ChromaStore(BaseStore):
                 repo_data = repo_stats[repo_key]
                 repo_data["document_count"] += 1
                 
-                # Track unique files
-                source_file = metadata.get("source", "")
-                if source_file and isinstance(source_file, str):
-                    repo_data["files"].add(source_file)
+                # Track unique files using file_path instead of source
+                file_path = metadata.get("file_path", "")
+                if file_path and isinstance(file_path, str):
+                    repo_data["files"].add(file_path)
+                else:
+                    # Fallback to source if file_path is not available
+                    source_file = metadata.get("source", "")
+                    if source_file and isinstance(source_file, str):
+                        repo_data["files"].add(source_file)
 
                 # Track languages
                 language = metadata.get("language", "")
                 if language and isinstance(language, str):
                     repo_data["languages"].add(language)
 
-                # Track file size
-                file_size = metadata.get("size", 0)
-                if isinstance(file_size, (int, float)):
+                # Track file size - try different size fields
+                file_size = metadata.get("size_bytes", metadata.get("size", 0))
+                if isinstance(file_size, (int, float)) and file_size > 0:
                     repo_data["total_size"] += file_size
 
                 # Track last modification (use as proxy for indexing time)
@@ -512,7 +516,7 @@ class ChromaStore(BaseStore):
                 # Convert languages set to list
                 repo_data["languages"] = list(repo_data["languages"])
                 
-                # Convert size to MB
+                # Convert size to MB (size_bytes is already in bytes)
                 size_mb = repo_data["total_size"] / (1024 * 1024) if repo_data["total_size"] > 0 else 0.0
                 
                 repositories.append({

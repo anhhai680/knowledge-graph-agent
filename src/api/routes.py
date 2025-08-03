@@ -357,6 +357,7 @@ async def list_repositories(
         # Check for dimension mismatch first
         try:
             is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+            logger.info(f"Embedding compatibility check: {is_compatible}, message: {compatibility_msg}")
             if not is_compatible:
                 logger.warning(f"Dimension mismatch detected: {compatibility_msg}")
                 logger.info("Falling back to configuration-based repository list due to dimension mismatch")
@@ -364,14 +365,19 @@ async def list_repositories(
                 repository_metadata = []
             else:
                 # Get repository information from vector store
+                logger.info("Getting repository metadata from vector store...")
                 repository_metadata = vector_store.get_repository_metadata()
+                logger.info(f"Retrieved {len(repository_metadata)} repositories from vector store")
         except Exception as e:
             logger.warning(f"Could not check embedding compatibility: {str(e)}")
             # Try to get repository metadata anyway, let the method handle the error
+            logger.info("Trying to get repository metadata despite compatibility check failure...")
             repository_metadata = vector_store.get_repository_metadata()
+            logger.info(f"Retrieved {len(repository_metadata)} repositories from vector store")
         
         # Convert repository metadata to RepositoryInfo objects
         repositories = []
+        logger.info(f"Processing {len(repository_metadata)} repository metadata entries")
         for repo_data in repository_metadata:
             try:
                 # Parse last_indexed date if it's a string
@@ -384,6 +390,8 @@ async def list_repositories(
                         last_indexed = datetime.now()
                 elif not last_indexed:
                     last_indexed = datetime.now()
+                
+                logger.info(f"Processing repository: {repo_data.get('name')} - files: {repo_data.get('file_count')}, docs: {repo_data.get('document_count')}")
                 
                 repository_info = RepositoryInfo(
                     name=repo_data.get("name", "Unknown"),
