@@ -729,13 +729,6 @@ async def _run_indexing_workflow(
         # Execute indexing workflow (simplified for now)
         result_state = await indexing_workflow.ainvoke(indexing_state)
         
-        # For now, simulate successful completion
-        # result_state = {
-        #     "processed_files": 0,
-        #     "embeddings_generated": 0,
-        #     "errors": []
-        # }
-        
         # Update workflow completion
         active_workflows[workflow_id].update({
             "status": WorkflowStatus.COMPLETED,
