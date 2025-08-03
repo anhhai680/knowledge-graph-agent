@@ -360,7 +360,7 @@ async def process_query(
             results=document_results,
             total_results=len(document_results),
             processing_time=processing_time,
-            confidence_score=result_state.get("response_confidence") or 0.0,  # Fixed: handle None values properly
+            confidence_score=result_state.get("response_confidence", 0.0),  # Fixed: handle None values properly
             suggestions=result_state.get("suggestions", [])
         )
         
