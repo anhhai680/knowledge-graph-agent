@@ -26,6 +26,15 @@ services:
       - CHROMA_API_IMPL=rest
       - CHROMA_SERVER_HOST=chroma
       - CHROMA_SERVER_HTTP_PORT=8000
+  
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - app
 
 volumes:
   chroma-data:

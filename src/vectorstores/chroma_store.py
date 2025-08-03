@@ -21,7 +21,7 @@ from tenacity import (
 from src.config.settings import settings
 from src.llm.embedding_factory import EmbeddingFactory
 from src.vectorstores.base_store import BaseStore
-
+import re
 
 class ChromaStore(BaseStore):
     """
@@ -69,6 +69,13 @@ class ChromaStore(BaseStore):
         try:
             self.collection = self.client.get_or_create_collection(self.collection_name)
             logger.debug(f"Connected to Chroma collection: {self.collection_name}")
+            
+            # Check for dimension mismatch and provide guidance
+            is_compatible, compatibility_msg = self.check_embedding_dimension_compatibility()
+            if not is_compatible:
+                logger.warning(f"Dimension mismatch detected: {compatibility_msg}")
+                logger.info("Use recreate_collection_with_correct_dimension() to fix this issue")
+                
         except Exception as e:
             error_message = f"Error connecting to Chroma collection: {str(e)}"
             logger.error(error_message)
@@ -80,6 +87,50 @@ class ChromaStore(BaseStore):
             collection_name=self.collection_name,
             embedding_function=self.embeddings,
         )
+    
+    def recreate_collection_with_correct_dimension(self) -> bool:
+        """
+        Recreate the collection with the correct embedding dimension.
+        
+        This method deletes the existing collection and creates a new one
+        with the current embedding model's dimension.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get current embedding dimension
+            test_embedding = self.embeddings.embed_query("test")
+            current_dimension = len(test_embedding)
+            
+            logger.info(f"Recreating collection with dimension {current_dimension}")
+            
+            # Delete existing collection
+            try:
+                self.client.delete_collection(self.collection_name)
+                logger.info(f"Deleted existing collection: {self.collection_name}")
+            except Exception as e:
+                logger.warning(f"Could not delete collection (may not exist): {str(e)}")
+            
+            # Create new collection with correct dimension
+            self.collection = self.client.create_collection(
+                name=self.collection_name,
+                metadata={"dimension": current_dimension}
+            )
+            
+            # Recreate LangChain Chroma instance
+            self.langchain_store = Chroma(
+                client=self.client,
+                collection_name=self.collection_name,
+                embedding_function=self.embeddings,
+            )
+            
+            logger.info(f"Successfully recreated collection: {self.collection_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error recreating collection: {str(e)}")
+            return False
 
     @retry(
         stop=stop_after_attempt(3),
@@ -270,14 +321,15 @@ class ChromaStore(BaseStore):
             # Get collection metadata (if any)
             collection_info = self.client.get_collection(self.collection_name)
 
+            # Safely get dimension from metadata
+            dimension = None
+            if hasattr(collection_info, "metadata") and collection_info.metadata is not None:
+                dimension = collection_info.metadata.get("dimension")
+
             stats = {
                 "name": self.collection_name,
                 "count": count,
-                "dimension": (
-                    collection_info.metadata.get("dimension")
-                    if hasattr(collection_info, "metadata")
-                    else None
-                ),
+                "dimension": dimension,
             }
 
             return stats
@@ -285,6 +337,71 @@ class ChromaStore(BaseStore):
         except Exception as e:
             logger.error(f"Error getting Chroma collection stats: {str(e)}")
             return {"name": self.collection_name, "error": str(e)}
+
+    def check_embedding_dimension_compatibility(self) -> Tuple[bool, str]:
+        """
+        Check if the current embeddings are compatible with the collection.
+
+        Returns:
+            Tuple of (is_compatible, message)
+        """
+        try:
+            # Get the expected dimension from the collection
+            collection_info = self.client.get_collection(self.collection_name)
+            expected_dimension = None
+            
+            if hasattr(collection_info, "metadata") and collection_info.metadata is not None:
+                expected_dimension = collection_info.metadata.get("dimension")
+            
+            # Test the current embeddings to get their dimension
+            test_embedding = self.embeddings.embed_query("test")
+            actual_dimension = len(test_embedding)
+            
+            # If no expected dimension in metadata, try a test query to see if it works
+            if expected_dimension is None:
+                try:
+                    # Try a small test query to see if dimensions are compatible
+                    test_results = self.collection.query(
+                        query_embeddings=[test_embedding],
+                        n_results=1,
+                        include=["distances"]
+                    )
+                    return True, f"No dimension metadata found, but test query succeeded with dimension {actual_dimension}"
+                except Exception as query_error:
+                    # Check if the error is related to dimension mismatch
+                    error_str = str(query_error).lower()
+                    if "dimension" in error_str and "expecting" in error_str:
+                        # Try to extract expected dimension from error message
+                        # Error format: "Collection expecting embedding with dimension of X, got Y"
+                        try:
+                            match = re.search(r'expecting embedding with dimension of (\d+), got (\d+)', error_str)
+                            if match:
+                                expected_dim = int(match.group(1))
+                                actual_dim = int(match.group(2))
+                                return False, f"Dimension mismatch: expected {expected_dim}, got {actual_dim}"
+                        except:
+                            pass
+                        return False, f"Dimension mismatch detected: {str(query_error)}"
+                    else:
+                        return False, f"Error testing collection compatibility: {str(query_error)}"
+            
+            # Compare dimensions
+            if actual_dimension == expected_dimension:
+                # Also test with a query operation to be sure
+                try:
+                    test_results = self.collection.query(
+                        query_embeddings=[test_embedding],
+                        n_results=1,
+                        include=["distances"]
+                    )
+                    return True, f"Embedding dimensions match and test query succeeded: {actual_dimension}"
+                except Exception as query_error:
+                    return False, f"Dimension metadata matches ({actual_dimension}) but query failed: {str(query_error)}"
+            else:
+                return False, f"Dimension mismatch: expected {expected_dimension}, got {actual_dimension}"
+                
+        except Exception as e:
+            return False, f"Error checking embedding compatibility: {str(e)}"
 
     def get_repository_metadata(self) -> List[Dict[str, Any]]:
         """
@@ -294,27 +411,27 @@ class ChromaStore(BaseStore):
             List of dictionaries containing repository metadata
         """
         try:
-            # Query all documents to analyze repository metadata
-            # We'll get a sample of documents and aggregate repository information
-            query_results = self.collection.query(
-                query_texts=[""],  # Empty query to get all documents
-                n_results=10000,  # Large number to get all documents
+            # First check embedding compatibility
+            is_compatible, compatibility_msg = self.check_embedding_dimension_compatibility()
+            if not is_compatible:
+                logger.error(f"Embedding dimension mismatch: {compatibility_msg}")
+                return []
+            
+            # Use get() method to retrieve all documents instead of query()
+            # This is the correct way to get all documents from Chroma
+            get_results = self.collection.get(
                 include=["metadatas", "documents"]
             )
 
-            if not query_results or "metadatas" not in query_results:
+            if not get_results or "metadatas" not in get_results:
                 logger.warning("No documents found in Chroma collection")
                 return []
 
             # Aggregate repository information from document metadata
             repo_stats = {}
-            metadatas_list = query_results.get("metadatas")
-            documents_list = query_results.get("documents")
-            
-            metadatas = metadatas_list[0] if metadatas_list and len(metadatas_list) > 0 else []
-            documents = documents_list[0] if documents_list and len(documents_list) > 0 else []
+            metadatas = get_results.get("metadatas", [])
 
-            for i, metadata in enumerate(metadatas):
+            for metadata in metadatas:
                 if not metadata:
                     continue
 
@@ -331,19 +448,28 @@ class ChromaStore(BaseStore):
                 if not repo_url and not repo_name:
                     continue
 
-                # Use repository URL as key, fallback to name
-                repo_key = repo_url or repo_name
+                # Normalize repository key - prioritize repository name from metadata
+                # Use the repository name from document metadata as the primary key
+                if repo_name and isinstance(repo_name, str):
+                    repo_key = repo_name
+                    display_name = repo_name
+                elif repo_url and "/" in repo_url:
+                    # Fallback to URL extraction if no repository name
+                    url_parts = repo_url.rstrip("/").split("/")
+                    if len(url_parts) >= 2:
+                        repo_key = f"{url_parts[-2]}/{url_parts[-1]}"
+                        display_name = repo_key
+                    else:
+                        repo_key = repo_url
+                        display_name = repo_url
+                else:
+                    # Last resort - use URL as key
+                    repo_key = repo_url
+                    display_name = repo_name or repo_url
                 
                 if repo_key not in repo_stats:
-                    # Extract repository display name
-                    display_name = repo_name
-                    if not display_name and repo_url and isinstance(repo_url, str) and "/" in repo_url:
-                        url_parts = repo_url.rstrip("/").split("/")
-                        if len(url_parts) >= 2:
-                            display_name = f"{url_parts[-2]}/{url_parts[-1]}"
-                    
                     repo_stats[repo_key] = {
-                        "name": display_name or repo_key,
+                        "name": display_name,
                         "url": repo_url,
                         "branch": metadata.get("branch", "main"),
                         "file_count": 0,
@@ -358,19 +484,24 @@ class ChromaStore(BaseStore):
                 repo_data = repo_stats[repo_key]
                 repo_data["document_count"] += 1
                 
-                # Track unique files
-                source_file = metadata.get("source", "")
-                if source_file and isinstance(source_file, str):
-                    repo_data["files"].add(source_file)
+                # Track unique files using file_path instead of source
+                file_path = metadata.get("file_path", "")
+                if file_path and isinstance(file_path, str):
+                    repo_data["files"].add(file_path)
+                else:
+                    # Fallback to source if file_path is not available
+                    source_file = metadata.get("source", "")
+                    if source_file and isinstance(source_file, str):
+                        repo_data["files"].add(source_file)
 
                 # Track languages
                 language = metadata.get("language", "")
                 if language and isinstance(language, str):
                     repo_data["languages"].add(language)
 
-                # Track file size
-                file_size = metadata.get("size", 0)
-                if isinstance(file_size, (int, float)):
+                # Track file size - try different size fields
+                file_size = metadata.get("size_bytes", metadata.get("size", 0))
+                if isinstance(file_size, (int, float)) and file_size > 0:
                     repo_data["total_size"] += file_size
 
                 # Track last modification (use as proxy for indexing time)
@@ -388,7 +519,7 @@ class ChromaStore(BaseStore):
                 # Convert languages set to list
                 repo_data["languages"] = list(repo_data["languages"])
                 
-                # Convert size to MB
+                # Convert size to MB (size_bytes is already in bytes)
                 size_mb = repo_data["total_size"] / (1024 * 1024) if repo_data["total_size"] > 0 else 0.0
                 
                 repositories.append({
@@ -409,6 +540,47 @@ class ChromaStore(BaseStore):
             logger.error(f"Error getting repository metadata from Chroma: {str(e)}")
             return []
 
+    def get_dimension_mismatch_guidance(self) -> Dict[str, Any]:
+        """
+        Get guidance for fixing dimension mismatch issues.
+
+        Returns:
+            Dictionary with guidance information
+        """
+        try:
+            # Check current embedding dimension
+            test_embedding = self.embeddings.embed_query("test")
+            current_dimension = len(test_embedding)
+            
+            # Get collection info
+            collection_info = self.client.get_collection(self.collection_name)
+            expected_dimension = None
+            
+            if hasattr(collection_info, "metadata") and collection_info.metadata is not None:
+                expected_dimension = collection_info.metadata.get("dimension")
+            
+            guidance = {
+                "current_dimension": current_dimension,
+                "expected_dimension": expected_dimension,
+                "has_mismatch": expected_dimension is not None and current_dimension != expected_dimension,
+                "solutions": []
+            }
+            
+            if guidance["has_mismatch"]:
+                guidance["solutions"] = [
+                    "Delete the existing collection and recreate it with the correct embedding model",
+                    "Update the embedding model configuration to match the collection's expected dimension",
+                    "Use a different collection name that matches the current embedding model"
+                ]
+            
+            return guidance
+            
+        except Exception as e:
+            return {
+                "error": f"Error getting dimension guidance: {str(e)}",
+                "solutions": ["Check embedding model configuration and collection settings"]
+            }
+
     def health_check(self) -> Tuple[bool, str]:
         """
         Check if the vector store is healthy.
@@ -419,6 +591,12 @@ class ChromaStore(BaseStore):
         try:
             # Attempt to get collection stats
             _ = self.collection.count()
+            
+            # Check embedding compatibility
+            is_compatible, compatibility_msg = self.check_embedding_dimension_compatibility()
+            if not is_compatible:
+                return False, f"Chroma vector store has dimension mismatch: {compatibility_msg}"
+            
             return True, "Chroma vector store is healthy"
 
         except Exception as e:

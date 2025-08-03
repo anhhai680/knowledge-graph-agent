@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Graph Agent - Chat Interface</title>
+    
+    <!-- Prism.js for syntax highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: white;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.offline {
+            background: #ef4444;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            gap: 1rem;
+            padding: 1rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .chat-container {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 600px;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .chat-header {
+            padding: 1rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h2 {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .message {
+            display: flex;
+            gap: 0.5rem;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            position: relative;
+        }
+
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: #f3f4f6;
+            color: #1f2937;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-time {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            margin-top: 0.25rem;
+        }
+
+        .code-block {
+            background: #1e293b;
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            overflow: hidden;
+        }
+
+        .code-header {
+            background: #334155;
+            padding: 0.5rem 1rem;
+            color: #e2e8f0;
+            font-size: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .code-header .file-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .copy-btn {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover {
+            background: #475569;
+            color: white;
+        }
+
+        .code-content {
+            padding: 1rem;
+            overflow-x: auto;
+        }
+
+        .code-content pre {
+            margin: 0;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        .chat-input-container {
+            padding: 1rem;
+            background: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            resize: none;
+            min-height: 44px;
+            max-height: 120px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .send-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .sidebar-section {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar-section h3 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .workflow-item {
+            background: #f9fafb;
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid #e5e7eb;
+            transition: all 0.2s;
+        }
+
+        .workflow-item.running {
+            border-left-color: #10b981;
+            background: #f0fdf4;
+        }
+
+        .workflow-item.completed {
+            border-left-color: #3b82f6;
+            background: #eff6ff;
+        }
+
+        .workflow-item.failed {
+            border-left-color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .workflow-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.25rem;
+        }
+
+        .workflow-type {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .workflow-status {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .workflow-status.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .workflow-status.running {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .workflow-status.completed {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .workflow-status.failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .workflow-details {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 0.5rem;
+            background: #f9fafb;
+            border-radius: 6px;
+        }
+
+        .stat-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: #6b7280;
+            margin-top: 0.25rem;
+        }
+
+        .repository-item {
+            background: #f9fafb;
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-left: 3px solid #e5e7eb;
+        }
+
+        .repository-name {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.25rem;
+        }
+
+        .repository-details {
+            font-size: 0.7rem;
+            color: #6b7280;
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 0.25rem;
+            padding: 0.5rem;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #9ca3af;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        .error-message {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin: 0.5rem 0;
+            font-size: 0.8rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+                padding: 0.5rem;
+            }
+
+            .sidebar {
+                width: 100%;
+                max-height: 300px;
+            }
+
+            .header {
+                padding: 1rem;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .message-content {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i class="fas fa-brain"></i> Knowledge Graph Agent</h1>
+        <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="chat-container">
+            <div class="chat-header">
+                <h2><i class="fas fa-comments"></i> Chat Interface</h2>
+                <div class="chat-controls">
+                    <button id="clearChatBtn" class="send-btn" style="padding: 0.5rem 1rem; font-size: 0.8rem;">
+                        <i class="fas fa-trash"></i> Clear Chat
+                    </button>
+                </div>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <div class="message assistant">
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <p>Hello! I'm your Knowledge Graph Agent assistant. I can help you search through your code repositories and answer questions about your codebase.</p>
+                        <p>Try asking me questions like:</p>
+                        <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+                            <li>"How is authentication implemented in the API?"</li>
+                            <li>"Show me the workflow implementation"</li>
+                            <li>"What are the main components of this project?"</li>
+                        </ul>
+                        <div class="message-time" id="welcomeTime"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <div class="chat-input-wrapper">
+                    <textarea 
+                        id="chatInput" 
+                        class="chat-input" 
+                        placeholder="Ask me anything about your codebase..."
+                        rows="1"
+                    ></textarea>
+                    <button id="sendBtn" class="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                        Send
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="sidebar-section">
+                <h3><i class="fas fa-chart-line"></i> System Status</h3>
+                <div id="systemStats">
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="repoCount">-</div>
+                            <div class="stat-label">Repositories</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="docCount">-</div>
+                            <div class="stat-label">Documents</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="activeWorkflows">-</div>
+                            <div class="stat-label">Active Workflows</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="systemHealth">-</div>
+                            <div class="stat-label">Health</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3><i class="fas fa-cogs"></i> Active Workflows</h3>
+                <div id="workflowsList">
+                    <p style="font-size: 0.8rem; color: #6b7280; text-align: center;">No active workflows</p>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3><i class="fas fa-database"></i> Indexed Repositories</h3>
+                <div id="repositoriesList">
+                    <p style="font-size: 0.8rem; color: #6b7280; text-align: center;">Loading repositories...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Set API base URL from environment or deployment config -->
+    <script>
+        // You can set this variable at deploy time, e.g. via server-side templating or a build tool
+        window.API_BASE_URL = window.API_BASE_URL || 'http://localhost:8000/api/v1';
+    </script>
+    <script>
+        class KnowledgeGraphAgent {
+            constructor() {
+                this.apiBase = window.API_BASE_URL;
+                this.chatHistory = [];
+                this.isConnected = false;
+                this.currentWorkflows = new Map();
+                this.repositories = [];
+                this.systemStats = {};
+                
+                this.initializeEventListeners();
+                this.initializeApp();
+            }
+
+            initializeEventListeners() {
+                const chatInput = document.getElementById('chatInput');
+                const sendBtn = document.getElementById('sendBtn');
+                const clearChatBtn = document.getElementById('clearChatBtn');
+
+                chatInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+
+                chatInput.addEventListener('input', () => {
+                    chatInput.style.height = 'auto';
+                    chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+                });
+
+                sendBtn.addEventListener('click', () => this.sendMessage());
+                clearChatBtn.addEventListener('click', () => this.clearChat());
+
+                document.getElementById('welcomeTime').textContent = this.formatTime(new Date());
+            }
+
+            async initializeApp() {
+                await this.checkConnection();
+                await this.loadSystemStats();
+                await this.loadRepositories();
+                await this.loadWorkflows();
+                
+                setInterval(() => this.loadSystemStats(), 30000);
+                setInterval(() => this.loadWorkflows(), 10000);
+            }
+
+            async checkConnection() {
+                try {
+                    const response = await fetch(`${this.apiBase}/health`);
+                    const data = await response.json();
+                    
+                    this.isConnected = data.status === 'healthy';
+                    this.updateConnectionStatus();
+                    
+                    if (this.isConnected) {
+                        console.log('Connected to Knowledge Graph Agent API');
+                    }
+                } catch (error) {
+                    console.error('Failed to connect to API:', error);
+                    this.isConnected = false;
+                    this.updateConnectionStatus();
+                }
+            }
+
+            updateConnectionStatus() {
+                const statusDot = document.getElementById('statusDot');
+                const statusText = document.getElementById('statusText');
+                
+                if (this.isConnected) {
+                    statusDot.classList.remove('offline');
+                    statusText.textContent = 'Connected';
+                } else {
+                    statusDot.classList.add('offline');
+                    statusText.textContent = 'Disconnected';
+                }
+            }
+
+            async loadSystemStats() {
+                try {
+                    const response = await fetch(`${this.apiBase}/stats`);
+                    const data = await response.json();
+                    
+                    this.systemStats = data;
+                    this.updateSystemStats();
+                } catch (error) {
+                    console.error('Failed to load system stats:', error);
+                }
+            }
+
+            updateSystemStats() {
+                document.getElementById('repoCount').textContent = this.systemStats.total_repositories || 0;
+                document.getElementById('docCount').textContent = this.systemStats.total_documents || 0;
+                document.getElementById('activeWorkflows').textContent = this.systemStats.active_workflows || 0;
+                document.getElementById('systemHealth').textContent = this.systemStats.system_health || 'Unknown';
+            }
+
+            async loadRepositories() {
+                try {
+                    const response = await fetch(`${this.apiBase}/repositories`);
+                    const data = await response.json();
+                    
+                    this.repositories = data.repositories || [];
+                    this.updateRepositoriesList();
+                } catch (error) {
+                    console.error('Failed to load repositories:', error);
+                    this.updateRepositoriesList();
+                }
+            }
+
+            updateRepositoriesList() {
+                const container = document.getElementById('repositoriesList');
+                
+                if (this.repositories.length === 0) {
+                    container.innerHTML = '<p style="font-size: 0.8rem; color: #6b7280; text-align: center;">No repositories indexed</p>';
+                    return;
+                }
+
+                container.innerHTML = this.repositories.map(repo => `
+                    <div class="repository-item">
+                        <div class="repository-name">${repo.name}</div>
+                        <div class="repository-details">
+                            ${repo.file_count} files • ${repo.document_count} docs • ${repo.languages.join(', ') || 'Unknown'}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            async loadWorkflows() {
+                try {
+                    const response = await fetch(`${this.apiBase}/workflows`);
+                    const workflows = await response.json();
+                    
+                    this.currentWorkflows.clear();
+                    workflows.forEach(workflow => {
+                        this.currentWorkflows.set(workflow.workflow_id, workflow);
+                    });
+                    
+                    this.updateWorkflowsList();
+                } catch (error) {
+                    console.error('Failed to load workflows:', error);
+                }
+            }
+
+            updateWorkflowsList() {
+                const container = document.getElementById('workflowsList');
+                
+                if (this.currentWorkflows.size === 0) {
+                    container.innerHTML = '<p style="font-size: 0.8rem; color: #6b7280; text-align: center;">No active workflows</p>';
+                    return;
+                }
+
+                container.innerHTML = Array.from(this.currentWorkflows.values()).map(workflow => `
+                    <div class="workflow-item ${workflow.status}">
+                        <div class="workflow-header">
+                            <span class="workflow-type">${workflow.workflow_type}</span>
+                            <span class="workflow-status ${workflow.status}">${workflow.status}</span>
+                        </div>
+                        <div class="workflow-details">
+                            ${workflow.metadata?.repository || 'Unknown repository'}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            async sendMessage() {
+                const input = document.getElementById('chatInput');
+                const message = input.value.trim();
+                
+                if (!message) return;
+                
+                this.addMessage('user', message);
+                input.value = '';
+                input.style.height = 'auto';
+                
+                this.showTypingIndicator();
+                
+                try {
+                    const response = await this.processQuery(message);
+                    this.hideTypingIndicator();
+                    this.addMessage('assistant', response);
+                } catch (error) {
+                    this.hideTypingIndicator();
+                    this.addMessage('assistant', `Sorry, I encountered an error: ${error.message}`, true);
+                }
+            }
+
+            async processQuery(query) {
+                const response = await fetch(`${this.apiBase}/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        top_k: 5,
+                        include_metadata: true
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                return this.formatQueryResponse(data);
+            }
+
+            formatQueryResponse(data) {
+                let response = `<p><strong>Query:</strong> ${data.query}</p>`;
+                response += `<p><strong>Processing Time:</strong> ${data.processing_time.toFixed(2)}s</p>`;
+                response += `<p><strong>Results Found:</strong> ${data.total_results}</p>`;
+                
+                if (data.results && data.results.length > 0) {
+                    response += '<p><strong>Relevant Code Snippets:</strong></p>';
+                    
+                    data.results.forEach((result, index) => {
+                        const metadata = result.metadata;
+                        const language = this.detectLanguage(metadata.file_type || metadata.source);
+                        
+                        response += `
+                            <div class="code-block">
+                                <div class="code-header">
+                                    <div class="file-info">
+                                        <i class="fas fa-file-code"></i>
+                                        ${metadata.source} (${metadata.repository})
+                                    </div>
+                                    <button class="copy-btn" onclick="copyToClipboard('code-${index}')">
+                                        <i class="fas fa-copy"></i>
+                                    </button>
+                                </div>
+                                <div class="code-content">
+                                    <pre><code class="language-${language}" id="code-${index}">${this.escapeHtml(result.content)}</code></pre>
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    response += '<p>No relevant code snippets found for your query.</p>';
+                }
+
+                if (data.suggestions && data.suggestions.length > 0) {
+                    response += '<p><strong>Suggestions:</strong></p><ul>';
+                    data.suggestions.forEach(suggestion => {
+                        response += `<li>${suggestion}</li>`;
+                    });
+                    response += '</ul>';
+                }
+
+                return response;
+            }
+
+            detectLanguage(fileType) {
+                const languageMap = {
+                    '.py': 'python', '.js': 'javascript', '.ts': 'typescript',
+                    '.jsx': 'javascript', '.tsx': 'typescript', '.cs': 'csharp',
+                    '.java': 'java', '.cpp': 'cpp', '.c': 'c', '.php': 'php',
+                    '.rb': 'ruby', '.go': 'go', '.rs': 'rust', '.swift': 'swift',
+                    '.kt': 'kotlin', '.scala': 'scala', '.html': 'html',
+                    '.css': 'css', '.scss': 'scss', '.sass': 'sass',
+                    '.json': 'json', '.xml': 'xml', '.yaml': 'yaml',
+                    '.yml': 'yaml', '.toml': 'toml', '.ini': 'ini',
+                    '.sh': 'bash', '.bash': 'bash', '.md': 'markdown',
+                    '.txt': 'text'
+                };
+                return languageMap[fileType] || 'text';
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            addMessage(type, content, isError = false) {
+                const messagesContainer = document.getElementById('chatMessages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${type}`;
+                
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.innerHTML = type === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                
+                if (isError) {
+                    contentDiv.innerHTML = `<div class="error-message">${content}</div>`;
+                } else {
+                    contentDiv.innerHTML = content;
+                }
+                
+                const timeDiv = document.createElement('div');
+                timeDiv.className = 'message-time';
+                timeDiv.textContent = this.formatTime(new Date());
+                
+                contentDiv.appendChild(timeDiv);
+                messageDiv.appendChild(avatar);
+                messageDiv.appendChild(contentDiv);
+                messagesContainer.appendChild(messageDiv);
+                
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                
+                if (window.Prism) {
+                    setTimeout(() => {
+                        Prism.highlightAllUnder(messagesContainer);
+                    }, 100);
+                }
+                
+                this.chatHistory.push({
+                    type,
+                    content,
+                    timestamp: new Date(),
+                    isError
+                });
+            }
+
+            showTypingIndicator() {
+                const messagesContainer = document.getElementById('chatMessages');
+                const typingDiv = document.createElement('div');
+                typingDiv.className = 'message assistant typing-indicator-message';
+                typingDiv.id = 'typingIndicator';
+                
+                typingDiv.innerHTML = `
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <div class="typing-indicator">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot"></div>
+                        </div>
+                    </div>
+                `;
+                
+                messagesContainer.appendChild(typingDiv);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            hideTypingIndicator() {
+                const typingIndicator = document.getElementById('typingIndicator');
+                if (typingIndicator) {
+                    typingIndicator.remove();
+                }
+            }
+
+            clearChat() {
+                const messagesContainer = document.getElementById('chatMessages');
+                messagesContainer.innerHTML = `
+                    <div class="message assistant">
+                        <div class="message-avatar">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="message-content">
+                            <p>Chat history cleared. How can I help you today?</p>
+                            <div class="message-time">${this.formatTime(new Date())}</div>
+                        </div>
+                    </div>
+                `;
+                
+                this.chatHistory = [];
+            }
+
+            formatTime(date) {
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+
+        function copyToClipboard(event,elementId) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                const text = element.textContent;
+                navigator.clipboard.writeText(text).then(() => {
+                    const btn = event.target.closest('.copy-btn');
+                    const originalIcon = btn.innerHTML;
+                    btn.innerHTML = '<i class="fas fa-check"></i>';
+                    setTimeout(() => {
+                        btn.innerHTML = originalIcon;
+                    }, 1000);
+                }).catch(err => {
+                    console.error('Failed to copy text: ', err);
+                });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.agent = new KnowledgeGraphAgent();
+        });
+    </script>
+</body>
+</html> 

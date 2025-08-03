@@ -29,60 +29,85 @@ def inspect_chroma_db():
         for table in tables:
             print(f"  - {table[0]}")
         
-        # Check if embeddings table exists
+        # Check embedding_metadata table
+        if any('embedding_metadata' in str(table) for table in tables):
+            print("\n🔍 Checking embedding_metadata table...")
+            cursor.execute("SELECT COUNT(*) FROM embedding_metadata;")
+            count = cursor.fetchone()[0]
+            print(f"📈 Total metadata entries: {count}")
+            
+            # Get table schema
+            cursor.execute("PRAGMA table_info(embedding_metadata);")
+            columns = cursor.fetchall()
+            print(f"📋 Embedding_metadata table columns:")
+            for col in columns:
+                print(f"  - {col[1]} ({col[2]})")
+            
+            if count > 0:
+                # Get sample data - first check what columns exist
+                cursor.execute("SELECT * FROM embedding_metadata LIMIT 5;")
+                sample_rows = cursor.fetchall()
+                if sample_rows:
+                    print(f"\n📄 Sample metadata entries:")
+                    for i, row in enumerate(sample_rows):
+                        print(f"  Sample {i+1}: {row}")
+                
+                # Try to get all metadata entries
+                cursor.execute("SELECT * FROM embedding_metadata;")
+                all_metadata = cursor.fetchall()
+                
+                # Group by embedding_id (assuming it's the first column)
+                embedding_metadata = {}
+                for row in all_metadata:
+                    if len(row) >= 3:  # Ensure we have at least id, key, value
+                        embedding_id = row[0]  # Assuming first column is id
+                        key = row[1]  # Assuming second column is key
+                        value = row[2]  # Assuming third column is string_value
+                        
+                        if embedding_id not in embedding_metadata:
+                            embedding_metadata[embedding_id] = {}
+                        embedding_metadata[embedding_id][key] = value
+                
+                # Aggregate by repository
+                repos = {}
+                for embedding_id, metadata in embedding_metadata.items():
+                    repo_url = metadata.get('repository_url', '')
+                    repo_name = metadata.get('repository', '')
+                    
+                    # Use repository URL as key, fallback to name
+                    repo_key = repo_url or repo_name
+                    if not repo_key:
+                        continue
+                        
+                    if repo_key not in repos:
+                        repos[repo_key] = {
+                            'count': 0,
+                            'languages': set(),
+                            'sources': set(),
+                            'name': repo_name,
+                            'url': repo_url,
+                            'branch': metadata.get('branch', 'main')
+                        }
+                    repos[repo_key]['count'] += 1
+                    if metadata.get('language'):
+                        repos[repo_key]['languages'].add(metadata.get('language'))
+                    if metadata.get('source'):
+                        repos[repo_key]['sources'].add(metadata.get('source'))
+                
+                print(f"\n🏢 Repositories found: {len(repos)}")
+                for repo_key, repo_data in repos.items():
+                    print(f"  📁 {repo_data['name']} ({repo_key}):")
+                    print(f"    Documents: {repo_data['count']}")
+                    print(f"    Files: {len(repo_data['sources'])}")
+                    print(f"    Languages: {list(repo_data['languages'])}")
+                    print(f"    Branch: {repo_data['branch']}")
+        
+        # Check embeddings table
         if any('embeddings' in str(table) for table in tables):
             print("\n🔍 Checking embeddings table...")
             cursor.execute("SELECT COUNT(*) FROM embeddings;")
             count = cursor.fetchone()[0]
             print(f"📈 Total embeddings: {count}")
-            
-            if count > 0:
-                # Get sample metadata
-                cursor.execute("SELECT metadata FROM embeddings LIMIT 5;")
-                samples = cursor.fetchall()
-                
-                print("\n📄 Sample metadata entries:")
-                for i, (metadata_json,) in enumerate(samples):
-                    try:
-                        metadata = json.loads(metadata_json) if metadata_json else {}
-                        print(f"  Sample {i+1}:")
-                        print(f"    Repository: {metadata.get('repository', 'N/A')}")
-                        print(f"    Source: {metadata.get('source', 'N/A')}")
-                        print(f"    Language: {metadata.get('language', 'N/A')}")
-                        print(f"    Size: {metadata.get('size', 'N/A')}")
-                    except json.JSONDecodeError:
-                        print(f"  Sample {i+1}: Invalid JSON metadata")
-                
-                # Aggregate repository info
-                print("\n📊 Repository analysis:")
-                cursor.execute("SELECT metadata FROM embeddings;")
-                all_metadata = cursor.fetchall()
-                
-                repos = {}
-                for (metadata_json,) in all_metadata:
-                    try:
-                        metadata = json.loads(metadata_json) if metadata_json else {}
-                        repo = metadata.get('repository', 'Unknown')
-                        if repo not in repos:
-                            repos[repo] = {
-                                'count': 0,
-                                'languages': set(),
-                                'sources': set()
-                            }
-                        repos[repo]['count'] += 1
-                        if metadata.get('language'):
-                            repos[repo]['languages'].add(metadata.get('language'))
-                        if metadata.get('source'):
-                            repos[repo]['sources'].add(metadata.get('source'))
-                    except:
-                        continue
-                
-                print(f"🏢 Repositories found: {len(repos)}")
-                for repo_name, repo_data in repos.items():
-                    print(f"  📁 {repo_name}:")
-                    print(f"    Documents: {repo_data['count']}")
-                    print(f"    Files: {len(repo_data['sources'])}")
-                    print(f"    Languages: {list(repo_data['languages'])}")
         
         # Check collections table
         if any('collections' in str(table) for table in tables):

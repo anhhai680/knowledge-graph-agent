@@ -6,12 +6,10 @@ providing comprehensive REST API endpoints for repository indexing, query
 processing, and workflow management with full LangGraph integration.
 """
 
-import asyncio
-import logging
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -21,8 +19,6 @@ from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
 from src.vectorstores.store_factory import VectorStoreFactory
-from src.llm.llm_factory import LLMFactory
-from src.llm.embedding_factory import EmbeddingFactory
 
 logger = get_logger(__name__)
 

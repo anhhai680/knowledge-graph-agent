@@ -273,61 +273,13 @@ async def process_query(
         
         logger.info(f"Processing query: {request.query[:100]}...")
         
-        # Create query state for workflow
-        query_state = {
-            "workflow_id": str(uuid.uuid4()),
-            "workflow_type": "query",
-            "status": "in_progress",
-            "created_at": start_time.timestamp(),
-            "updated_at": start_time.timestamp(),
-            "progress_percentage": 0.0,
-            "current_step": "initializing",
-            "errors": [],
-            "metadata": {},
-            "original_query": request.query,
-            "processed_query": request.query,
-            "query_intent": request.intent.value if request.intent else None,
-            "search_strategy": request.search_strategy.value if request.search_strategy else "hybrid",
-            "target_repositories": request.repositories or [],
-            "target_languages": request.language_filter or [],
-            "target_file_types": None,
-            "retrieval_config": {
-                "top_k": request.top_k or 5,
-                "include_metadata": request.include_metadata
-            },
-            "document_retrieval": {
-                "query_vector": None,
-                "search_strategy": request.search_strategy.value if request.search_strategy else "hybrid",
-                "top_k": request.top_k or 5,
-                "similarity_threshold": 0.7,
-                "metadata_filters": {},
-                "retrieved_documents": [],
-                "retrieval_time": None,
-                "relevance_scores": []
-            },
-            "context_size": 0,
-            "context_documents": [],
-            "context_preparation_time": None,
-            "llm_generation": {
-                "prompt_template": "",
-                "context_documents": [],
-                "generated_response": None,
-                "generation_time": None,
-                "token_usage": {},
-                "model_name": "gpt-3.5-turbo",
-                "temperature": 0.7,
-                "max_tokens": 1000
-            },
-            "response_quality_score": None,
-            "response_confidence": None,
-            "response_sources": [],
-            "total_query_time": None,
-            "retrieval_time": None,
-            "generation_time": None
-        }
-        
-        # Execute query workflow
-        result_state = await query_workflow.ainvoke(query_state)
+        # Execute query workflow using the workflow's proper state creation
+        result_state = await query_workflow.run(
+            query=request.query,
+            repositories=request.repositories,
+            languages=request.language_filter,
+            k=request.top_k or 5
+        )
         
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()
@@ -353,14 +305,28 @@ async def process_query(
                 chunk_index=doc.get("metadata", {}).get("chunk_index")
             ))
         
+        # Calculate confidence score with proper fallback
+        confidence_score = result_state.get("response_confidence")
+        if confidence_score is None:  
+            # Calculate a basic confidence score based on retrieved documents  
+            doc_count = len(document_results)  
+            if doc_count == 0:  
+                confidence_score = 0.0  
+            else:  
+                # Simple confidence calculation based on document count and content  
+                base_confidence = min(doc_count / 5.0, 1.0)  # More docs = higher confidence  
+                total_content_length = sum(len(doc.content) for doc in document_results)  
+                content_confidence = min(total_content_length / 2000.0, 1.0)  # More content = higher confidence  
+                confidence_score = (base_confidence * 0.6 + content_confidence * 0.4) # Weighted average
+        
         response = QueryResponse(
             query=request.query,
-            intent=_map_workflow_intent_to_api(result_state.get("query_intent", "general")),  # Fixed: use mapping function
+            intent=_map_workflow_intent_to_api(str(result_state.get("query_intent", "general") or "general")),  # Fixed: ensure string type
             strategy=_map_workflow_strategy_to_api(result_state.get("search_strategy", "hybrid")),  # Fixed: use mapping function
             results=document_results,
             total_results=len(document_results),
             processing_time=processing_time,
-            confidence_score=result_state.get("response_confidence", 0.0),  # Fixed: handle None values properly
+            confidence_score=confidence_score,
             suggestions=result_state.get("suggestions", [])
         )
         
@@ -388,11 +354,30 @@ async def list_repositories(
     try:
         logger.info("Retrieving repository list with metadata from vector store")
         
-        # Get repository information from vector store
-        repository_metadata = vector_store.get_repository_metadata()
+        # Check for dimension mismatch first
+        try:
+            is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+            logger.info(f"Embedding compatibility check: {is_compatible}, message: {compatibility_msg}")
+            if not is_compatible:
+                logger.warning(f"Dimension mismatch detected: {compatibility_msg}")
+                logger.info("Falling back to configuration-based repository list due to dimension mismatch")
+                # Fall through to appSettings.json fallback
+                repository_metadata = []
+            else:
+                # Get repository information from vector store
+                logger.info("Getting repository metadata from vector store...")
+                repository_metadata = vector_store.get_repository_metadata()
+                logger.info(f"Retrieved {len(repository_metadata)} repositories from vector store")
+        except Exception as e:
+            logger.warning(f"Could not check embedding compatibility: {str(e)}")
+            # Try to get repository metadata anyway, let the method handle the error
+            logger.info("Trying to get repository metadata despite compatibility check failure...")
+            repository_metadata = vector_store.get_repository_metadata()
+            logger.info(f"Retrieved {len(repository_metadata)} repositories from vector store")
         
         # Convert repository metadata to RepositoryInfo objects
         repositories = []
+        logger.info(f"Processing {len(repository_metadata)} repository metadata entries")
         for repo_data in repository_metadata:
             try:
                 # Parse last_indexed date if it's a string
@@ -405,6 +390,8 @@ async def list_repositories(
                         last_indexed = datetime.now()
                 elif not last_indexed:
                     last_indexed = datetime.now()
+                
+                logger.info(f"Processing repository: {repo_data.get('name')} - files: {repo_data.get('file_count')}, docs: {repo_data.get('document_count')}")
                 
                 repository_info = RepositoryInfo(
                     name=repo_data.get("name", "Unknown"),
@@ -529,7 +516,6 @@ async def health_check(
             last_check=datetime.now()
         )
 
-
 @router.get("/stats", response_model=StatsResponse)
 async def get_statistics(
     vector_store=Depends(get_vector_store)
@@ -542,6 +528,25 @@ async def get_statistics(
     """
     try:
         logger.info("Retrieving system statistics from vector store")
+        
+        # Check for dimension mismatch first
+        try:
+            is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+            if not is_compatible:
+                logger.warning(f"Dimension mismatch detected: {compatibility_msg}")
+                # Return degraded statistics with warning
+                return StatsResponse(
+                    total_repositories=0,
+                    total_documents=0,
+                    total_files=0,
+                    index_size_mb=0.0,
+                    languages={},
+                    recent_queries=0,
+                    active_workflows=0,
+                    system_health="degraded"
+                )
+        except Exception as e:
+            logger.warning(f"Could not check embedding compatibility: {str(e)}")
         
         # Get collection statistics
         collection_stats = vector_store.get_collection_stats()
@@ -752,3 +757,119 @@ async def _run_indexing_workflow(
             "completed_at": datetime.now(),
             "error_message": str(e)
         })
+
+
+@router.post("/fix/chroma-dimension")
+async def fix_chroma_dimension(
+    vector_store=Depends(get_vector_store)
+):
+    """
+    Fix Chroma vector store dimension mismatch issues.
+    
+    This endpoint automatically detects and fixes dimension mismatches
+    between the current embedding model and the Chroma collection.
+    """
+    try:
+        logger.info("Checking for Chroma dimension mismatch")
+        
+        # Check if there's a dimension mismatch
+        is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+        
+        if is_compatible:
+            return {
+                "status": "success",
+                "message": "No dimension mismatch detected",
+                "details": compatibility_msg,
+                "action_taken": "none"
+            }
+        
+        logger.warning(f"Dimension mismatch detected: {compatibility_msg}")
+        
+        # Recreate the collection with correct dimensions
+        success = vector_store.recreate_collection_with_correct_dimension()
+        
+        if success:
+            logger.info("Chroma collection recreated successfully with correct dimensions")
+            return {
+                "status": "success", 
+                "message": "Dimension mismatch fixed successfully",
+                "details": f"Fixed: {compatibility_msg}",
+                "action_taken": "collection_recreated",
+                "warning": "All existing data has been cleared. You will need to re-index your repositories."
+            }
+        else:
+            logger.error("Failed to recreate Chroma collection")
+            return {
+                "status": "error",
+                "message": "Failed to fix dimension mismatch",
+                "details": compatibility_msg,
+                "action_taken": "none"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error fixing Chroma dimension: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fixing Chroma dimension: {str(e)}"
+        )
+
+
+@router.get("/diagnose/chroma-dimension")
+async def diagnose_chroma_dimension(
+    vector_store=Depends(get_vector_store)
+):
+    """
+    Diagnose Chroma vector store dimension compatibility.
+    
+    This endpoint checks for dimension mismatches and provides detailed
+    information about the current state without making any changes.
+    """
+    try:
+        logger.info("Diagnosing Chroma dimension compatibility")
+        
+        # Check dimension compatibility
+        is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+        
+        # Get current embedding model info
+        test_embedding = vector_store.embeddings.embed_query("test")
+        current_dimension = len(test_embedding)
+        
+        # Get collection info
+        try:
+            collection_info = vector_store.client.get_collection(vector_store.collection_name)
+            collection_exists = True
+            collection_metadata = collection_info.metadata if hasattr(collection_info, "metadata") else None
+            expected_dimension = None
+            if collection_metadata:
+                expected_dimension = collection_metadata.get("dimension")
+        except Exception as e:
+            collection_exists = False
+            collection_metadata = None
+            expected_dimension = None
+        
+        diagnosis = {
+            "compatible": is_compatible,
+            "message": compatibility_msg,
+            "current_embedding_model": getattr(vector_store.embeddings, 'model', 'unknown'),
+            "current_dimension": current_dimension,
+            "collection_exists": collection_exists,
+            "expected_dimension": expected_dimension,
+            "collection_metadata": collection_metadata,
+            "collection_name": vector_store.collection_name
+        }
+        
+        if not is_compatible:
+            diagnosis["recommended_action"] = "Use POST /fix/chroma-dimension to automatically fix this issue"
+            diagnosis["warning"] = "Fixing will recreate the collection and clear all existing data"
+        
+        return {
+            "status": "success",
+            "diagnosis": diagnosis
+        }
+        
+    except Exception as e:
+        logger.error(f"Error diagnosing Chroma dimension: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error diagnosing Chroma dimension: {str(e)}"
+        )

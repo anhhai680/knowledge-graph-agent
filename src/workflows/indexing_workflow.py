@@ -464,10 +464,10 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                         ] = repo_file_count
                         state["repository_states"][repo_name][
                             "processed_files"
-                        ] = repo_file_count
+                        ] = len(repo_documents)  # Document count (chunks)
 
                         self.logger.info(
-                            f"Loaded {repo_file_count} files from repository: {repo_name}"
+                            f"Loaded {repo_file_count} files ({len(repo_documents)} documents) from repository: {repo_name}"
                         )
                     else:
                         # No files loaded - treat as failure
@@ -511,7 +511,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         # Store documents in state metadata for next steps
         state["metadata"]["loaded_documents"] = all_documents
         state["total_files"] = total_files
-        state["processed_files"] = total_files
+        state["processed_files"] = len(all_documents)  # Total documents, not files
 
         if not all_documents:
             # Provide detailed diagnostic information when no documents are loaded
@@ -781,8 +781,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 state, progress, IndexingWorkflowSteps.STORE_IN_VECTOR_DB
             ))
 
-        # Store storage statistics
+        # Store storage statistics and update successful embeddings count
         state["metadata"]["storage_stats"] = storage_stats
+        state["successful_embeddings"] = storage_stats["stored_documents"]
 
         self.logger.info(
             f"Stored {storage_stats['stored_documents']}/{storage_stats['total_documents']} documents in vector database"
@@ -1034,11 +1035,25 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             # Load documents from repository
             documents = loader.load()
 
-            # Add repository name to document metadata
+            # Add repository name to document metadata (use full owner/repo name)
+            full_repo_name = f"{owner}/{name}"
             for doc in documents:
-                doc.metadata["repository"] = repo_name
+                doc.metadata["repository"] = full_repo_name
 
-            return documents, len(documents)
+            # Calculate unique file count from document metadata
+            unique_files = set()
+            for doc in documents:
+                file_path = doc.metadata.get("file_path", "")
+                if file_path:
+                    unique_files.add(file_path)
+                else:
+                    # Fallback to source if file_path is not available
+                    source_file = doc.metadata.get("source", "")
+                    if source_file:
+                        unique_files.add(source_file)
+
+            # Return documents and unique file count (not document count)
+            return documents, len(unique_files)
 
         except Exception as e:
             repo_state["status"] = ProcessingStatus.FAILED
