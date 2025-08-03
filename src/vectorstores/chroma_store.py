@@ -449,20 +449,24 @@ class ChromaStore(BaseStore):
                 if not repo_url and not repo_name:
                     continue
 
-                # Normalize repository key - use URL if available, otherwise use name
-                # For URLs, extract the repository name for consistency
-                if repo_url and "/" in repo_url:
-                    # Extract owner/repo from URL
+                # Normalize repository key - prioritize repository name from metadata
+                # Use the repository name from document metadata as the primary key
+                if repo_name and isinstance(repo_name, str):
+                    repo_key = repo_name
+                    display_name = repo_name
+                elif repo_url and "/" in repo_url:
+                    # Fallback to URL extraction if no repository name
                     url_parts = repo_url.rstrip("/").split("/")
                     if len(url_parts) >= 2:
                         repo_key = f"{url_parts[-2]}/{url_parts[-1]}"
                         display_name = repo_key
                     else:
                         repo_key = repo_url
-                        display_name = repo_name or repo_url
+                        display_name = repo_url
                 else:
-                    repo_key = repo_name
-                    display_name = repo_name
+                    # Last resort - use URL as key
+                    repo_key = repo_url
+                    display_name = repo_name or repo_url
                 
                 if repo_key not in repo_stats:
                     repo_stats[repo_key] = {

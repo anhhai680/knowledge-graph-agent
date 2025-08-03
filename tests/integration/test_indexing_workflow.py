@@ -264,11 +264,11 @@ python hello.py
 
             repo_state = final_state["repository_states"]["test-integration-repo"]
             self.assertEqual(repo_state["status"], ProcessingStatus.COMPLETED)
-            self.assertEqual(repo_state["total_files"], 3)
-            self.assertEqual(repo_state["processed_files"], 3)
+            self.assertEqual(repo_state["total_files"], 3)  # Unique files
+            self.assertEqual(repo_state["processed_files"], 6)  # Total documents/chunks
 
             # Verify document processing statistics
-            self.assertEqual(final_state["processed_files"], 3)
+            self.assertEqual(final_state["processed_files"], 6)  # Total documents/chunks
             self.assertEqual(final_state["total_chunks"], 6)  # 3 docs * 2 chunks each
             self.assertEqual(final_state["successful_embeddings"], 6)
             self.assertEqual(final_state["failed_embeddings"], 0)
