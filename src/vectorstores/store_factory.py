@@ -4,7 +4,7 @@ Vector store factory module for the Knowledge Graph Agent.
 This module provides a factory pattern for creating vector store instances.
 """
 
-from typing import Dict, Any, List, Optional, Tuple, Union
+from typing import List, Optional
 
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
