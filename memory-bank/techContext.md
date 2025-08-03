@@ -5,20 +5,7 @@
 
 ## Technology Stack
 
-### Core Fr│   ├── workflows/                # LangGraph workflow definitions
-│       ├── base_workflow.py      # Base workflow interface
-│       ├── indexing_workflow.py  # Repository indexing workflow
-│       ├── query_workflow.py     # Refactored modular query workflow (253 lines)
-│       ├── query/                # ✨ NEW: Modular query components (August 3, 2025)
-│       │   ├── handlers/          # Specialized query processing handlers
-│       │   │   ├── query_parsing_handler.py      # Query parsing and intent analysis (116 lines)
-│       │   │   ├── vector_search_handler.py      # Document retrieval and ranking (241 lines)
-│       │   │   ├── context_processing_handler.py # Context preparation (164 lines)
-│       │   │   └── llm_generation_handler.py     # LLM interaction and response generation (199 lines)
-│       │   └── orchestrator/      # Query workflow orchestration
-│       │       └── query_orchestrator.py         # Modular workflow coordination (267 lines)
-│       ├── state_manager.py      # Workflow state management
-│       └── workflow_states.py    # State type definitionsk
+### Core Framework
 - **Python 3.11+**: Primary programming language with modern async support
 - **LangChain**: AI/ML pipeline framework for document processing, embeddings, and RAG
 - **LangGraph**: Stateful workflow orchestration with error recovery and state management
@@ -165,9 +152,17 @@ knowledge-graph-agent/
 │   └── workflows/                # LangGraph workflow definitions
 │       ├── base_workflow.py      # Base workflow interface
 │       ├── indexing_workflow.py  # Repository indexing workflow
-│       ├── query_workflow.py     # RAG query workflow
+│       ├── query_workflow.py     # Refactored modular query workflow (253 lines)
+│       ├── query/                # ✨ NEW: Modular query components (August 3, 2025)
+│       │   ├── handlers/          # Specialized query processing handlers
+│       │   │   ├── query_parsing_handler.py      # Query parsing and intent analysis (116 lines)
+│       │   │   ├── vector_search_handler.py      # Document retrieval and ranking (241 lines)
+│       │   │   ├── context_processing_handler.py # Context preparation (164 lines)
+│       │   │   └── llm_generation_handler.py     # LLM interaction and response generation (199 lines)
+│       │   └── orchestrator/      # Query workflow orchestration
+│       │       └── query_orchestrator.py         # Modular workflow coordination (267 lines)
 │       ├── state_manager.py      # Workflow state management
-│       └── workflow_states.py    # State type definitions
+│       └── workflow_states.py    # State type definitionsk
 ├── tests/                        # Test suites
 │   ├── unit/                     # Unit tests
 │   ├── integration/              # Integration tests
