@@ -19,23 +19,32 @@ except ImportError:
 
 def get_openai_model_name() -> str:
     """Get OpenAI model name with fallback."""
-    if _app_settings_available and AppSettings:
-        return AppSettings.openai.model
-    return "gpt-4o-mini"
+    try:
+        from src.config.settings import get_settings
+        settings = get_settings()
+        return settings.openai.model
+    except Exception:
+        return "gpt-4o-mini"
 
 
 def get_openai_temperature() -> float:
     """Get OpenAI temperature with fallback."""
-    if _app_settings_available and AppSettings:
-        return AppSettings.openai.temperature
-    return 0.7
+    try:
+        from src.config.settings import get_settings
+        settings = get_settings()
+        return settings.openai.temperature
+    except Exception:
+        return 0.7
 
 
 def get_openai_max_tokens() -> int:
     """Get OpenAI max tokens with fallback."""
-    if _app_settings_available and AppSettings:
-        return AppSettings.openai.max_tokens
-    return 4000
+    try:
+        from src.config.settings import get_settings
+        settings = get_settings()
+        return settings.openai.max_tokens
+    except Exception:
+        return 4000
 
 
 class WorkflowType(str, Enum):

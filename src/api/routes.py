@@ -273,61 +273,13 @@ async def process_query(
         
         logger.info(f"Processing query: {request.query[:100]}...")
         
-        # Create query state for workflow
-        query_state = {
-            "workflow_id": str(uuid.uuid4()),
-            "workflow_type": "query",
-            "status": "in_progress",
-            "created_at": start_time.timestamp(),
-            "updated_at": start_time.timestamp(),
-            "progress_percentage": 0.0,
-            "current_step": "initializing",
-            "errors": [],
-            "metadata": {},
-            "original_query": request.query,
-            "processed_query": request.query,
-            "query_intent": request.intent.value if request.intent else None,
-            "search_strategy": request.search_strategy.value if request.search_strategy else "hybrid",
-            "target_repositories": request.repositories or [],
-            "target_languages": request.language_filter or [],
-            "target_file_types": None,
-            "retrieval_config": {
-                "top_k": request.top_k or 5,
-                "include_metadata": request.include_metadata
-            },
-            "document_retrieval": {
-                "query_vector": None,
-                "search_strategy": request.search_strategy.value if request.search_strategy else "hybrid",
-                "top_k": request.top_k or 5,
-                "similarity_threshold": 0.7,
-                "metadata_filters": {},
-                "retrieved_documents": [],
-                "retrieval_time": None,
-                "relevance_scores": []
-            },
-            "context_size": 0,
-            "context_documents": [],
-            "context_preparation_time": None,
-            "llm_generation": {
-                "prompt_template": "",
-                "context_documents": [],
-                "generated_response": None,
-                "generation_time": None,
-                "token_usage": {},
-                "model_name": "gpt-3.5-turbo",
-                "temperature": 0.7,
-                "max_tokens": 1000
-            },
-            "response_quality_score": None,
-            "response_confidence": None,
-            "response_sources": [],
-            "total_query_time": None,
-            "retrieval_time": None,
-            "generation_time": None
-        }
-        
-        # Execute query workflow
-        result_state = await query_workflow.ainvoke(query_state)
+        # Execute query workflow using the workflow's proper state creation
+        result_state = await query_workflow.run(
+            query=request.query,
+            repositories=request.repositories,
+            languages=request.language_filter,
+            k=request.top_k or 5
+        )
         
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()

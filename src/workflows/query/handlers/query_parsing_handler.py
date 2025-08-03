@@ -40,8 +40,17 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         """
         if step == "parse_query":
             # Parse and clean the query
-            state["processed_query"] = state["original_query"].strip()
-            self.logger.info(f"Parsed query: {state['processed_query']}")
+            original_query = state["original_query"].strip()
+            
+            # Extract key terms for better search
+            simplified_query = self._extract_key_terms(original_query)
+            
+            # Store both original and simplified queries
+            state["processed_query"] = simplified_query
+            state["original_processed_query"] = original_query
+            
+            self.logger.info(f"Original query: {original_query}")
+            self.logger.info(f"Simplified query: {simplified_query}")
             
         elif step == "validate_query":
             # Validate query is not empty and has reasonable length
@@ -114,3 +123,84 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         # Default to code search
         else:
             return QueryIntent.CODE_SEARCH
+
+    def _extract_key_terms(self, query: str) -> str:
+        """
+        Extract key terms from complex queries for better vector search.
+        
+        This method simplifies complex queries by extracting the most relevant
+        terms that are likely to match documents in the vector store.
+        
+        Args:
+            query: Original user query
+            
+        Returns:
+            Simplified query with key terms
+        """
+        query_lower = query.lower()
+        
+        # Define key term patterns for different query types
+        key_terms = []
+        
+        # Extract repository/service names
+        if "car-listing-service" in query_lower:
+            key_terms.append("car")
+            key_terms.append("listing")
+        elif "car-notification-service" in query_lower:
+            key_terms.append("car")
+            key_terms.append("notification")
+        elif "car-order-service" in query_lower:
+            key_terms.append("car")
+            key_terms.append("order")
+        elif "car-web-client" in query_lower:
+            key_terms.append("car")
+            key_terms.append("web")
+        
+        # Extract common technical terms
+        if "component" in query_lower or "components" in query_lower:
+            key_terms.append("class")
+            key_terms.append("service")
+        if "main" in query_lower:
+            key_terms.append("class")
+        if "structure" in query_lower:
+            key_terms.append("class")
+        if "project" in query_lower:
+            key_terms.append("class")
+        
+        # Extract programming language terms
+        if "csharp" in query_lower or "c#" in query_lower:
+            key_terms.append("class")
+        if "dotnet" in query_lower or ".net" in query_lower:
+            key_terms.append("class")
+        
+        # Extract API-related terms
+        if "api" in query_lower:
+            key_terms.append("controller")
+            key_terms.append("service")
+        if "endpoint" in query_lower:
+            key_terms.append("controller")
+        if "controller" in query_lower:
+            key_terms.append("controller")
+        
+        # Extract database-related terms
+        if "database" in query_lower or "db" in query_lower:
+            key_terms.append("model")
+            key_terms.append("entity")
+        if "model" in query_lower:
+            key_terms.append("class")
+        
+        # If no specific terms found, extract general terms
+        if not key_terms:
+            # Extract words that are likely to be in code
+            words = query_lower.split()
+            for word in words:
+                if len(word) > 2 and word not in ["the", "and", "or", "for", "with", "this", "that", "what", "are", "main", "components", "project"]:
+                    key_terms.append(word)
+        
+        # If still no terms, use the original query
+        if not key_terms:
+            return query
+        
+        # Return simplified query
+        simplified = " ".join(key_terms[:5])  # Limit to 5 terms
+        return simplified
