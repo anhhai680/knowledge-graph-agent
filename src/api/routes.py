@@ -353,6 +353,20 @@ async def process_query(
                 chunk_index=doc.get("metadata", {}).get("chunk_index")
             ))
         
+        # Calculate confidence score with proper fallback
+        confidence_score = result_state.get("response_confidence")
+        if confidence_score is None:
+            # Calculate a basic confidence score based on retrieved documents
+            doc_count = len(document_results)
+            if doc_count == 0:
+                confidence_score = 0.0
+            else:
+                # Simple confidence calculation based on document count and content
+                base_confidence = min(doc_count / 5.0, 1.0)  # More docs = higher confidence
+                total_content_length = sum(len(doc.content) for doc in document_results)
+                content_confidence = min(total_content_length / 2000.0, 1.0)  # More content = higher confidence
+                confidence_score = (base_confidence * 0.6 + content_confidence * 0.4)
+        
         response = QueryResponse(
             query=request.query,
             intent=_map_workflow_intent_to_api(result_state.get("query_intent", "general")),  # Fixed: use mapping function
@@ -360,7 +374,7 @@ async def process_query(
             results=document_results,
             total_results=len(document_results),
             processing_time=processing_time,
-            confidence_score=result_state.get("response_confidence", 0.0),  # Fixed: handle None values properly
+            confidence_score=confidence_score,
             suggestions=result_state.get("suggestions", [])
         )
         
@@ -530,6 +544,53 @@ async def health_check(
         )
 
 
+@router.post("/fix/chroma-dimension", response_model=Dict[str, Any])
+async def fix_chroma_dimension_issue(
+    vector_store=Depends(get_vector_store)
+):
+    """
+    Fix Chroma dimension mismatch issues.
+    
+    This endpoint attempts to fix embedding dimension mismatches by
+    recreating the Chroma collection with the correct dimension.
+    """
+    try:
+        # Check if there's a dimension mismatch
+        is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+        
+        if is_compatible:
+            return {
+                "success": True,
+                "message": "No dimension mismatch detected",
+                "action_taken": "none"
+            }
+        
+        # Attempt to fix the issue
+        success = vector_store.recreate_collection_with_correct_dimension()
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Successfully recreated collection with correct dimension",
+                "action_taken": "recreated_collection",
+                "compatibility_message": compatibility_msg
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to recreate collection",
+                "action_taken": "failed",
+                "compatibility_message": compatibility_msg
+            }
+            
+    except Exception as e:
+        logger.error(f"Error fixing Chroma dimension issue: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fixing Chroma dimension issue: {str(e)}"
+        )
+
+
 @router.get("/stats", response_model=StatsResponse)
 async def get_statistics(
     vector_store=Depends(get_vector_store)
@@ -542,6 +603,25 @@ async def get_statistics(
     """
     try:
         logger.info("Retrieving system statistics from vector store")
+        
+        # Check for dimension mismatch first
+        try:
+            is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+            if not is_compatible:
+                logger.warning(f"Dimension mismatch detected: {compatibility_msg}")
+                # Return degraded statistics with warning
+                return StatsResponse(
+                    total_repositories=0,
+                    total_documents=0,
+                    total_files=0,
+                    index_size_mb=0.0,
+                    languages={},
+                    recent_queries=0,
+                    active_workflows=0,
+                    system_health="degraded"
+                )
+        except Exception as e:
+            logger.warning(f"Could not check embedding compatibility: {str(e)}")
         
         # Get collection statistics
         collection_stats = vector_store.get_collection_stats()

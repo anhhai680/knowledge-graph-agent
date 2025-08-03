@@ -69,6 +69,13 @@ class ChromaStore(BaseStore):
         try:
             self.collection = self.client.get_or_create_collection(self.collection_name)
             logger.debug(f"Connected to Chroma collection: {self.collection_name}")
+            
+            # Check for dimension mismatch and provide guidance
+            is_compatible, compatibility_msg = self.check_embedding_dimension_compatibility()
+            if not is_compatible:
+                logger.warning(f"Dimension mismatch detected: {compatibility_msg}")
+                logger.info("Use recreate_collection_with_correct_dimension() to fix this issue")
+                
         except Exception as e:
             error_message = f"Error connecting to Chroma collection: {str(e)}"
             logger.error(error_message)
@@ -80,6 +87,50 @@ class ChromaStore(BaseStore):
             collection_name=self.collection_name,
             embedding_function=self.embeddings,
         )
+    
+    def recreate_collection_with_correct_dimension(self) -> bool:
+        """
+        Recreate the collection with the correct embedding dimension.
+        
+        This method deletes the existing collection and creates a new one
+        with the current embedding model's dimension.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get current embedding dimension
+            test_embedding = self.embeddings.embed_query("test")
+            current_dimension = len(test_embedding)
+            
+            logger.info(f"Recreating collection with dimension {current_dimension}")
+            
+            # Delete existing collection
+            try:
+                self.client.delete_collection(self.collection_name)
+                logger.info(f"Deleted existing collection: {self.collection_name}")
+            except Exception as e:
+                logger.warning(f"Could not delete collection (may not exist): {str(e)}")
+            
+            # Create new collection with correct dimension
+            self.collection = self.client.create_collection(
+                name=self.collection_name,
+                metadata={"dimension": current_dimension}
+            )
+            
+            # Recreate LangChain Chroma instance
+            self.langchain_store = Chroma(
+                client=self.client,
+                collection_name=self.collection_name,
+                embedding_function=self.embeddings,
+            )
+            
+            logger.info(f"Successfully recreated collection: {self.collection_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error recreating collection: {str(e)}")
+            return False
 
     @retry(
         stop=stop_after_attempt(3),
@@ -270,14 +321,15 @@ class ChromaStore(BaseStore):
             # Get collection metadata (if any)
             collection_info = self.client.get_collection(self.collection_name)
 
+            # Safely get dimension from metadata
+            dimension = None
+            if hasattr(collection_info, "metadata") and collection_info.metadata is not None:
+                dimension = collection_info.metadata.get("dimension")
+
             stats = {
                 "name": self.collection_name,
                 "count": count,
-                "dimension": (
-                    collection_info.metadata.get("dimension")
-                    if hasattr(collection_info, "metadata")
-                    else None
-                ),
+                "dimension": dimension,
             }
 
             return stats
@@ -285,6 +337,36 @@ class ChromaStore(BaseStore):
         except Exception as e:
             logger.error(f"Error getting Chroma collection stats: {str(e)}")
             return {"name": self.collection_name, "error": str(e)}
+
+    def check_embedding_dimension_compatibility(self) -> Tuple[bool, str]:
+        """
+        Check if the current embeddings are compatible with the collection.
+
+        Returns:
+            Tuple of (is_compatible, message)
+        """
+        try:
+            # Get the expected dimension from the collection
+            collection_info = self.client.get_collection(self.collection_name)
+            expected_dimension = None
+            
+            if hasattr(collection_info, "metadata") and collection_info.metadata is not None:
+                expected_dimension = collection_info.metadata.get("dimension")
+            
+            if expected_dimension is None:
+                return True, "No dimension information available in collection metadata"
+            
+            # Test the current embeddings to get their dimension
+            test_embedding = self.embeddings.embed_query("test")
+            actual_dimension = len(test_embedding)
+            
+            if actual_dimension == expected_dimension:
+                return True, f"Embedding dimensions match: {actual_dimension}"
+            else:
+                return False, f"Dimension mismatch: expected {expected_dimension}, got {actual_dimension}"
+                
+        except Exception as e:
+            return False, f"Error checking embedding compatibility: {str(e)}"
 
     def get_repository_metadata(self) -> List[Dict[str, Any]]:
         """
@@ -294,6 +376,12 @@ class ChromaStore(BaseStore):
             List of dictionaries containing repository metadata
         """
         try:
+            # First check embedding compatibility
+            is_compatible, compatibility_msg = self.check_embedding_dimension_compatibility()
+            if not is_compatible:
+                logger.error(f"Embedding dimension mismatch: {compatibility_msg}")
+                return []
+            
             # Query all documents to analyze repository metadata
             # We'll get a sample of documents and aggregate repository information
             query_results = self.collection.query(
@@ -409,6 +497,47 @@ class ChromaStore(BaseStore):
             logger.error(f"Error getting repository metadata from Chroma: {str(e)}")
             return []
 
+    def get_dimension_mismatch_guidance(self) -> Dict[str, Any]:
+        """
+        Get guidance for fixing dimension mismatch issues.
+
+        Returns:
+            Dictionary with guidance information
+        """
+        try:
+            # Check current embedding dimension
+            test_embedding = self.embeddings.embed_query("test")
+            current_dimension = len(test_embedding)
+            
+            # Get collection info
+            collection_info = self.client.get_collection(self.collection_name)
+            expected_dimension = None
+            
+            if hasattr(collection_info, "metadata") and collection_info.metadata is not None:
+                expected_dimension = collection_info.metadata.get("dimension")
+            
+            guidance = {
+                "current_dimension": current_dimension,
+                "expected_dimension": expected_dimension,
+                "has_mismatch": expected_dimension is not None and current_dimension != expected_dimension,
+                "solutions": []
+            }
+            
+            if guidance["has_mismatch"]:
+                guidance["solutions"] = [
+                    "Delete the existing collection and recreate it with the correct embedding model",
+                    "Update the embedding model configuration to match the collection's expected dimension",
+                    "Use a different collection name that matches the current embedding model"
+                ]
+            
+            return guidance
+            
+        except Exception as e:
+            return {
+                "error": f"Error getting dimension guidance: {str(e)}",
+                "solutions": ["Check embedding model configuration and collection settings"]
+            }
+
     def health_check(self) -> Tuple[bool, str]:
         """
         Check if the vector store is healthy.
@@ -419,6 +548,12 @@ class ChromaStore(BaseStore):
         try:
             # Attempt to get collection stats
             _ = self.collection.count()
+            
+            # Check embedding compatibility
+            is_compatible, compatibility_msg = self.check_embedding_dimension_compatibility()
+            if not is_compatible:
+                return False, f"Chroma vector store has dimension mismatch: {compatibility_msg}"
+            
             return True, "Chroma vector store is healthy"
 
         except Exception as e:

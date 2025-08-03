@@ -253,6 +253,10 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
 
         state["response_sources"] = sources
 
+        # Calculate confidence score using PromptManager logic
+        confidence_score = self._calculate_response_confidence(state)
+        state["response_confidence"] = confidence_score
+
         # Calculate total processing time
         start_time = state.get("start_time")
         if start_time:
@@ -262,6 +266,49 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
         state["status"] = ProcessingStatus.COMPLETED
         state = update_workflow_progress(state, 100.0, "workflow_complete")
 
-        self.logger.info(f"Query workflow completed successfully")
+        self.logger.info(f"Query workflow completed successfully with confidence score: {confidence_score:.2f}")
 
         return state
+
+    def _calculate_response_confidence(self, state: QueryState) -> float:
+        """
+        Calculate response confidence score using PromptManager logic.
+
+        Args:
+            state: Current query state
+
+        Returns:
+            Confidence score between 0 and 1
+        """
+        context_documents = state.get("context_documents", [])
+        query = state.get("original_query", "")
+
+        if not context_documents:
+            return 0.0
+
+        # Basic confidence metrics (based on PromptManager._assess_context_confidence)
+        doc_count_score = min(len(context_documents) / 5.0, 1.0)  # More docs = higher confidence
+        
+        # Content relevance score
+        total_content_length = sum(len(doc.get("content", "")) for doc in context_documents)
+        content_score = min(total_content_length / 2000.0, 1.0)  # More content = higher confidence
+        
+        # Metadata quality score
+        metadata_quality = 0.0
+        for doc in context_documents:
+            metadata = doc.get("metadata", {})
+            if metadata.get("file_path"):
+                metadata_quality += 0.2
+            if metadata.get("repository"):
+                metadata_quality += 0.1
+            if metadata.get("language"):
+                metadata_quality += 0.1
+            if metadata.get("chunk_type"):
+                metadata_quality += 0.1
+        
+        metadata_quality = min(metadata_quality / len(context_documents), 1.0)
+        
+        # Combined confidence score
+        confidence = (doc_count_score * 0.4 + content_score * 0.4 + metadata_quality * 0.2)
+        
+        return min(confidence, 1.0)
