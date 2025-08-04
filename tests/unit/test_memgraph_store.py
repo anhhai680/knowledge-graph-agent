@@ -10,7 +10,8 @@ from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 
 from src.graphstores.memgraph_store import MemGraphStore
-from src.graphstores.base_graph_store import GraphQueryResult, GraphNode
+from src.graphstores.base_graph_store import GraphNode
+from src.api.models import GraphQueryResult
 from src.config.settings import settings
 
 
@@ -144,8 +145,10 @@ class TestMemGraphStore:
         assert result.data[0] == mock_record1
         assert result.data[1] == mock_record2
         assert result.execution_time_ms > 0
-        assert result.metadata["node_count"] == 1
-        assert result.metadata["relationship_count"] == 1
+        assert result.metadata["node_count"] == 1  # One record has a "node" key
+        assert result.metadata["relationship_count"] == 1  # One record has a "relationship" key
+        assert result.node_count == 1  # New field
+        assert result.relationship_count == 1  # New field
     
     def test_execute_query_not_connected(self, memgraph_store):
         """Test query execution when not connected."""

@@ -10,7 +10,8 @@ from typing import Any, Dict, List, Optional
 from neo4j import GraphDatabase, Driver, Session
 from neo4j.exceptions import ServiceUnavailable, AuthError, ClientError
 
-from .base_graph_store import BaseGraphStore, GraphQueryResult, GraphNode, GraphRelationship
+from .base_graph_store import BaseGraphStore, GraphNode, GraphRelationship
+from ..api.models import GraphQueryResult
 from ..config.settings import settings
 
 
@@ -161,15 +162,21 @@ class MemGraphStore(BaseGraphStore):
                 
                 execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
                 
+                # Count nodes and relationships in the result
+                node_count = len([r for r in data if any('node' in str(k).lower() or 'n' == k for k in r.keys())])
+                relationship_count = len([r for r in data if any('rel' in str(k).lower() or 'r' == k for k in r.keys())])
+                
                 return GraphQueryResult(
                     data=data,
                     metadata={
-                        "node_count": len([r for r in data if "node" in r]),
-                        "relationship_count": len([r for r in data if "relationship" in r]),
+                        "node_count": node_count,
+                        "relationship_count": relationship_count,
                         "result_count": len(data)
                     },
                     execution_time_ms=execution_time,
-                    query=query
+                    query=query,
+                    node_count=node_count,
+                    relationship_count=relationship_count
                 )
                 
         except Exception as e:
