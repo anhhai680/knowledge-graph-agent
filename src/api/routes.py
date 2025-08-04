@@ -27,10 +27,14 @@ from src.api.models import (
     DocumentResult,
     DocumentMetadata,
     QueryIntent,
-    SearchStrategy
+    SearchStrategy,
+    GraphQueryRequest,
+    GraphQueryResponse,
+    GraphInfoResponse
 )
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
+from src.utils.feature_flags import is_graph_enabled, require_graph_features
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
 
@@ -94,6 +98,13 @@ def get_vector_store():
     # This will be implemented in main.py as a dependency
     from src.api.main import get_vector_store
     return get_vector_store()
+
+
+def get_graph_store():
+    """Dependency injection for graph store."""
+    # This will be implemented in main.py as a dependency
+    from src.api.main import get_graph_store
+    return get_graph_store()
 
 
 @router.get("/")
@@ -872,4 +883,89 @@ async def diagnose_chroma_dimension(
         raise HTTPException(
             status_code=500,
             detail=f"Error diagnosing Chroma dimension: {str(e)}"
+        )
+
+
+@router.post("/graph/query", response_model=GraphQueryResponse)
+async def execute_graph_query(
+    request: GraphQueryRequest,
+    graph_store=Depends(get_graph_store)
+):
+    """
+    Execute a Cypher query against the knowledge graph.
+    
+    This endpoint allows executing Cypher queries against the graph database
+    when graph features are enabled.
+    """
+    if not is_graph_enabled():
+        raise HTTPException(
+            status_code=400, 
+            detail="Graph features are not enabled"
+        )
+    
+    start_time = datetime.now()
+    
+    try:
+        # Execute the query
+        result = graph_store.execute_query(
+            query=request.query,
+            parameters=request.parameters
+        )
+        
+        processing_time = (datetime.now() - start_time).total_seconds()
+        
+        return GraphQueryResponse(
+            success=True,
+            result=result,
+            error=None,
+            processing_time=processing_time,
+            query=request.query
+        )
+        
+    except Exception as e:
+        processing_time = (datetime.now() - start_time).total_seconds()
+        logger.error(f"Graph query failed: {str(e)}")
+        
+        return GraphQueryResponse(
+            success=False,
+            result=None,
+            error=str(e),
+            processing_time=processing_time,
+            query=request.query
+        )
+
+
+@router.get("/graph/info", response_model=GraphInfoResponse)
+async def get_graph_info(
+    graph_store=Depends(get_graph_store)
+):
+    """
+    Get information about the graph database.
+    
+    This endpoint provides information about the graph database
+    when graph features are enabled.
+    """
+    if not is_graph_enabled():
+        raise HTTPException(
+            status_code=400, 
+            detail="Graph features are not enabled"
+        )
+    
+    try:
+        info = graph_store.get_graph_info()
+        
+        return GraphInfoResponse(
+            connected=info.get("connected", False),
+            node_count=info.get("node_count", 0),
+            relationship_count=info.get("relationship_count", 0),
+            database_type=info.get("database_type", "Unknown"),
+            schema_info=None,  # TODO: Add schema info
+            performance_metrics=None  # TODO: Add performance metrics
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get graph info: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get graph info: {str(e)}"
         )

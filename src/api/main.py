@@ -19,6 +19,7 @@ from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
 from src.vectorstores.store_factory import VectorStoreFactory
+from src.utils.feature_flags import is_graph_enabled
 
 logger = get_logger(__name__)
 
@@ -247,6 +248,35 @@ def get_vector_store():
         raise HTTPException(
             status_code=503,
             detail=f"Vector store not available: {str(e)}"
+        )
+
+
+def get_graph_store():
+    """
+    Dependency to get the graph store instance.
+    
+    Returns:
+        MemGraphStore: The graph store instance
+        
+    Raises:
+        HTTPException: If graph store instance is not available or features disabled
+    """
+    if not is_graph_enabled():
+        raise HTTPException(
+            status_code=400,
+            detail="Graph features are not enabled"
+        )
+    
+    try:
+        vector_store_factory = VectorStoreFactory()
+        graph_store = vector_store_factory.create(store_type="graph")
+        logger.debug("Successfully created graph store instance")
+        return graph_store
+    except Exception as e:
+        logger.error(f"Failed to create graph store: {str(e)}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Graph store not available: {str(e)}"
         )
 
 

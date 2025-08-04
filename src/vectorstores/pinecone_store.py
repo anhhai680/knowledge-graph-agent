@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pinecone
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
-from langchain.vectorstores import Pinecone as LangchainPinecone
+from langchain_community.vectorstores import Pinecone as LangchainPinecone
 from loguru import logger
 from tenacity import (
     retry,

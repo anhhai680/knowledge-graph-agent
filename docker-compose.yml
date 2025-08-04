@@ -27,6 +27,18 @@ services:
       - CHROMA_SERVER_HOST=chroma
       - CHROMA_SERVER_HTTP_PORT=8000
   
+  memgraph:
+    image: memgraph/memgraph:2.11.0
+    ports:
+      - "7687:7687"  # Bolt protocol
+      - "7444:7444"  # HTTP for management
+    environment:
+      - MEMGRAPH_LOG_LEVEL=WARNING
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+    networks:
+      - knowledge-graph-net
+  
   web:
     build: ./web
     ports:
@@ -38,3 +50,8 @@ services:
 
 volumes:
   chroma-data:
+  memgraph_data:
+
+networks:
+  knowledge-graph-net:
+    driver: bridge

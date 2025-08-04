@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class QueryIntent(str, Enum):
@@ -46,29 +46,30 @@ class IndexRepositoryRequest(BaseModel):
     repository_url: str = Field(
         ...,
         description="GitHub repository URL to index",
-        example="https://github.com/user/repo"
+        json_schema_extra={"example": "https://github.com/user/repo"}
     )
     branch: Optional[str] = Field(
         default="main",
         description="Branch to index",
-        example="main"
+        json_schema_extra={"example": "main"}
     )
     file_extensions: Optional[List[str]] = Field(
         default=None,
         description="File extensions to include (if not specified, uses default set)",
-        example=[".py", ".js", ".ts", ".md"]
+        json_schema_extra={"example": [".py", ".js", ".ts", ".md"]}
     )
     max_files: Optional[int] = Field(
         default=None,
         description="Maximum number of files to process",
-        example=1000
+        json_schema_extra={"example": 1000}
     )
     force_reindex: bool = Field(
         default=False,
         description="Force reindexing even if repository is already indexed"
     )
     
-    @validator('repository_url')
+    @field_validator('repository_url')
+    @classmethod
     def validate_repository_url(cls, v):
         """Validate GitHub repository URL format."""
         if not v.startswith(('https://github.com/', 'git@github.com:')):
@@ -82,7 +83,7 @@ class BatchIndexRequest(BaseModel):
     repositories: List[IndexRepositoryRequest] = Field(
         ...,
         description="List of repositories to index",
-        min_items=1
+        min_length=1
     )
     parallel_jobs: Optional[int] = Field(
         default=3,
@@ -100,7 +101,7 @@ class QueryRequest(BaseModel):
         description="User query text",
         min_length=1,
         max_length=2000,
-        example="How to implement authentication in FastAPI?"
+        json_schema_extra={"example": "How to implement authentication in FastAPI?"}
     )
     intent: Optional[QueryIntent] = Field(
         default=None,
@@ -109,7 +110,7 @@ class QueryRequest(BaseModel):
     repositories: Optional[List[str]] = Field(
         default=None,
         description="Repository names to search within",
-        example=["user/repo1", "user/repo2"]
+        json_schema_extra={"example": ["user/repo1", "user/repo2"]}
     )
     top_k: Optional[int] = Field(
         default=5,
@@ -128,7 +129,7 @@ class QueryRequest(BaseModel):
     language_filter: Optional[List[str]] = Field(
         default=None,
         description="Programming languages to filter by",
-        example=["python", "typescript", "javascript"]
+        json_schema_extra={"example": ["python", "typescript", "javascript"]}
     )
 
 
@@ -262,6 +263,71 @@ class ErrorResponse(BaseModel):
     details: Optional[Dict[str, Any]] = Field(None, description="Additional error details")
     request_id: Optional[str] = Field(None, description="Request identifier for tracking")
     timestamp: datetime = Field(default_factory=datetime.now, description="Error timestamp")
+
+
+# Graph Query Models
+
+class GraphQueryRequest(BaseModel):
+    """Request model for graph query operations."""
+    
+    query: str = Field(
+        ...,
+        description="Cypher query to execute",
+        min_length=1,
+        max_length=5000,
+        json_schema_extra={"example": "MATCH (f:File) RETURN f LIMIT 10"}
+    )
+    parameters: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Query parameters",
+        json_schema_extra={"example": {"file_path": "src/main.py"}}
+    )
+    timeout_seconds: Optional[int] = Field(
+        default=30,
+        description="Query timeout in seconds",
+        ge=1,
+        le=300
+    )
+    
+    @field_validator('query')
+    @classmethod
+    def validate_query(cls, v):
+        """Validate Cypher query format."""
+        if not v.strip().upper().startswith(('MATCH', 'CREATE', 'MERGE', 'RETURN', 'WITH')):
+            raise ValueError('Query must be a valid Cypher query starting with MATCH, CREATE, MERGE, RETURN, or WITH')
+        return v
+
+
+class GraphQueryResult(BaseModel):
+    """Result model for graph query execution."""
+    
+    data: List[Dict[str, Any]] = Field(..., description="Query result data")
+    metadata: Dict[str, Any] = Field(..., description="Query metadata")
+    execution_time_ms: float = Field(..., description="Query execution time in milliseconds")
+    query: str = Field(..., description="Original query executed")
+    node_count: Optional[int] = Field(None, description="Number of nodes in result")
+    relationship_count: Optional[int] = Field(None, description="Number of relationships in result")
+
+
+class GraphQueryResponse(BaseModel):
+    """Response model for graph query operations."""
+    
+    success: bool = Field(..., description="Query execution success")
+    result: Optional[GraphQueryResult] = Field(None, description="Query result")
+    error: Optional[str] = Field(None, description="Error message if failed")
+    processing_time: float = Field(..., description="Total processing time in seconds")
+    query: str = Field(..., description="Original query text")
+
+
+class GraphInfoResponse(BaseModel):
+    """Response model for graph database information."""
+    
+    connected: bool = Field(..., description="Graph database connection status")
+    node_count: int = Field(..., description="Total number of nodes")
+    relationship_count: int = Field(..., description="Total number of relationships")
+    database_type: str = Field(..., description="Graph database type")
+    schema_info: Optional[Dict[str, Any]] = Field(None, description="Graph schema information")
+    performance_metrics: Optional[Dict[str, Any]] = Field(None, description="Performance metrics")
 
 
 # Configuration Models

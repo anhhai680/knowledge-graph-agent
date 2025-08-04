@@ -12,6 +12,7 @@ pydantic>=2.0.0
 uvicorn[standard]>=0.23.0
 httpx>=0.24.0
 python-multipart>=0.0.6
+neo4j>=5.28.0
 
 # Utilities
 PyGithub>=2.1.1
