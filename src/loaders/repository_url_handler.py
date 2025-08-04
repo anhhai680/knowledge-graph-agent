@@ -112,7 +112,7 @@ class RepositoryUrlHandler:
             HTTPS clone URL with authentication if token provided
         """
         # Ensure repo name doesn't have .git suffix for URL building
-        repo_clean = repo.rstrip(".git")
+        repo_clean = repo.removesuffix(".git")
         
         if token:
             # Authenticated URL format
@@ -171,7 +171,7 @@ class RepositoryUrlHandler:
         """
         try:
             _, repo = self.parse_repo_info(url)
-            return repo.rstrip(".git")
+            return repo.removesuffix(".git")
         except Exception as e:
             raise ValueError(f"Unable to extract repository name from URL: {url}")
 
@@ -205,7 +205,7 @@ class RepositoryUrlHandler:
         Returns:
             GitHub API URL for the repository
         """
-        repo_clean = repo.rstrip(".git")
+        repo_clean = repo.removesuffix(".git")
         return f"https://api.github.com/repos/{owner}/{repo_clean}"
 
     def build_github_web_url(self, owner: str, repo: str) -> str:
@@ -219,7 +219,7 @@ class RepositoryUrlHandler:
         Returns:
             GitHub web URL for the repository
         """
-        repo_clean = repo.rstrip(".git")
+        repo_clean = repo.removesuffix(".git")
         return f"https://github.com/{owner}/{repo_clean}"
 
     def convert_to_ssh_url(self, owner: str, repo: str) -> str:
@@ -233,7 +233,7 @@ class RepositoryUrlHandler:
         Returns:
             SSH clone URL
         """
-        repo_clean = repo.rstrip(".git")
+        repo_clean = repo.removesuffix(".git")
         return f"git@github.com:{owner}/{repo_clean}.git"
 
     def mask_token_in_url(self, url: str) -> str:
