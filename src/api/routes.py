@@ -965,7 +965,77 @@ async def get_graph_info(
         
     except Exception as e:
         logger.error(f"Failed to get graph info: {str(e)}")
+        
+        # Check if it's a connection error
+        if "Failed to connect to MemGraph" in str(e) or "Connection refused" in str(e):
+            raise HTTPException(
+                status_code=503,
+                detail="MemGraph database is not available. Please ensure MemGraph is running and accessible at the configured URL."
+            )
+        
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get graph info: {str(e)}"
         )
+
+
+@router.get("/graph/health")
+async def get_graph_health():
+    """
+    Health check endpoint for graph database connectivity.
+    
+    This endpoint checks if graph features are enabled and if the
+    graph database is accessible, providing detailed diagnostic information.
+    """
+    if not is_graph_enabled():
+        return {
+            "status": "disabled",
+            "message": "Graph features are not enabled",
+            "enabled": False,
+            "connected": False,
+            "configuration": None
+        }
+    
+    try:
+        from ..vectorstores.store_factory import VectorStoreFactory
+        from ..config.settings import get_settings
+        
+        settings = get_settings()
+        graph_config = {
+            "type": settings.graph_store.type,
+            "url": settings.graph_store.url,
+            "has_auth": bool(settings.graph_store.username and settings.graph_store.password)
+        }
+        
+        # Try to create and connect to graph store
+        vector_store_factory = VectorStoreFactory()
+        graph_store = vector_store_factory.create(store_type="graph")
+        
+        return {
+            "status": "healthy",
+            "message": "Graph database is accessible",
+            "enabled": True,
+            "connected": True,
+            "configuration": graph_config,
+            "database_info": graph_store.get_graph_info() if hasattr(graph_store, 'get_graph_info') else None
+        }
+        
+    except Exception as e:
+        error_msg = str(e)
+        
+        # Provide specific guidance based on error type
+        if "Failed to connect to MemGraph" in error_msg or "Connection refused" in error_msg:
+            status_msg = "MemGraph database is not accessible"
+            if "localhost" in settings.graph_store.url:
+                status_msg += " (Check if running in Docker with correct hostname)"
+        else:
+            status_msg = f"Graph database error: {error_msg}"
+        
+        return {
+            "status": "unhealthy",
+            "message": status_msg,
+            "enabled": True,
+            "connected": False,
+            "configuration": graph_config if 'graph_config' in locals() else None,
+            "error": error_msg
+        }

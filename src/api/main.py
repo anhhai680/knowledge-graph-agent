@@ -264,7 +264,7 @@ def get_graph_store():
     if not is_graph_enabled():
         raise HTTPException(
             status_code=400,
-            detail="Graph features are not enabled"
+            detail="Graph features are not enabled. Set ENABLE_GRAPH_FEATURES=true in your environment."
         )
     
     try:
@@ -273,10 +273,35 @@ def get_graph_store():
         logger.debug("Successfully created graph store instance")
         return graph_store
     except Exception as e:
-        logger.error(f"Failed to create graph store: {str(e)}")
+        error_msg = str(e)
+        logger.error(f"Failed to create graph store: {error_msg}")
+        
+        # Check if it's a connection error and provide helpful guidance
+        if "Failed to connect to MemGraph" in error_msg or "Connection refused" in error_msg:
+            # Check if we're running in Docker
+            settings = get_settings()
+            graph_url = settings.graph_store.url
+            
+            if "localhost" in graph_url:
+                detail = (
+                    "MemGraph database is not available. "
+                    "If running in Docker, ensure MemGraph service is running and use 'memgraph:7687' as the host. "
+                    f"Current URL: {graph_url}"
+                )
+            else:
+                detail = (
+                    f"MemGraph database at {graph_url} is not accessible. "
+                    "Please ensure MemGraph is running and the URL is correct."
+                )
+            
+            raise HTTPException(
+                status_code=503,
+                detail=detail
+            )
+        
         raise HTTPException(
             status_code=503,
-            detail=f"Graph store not available: {str(e)}"
+            detail=f"Graph store not available: {error_msg}"
         )
 
 

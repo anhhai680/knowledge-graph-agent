@@ -31,36 +31,83 @@ class MemGraphStore(BaseGraphStore):
             username: Username for authentication (defaults to settings)
             password: Password for authentication (defaults to settings)
         """
-        self.uri = uri or settings.graph_store_url
-        self.username = username or settings.graph_store_user
-        self.password = password or settings.graph_store_password
+        self.uri = uri or settings.graph_store.url
+        self.username = username or settings.graph_store.username
+        self.password = password or settings.graph_store.password
         self.driver: Optional[Driver] = None
         self._connected = False
     
-    def connect(self) -> bool:
+    def connect(self, max_retries: int = 3, retry_delay: float = 1.0) -> bool:
         """
-        Establish connection to MemGraph.
+        Establish connection to MemGraph with retry logic.
+        
+        Args:
+            max_retries: Maximum number of connection attempts
+            retry_delay: Delay between retries in seconds
         
         Returns:
             bool: True if connection successful, False otherwise
         """
-        try:
-            if self.username and self.password:
-                self.driver = GraphDatabase.driver(self.uri, auth=(self.username, self.password))
-            else:
-                self.driver = GraphDatabase.driver(self.uri)
-            
-            # Test connection
-            with self.driver.session() as session:
-                session.run("RETURN 1")
-            
-            self._connected = True
-            return True
-            
-        except (ServiceUnavailable, AuthError, Exception) as e:
-            print(f"Failed to connect to MemGraph: {e}")
-            self._connected = False
-            return False
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                # Create driver with configuration
+                if self.username and self.password:
+                    self.driver = GraphDatabase.driver(
+                        self.uri, 
+                        auth=(self.username, self.password),
+                        connection_timeout=10.0,  # 10 second timeout
+                        max_connection_lifetime=3600,  # 1 hour lifetime
+                    )
+                else:
+                    self.driver = GraphDatabase.driver(
+                        self.uri,
+                        connection_timeout=10.0,
+                        max_connection_lifetime=3600,
+                    )
+                
+                # Test connection with a simple query
+                with self.driver.session() as session:
+                    result = session.run("RETURN 1 as test")
+                    result.single()  # Consume the result
+                
+                self._connected = True
+                print(f"Successfully connected to MemGraph at {self.uri}")
+                return True
+                
+            except (ServiceUnavailable, AuthError) as e:
+                last_error = e
+                print(f"MemGraph connection attempt {attempt + 1}/{max_retries} failed: {e}")
+                
+                # Clean up failed driver
+                if self.driver:
+                    try:
+                        self.driver.close()
+                    except Exception:
+                        pass
+                    self.driver = None
+                
+                # Wait before retrying (except on last attempt)
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                    
+            except Exception as e:
+                last_error = e
+                print(f"Unexpected error connecting to MemGraph: {e}")
+                
+                # Clean up failed driver
+                if self.driver:
+                    try:
+                        self.driver.close()
+                    except Exception:
+                        pass
+                    self.driver = None
+                break  # Don't retry on unexpected errors
+        
+        self._connected = False
+        print(f"Failed to connect to MemGraph after {max_retries} attempts. Last error: {last_error}")
+        return False
     
     def disconnect(self) -> None:
         """Close connection to MemGraph."""

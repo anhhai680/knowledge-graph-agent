@@ -11,8 +11,12 @@ services:
       - APP_ENV=development
       - LOG_LEVEL=DEBUG
       - DATABASE_TYPE=chroma
+      - GRAPH_STORE_URL=bolt://memgraph:7687
     depends_on:
       - chroma
+      - memgraph
+    networks:
+      - knowledge-graph-net
     command: python main.py
 
   chroma:
@@ -26,6 +30,8 @@ services:
       - CHROMA_API_IMPL=rest
       - CHROMA_SERVER_HOST=chroma
       - CHROMA_SERVER_HTTP_PORT=8000
+    networks:
+      - knowledge-graph-net
   
   memgraph:
     image: memgraph/memgraph:2.11.0
@@ -47,6 +53,8 @@ services:
       - REACT_APP_API_URL=http://localhost:8000
     depends_on:
       - app
+    networks:
+      - knowledge-graph-net
 
 volumes:
   chroma-data:
