@@ -1,12 +1,10 @@
 # Knowledge Graph Agent - Interactive Test Questions
 
-Các câu hỏi để test AI capabilities của Knowledge Graph Agent thông qua tương tác trực tiếp. Mỗi câu hỏi có expected answer pattern để đánh giá chất lượng response, bao gồm cả diagrams và code references khi cần thiết.
-
 **Test Focus:**
-- **Relation diagrams**: AI phải tạo và giải thích diagrams
-- **Repository indexing**: AI phải hiểu được cách index và process repos  
-- **Natural language responses**: AI phải trả lời bằng ngôn ngữ tự nhiên với code references
-- **Code understanding**: AI phải reference relevant code locations để support explanations
+- **Relation diagrams**: AI created and explained diagrams
+- **Repository indexing**: AI have to understand the way to index and process repos  
+- **Natural language responses**: AI response with NL code references
+- **Code understanding**: AI have to reference relevant code locations to support explanations
 
 ## Test Questions for AI Interaction
 
