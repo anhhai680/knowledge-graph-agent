@@ -56,6 +56,9 @@ class IndexingWorkflowSteps(str):
     HANDLE_EMBEDDING_ERRORS = "handle_embedding_errors"
     HANDLE_STORAGE_ERRORS = "handle_storage_errors"
 
+# Length of content preview for graph nodes
+CONTENT_PREVIEW_LENGTH = 200  
+
 
 class IndexingWorkflow(BaseWorkflow[IndexingState]):
     """
@@ -856,7 +859,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                         "language": metadata.get("language", "unknown"),
                         "file_extension": metadata.get("file_extension", ""),
                         "chunk_index": metadata.get("chunk_index", 0),
-                        "content_preview": chunk.page_content[:200] + "..." if len(chunk.page_content) > 200 else chunk.page_content
+                        "content_preview": chunk.page_content[:CONTENT_PREVIEW_LENGTH] + "..." if len(chunk.page_content) > CONTENT_PREVIEW_LENGTH else chunk.page_content
                     }
                     
                     # Create node in graph
