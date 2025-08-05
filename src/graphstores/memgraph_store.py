@@ -209,13 +209,28 @@ class MemGraphStore(BaseGraphStore):
         try:
             with self.driver.session() as session:
                 result = session.run(query, parameters or {})
-                data = [_serialize_record(record) for record in result]
+                
+                # Count nodes and relationships during processing, before serialization
+                data = []
+                node_count = 0
+                relationship_count = 0
+                
+                for record in result:
+                    # Count Neo4j objects by inspecting their types
+                    for value in record.values():
+                        if isinstance(value, Node):
+                            node_count += 1
+                        elif isinstance(value, Relationship):
+                            relationship_count += 1
+                        elif isinstance(value, Path):
+                            # Paths contain nodes and relationships
+                            node_count += len(value.nodes)
+                            relationship_count += len(value.relationships)
+                    
+                    # Serialize the record after counting
+                    data.append(_serialize_record(record))
                 
                 execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
-                
-                # Count nodes and relationships in the result
-                node_count = len([r for r in data if any('node' in str(k).lower() or 'n' == k for k in r.keys())])
-                relationship_count = len([r for r in data if any('rel' in str(k).lower() or 'r' == k for k in r.keys())])
                 
                 return GraphQueryResult(
                     data=data,

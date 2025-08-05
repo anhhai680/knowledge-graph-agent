@@ -69,8 +69,10 @@ class TestMemGraphStore:
     @patch('src.graphstores.memgraph_store.GraphDatabase')
     def test_connect_failure(self, mock_graph_database, memgraph_store):
         """Test connection failure to MemGraph."""
-        from neo4j.exceptions import ServiceUnavailable
-        mock_graph_database.driver.side_effect = ServiceUnavailable("Connection failed")
+        # Mock ServiceUnavailable exception instead of importing it
+        service_unavailable_error = Exception("Connection failed")
+        service_unavailable_error.__class__.__name__ = "ServiceUnavailable"
+        mock_graph_database.driver.side_effect = service_unavailable_error
         
         result = memgraph_store.connect()
         
@@ -125,30 +127,56 @@ class TestMemGraphStore:
         assert memgraph_store._connected is False
     
     def test_execute_query_success(self, memgraph_store, mock_driver):
-        """Test successful query execution."""
+        """Test successful query execution with type-based counting."""
         mock_driver_instance, mock_session = mock_driver
         memgraph_store.driver = mock_driver_instance
         memgraph_store._connected = True
         
-        # Mock query result
-        mock_record1 = {"node": {"id": 1, "name": "test"}}
-        mock_record2 = {"relationship": {"type": "IMPORTS"}}
+        # Create mock Neo4j objects for testing type-based counting
+        mock_node = Mock()
+        mock_node.__class__.__name__ = 'Node'
+        mock_node.id = 1
+        mock_node.labels = ["Person"]
+        mock_node.items.return_value = [("name", "John"), ("age", 30)]
+        
+        mock_relationship = Mock()
+        mock_relationship.__class__.__name__ = 'Relationship'
+        mock_relationship.id = 1
+        mock_relationship.type = "KNOWS"
+        mock_relationship.start_node.id = 1
+        mock_relationship.end_node.id = 2
+        mock_relationship.items.return_value = [("since", "2020")]
+        
+        # Mock record that contains actual Neo4j objects
+        mock_record = Mock()
+        mock_record.values.return_value = [mock_node, mock_relationship]
+        mock_record.items.return_value = [("person", mock_node), ("relationship", mock_relationship)]
+        
         mock_result = Mock()
-        mock_result.__iter__ = lambda self: iter([mock_record1, mock_record2])
+        mock_result.__iter__ = lambda self: iter([mock_record])
         mock_session.run.return_value = mock_result
         
-        result = memgraph_store.execute_query("MATCH (n) RETURN n")
-        
-        assert isinstance(result, GraphQueryResult)
-        assert result.query == "MATCH (n) RETURN n"
-        assert len(result.data) == 2
-        assert result.data[0] == mock_record1
-        assert result.data[1] == mock_record2
-        assert result.execution_time_ms > 0
-        assert result.metadata["node_count"] == 1  # One record has a "node" key
-        assert result.metadata["relationship_count"] == 1  # One record has a "relationship" key
-        assert result.node_count == 1  # New field
-        assert result.relationship_count == 1  # New field
+        # Mock the isinstance checks for our mock objects
+        with patch('src.graphstores.memgraph_store.isinstance') as mock_isinstance:
+            def isinstance_side_effect(obj, cls):
+                if hasattr(obj, '__class__') and obj.__class__.__name__ == 'Node':
+                    return cls.__name__ == 'Node'
+                elif hasattr(obj, '__class__') and obj.__class__.__name__ == 'Relationship':
+                    return cls.__name__ == 'Relationship'
+                return False
+            
+            mock_isinstance.side_effect = isinstance_side_effect
+            
+            result = memgraph_store.execute_query("MATCH (n)-[r]->(m) RETURN n, r")
+            
+            assert isinstance(result, GraphQueryResult)
+            assert result.query == "MATCH (n)-[r]->(m) RETURN n, r"
+            assert len(result.data) == 1
+            assert result.execution_time_ms > 0
+            assert result.metadata["node_count"] == 1  # Should find 1 node
+            assert result.metadata["relationship_count"] == 1  # Should find 1 relationship
+            assert result.node_count == 1
+            assert result.relationship_count == 1
     
     def test_execute_query_not_connected(self, memgraph_store):
         """Test query execution when not connected."""
@@ -168,6 +196,76 @@ class TestMemGraphStore:
         
         with pytest.raises(Exception, match="Query execution failed: Query failed"):
             memgraph_store.execute_query("MATCH (n) RETURN n")
+    
+    def test_execute_query_type_based_counting(self, memgraph_store, mock_driver):
+        """Test that node and relationship counting is based on object types, not key names."""
+        mock_driver_instance, mock_session = mock_driver
+        memgraph_store.driver = mock_driver_instance
+        memgraph_store._connected = True
+        
+        # Create mock objects that represent different scenarios
+        mock_node1 = Mock()
+        mock_node1.__class__.__name__ = 'Node'
+        
+        mock_node2 = Mock()
+        mock_node2.__class__.__name__ = 'Node'
+        
+        mock_relationship = Mock()
+        mock_relationship.__class__.__name__ = 'Relationship'
+        
+        mock_path = Mock()
+        mock_path.__class__.__name__ = 'Path'
+        mock_path.nodes = [mock_node1, mock_node2]  # Path contains 2 nodes
+        mock_path.relationships = [mock_relationship]  # Path contains 1 relationship
+        
+        # Mock records with different alias names (not 'n', 'node', 'r', 'rel')
+        mock_record1 = Mock()
+        mock_record1.values.return_value = [mock_node1]  # Record with alias like 'person'
+        mock_record1.items.return_value = [("person", mock_node1)]
+        
+        mock_record2 = Mock()
+        mock_record2.values.return_value = [mock_relationship]  # Record with alias like 'friendship'
+        mock_record2.items.return_value = [("friendship", mock_relationship)]
+        
+        mock_record3 = Mock()
+        mock_record3.values.return_value = [mock_path]  # Record with a path
+        mock_record3.items.return_value = [("path", mock_path)]
+        
+        mock_record4 = Mock()
+        mock_record4.values.return_value = ["some_string", 42]  # Record with non-graph objects
+        mock_record4.items.return_value = [("data", "some_string"), ("count", 42)]
+        
+        mock_result = Mock()
+        mock_result.__iter__ = lambda self: iter([mock_record1, mock_record2, mock_record3, mock_record4])
+        mock_session.run.return_value = mock_result
+        
+        # Mock both isinstance and _serialize_record to isolate the counting logic
+        with patch('src.graphstores.memgraph_store.isinstance') as mock_isinstance, \
+             patch('src.graphstores.memgraph_store._serialize_record') as mock_serialize:
+            
+            def isinstance_side_effect(obj, cls):
+                if hasattr(obj, '__class__'):
+                    if obj.__class__.__name__ == 'Node' and cls.__name__ == 'Node':
+                        return True
+                    elif obj.__class__.__name__ == 'Relationship' and cls.__name__ == 'Relationship':
+                        return True
+                    elif obj.__class__.__name__ == 'Path' and cls.__name__ == 'Path':
+                        return True
+                return False
+            
+            mock_isinstance.side_effect = isinstance_side_effect
+            mock_serialize.side_effect = lambda record: {"serialized": "data"}
+            
+            result = memgraph_store.execute_query("MATCH path = (person)-[friendship]->(friend) RETURN person, friendship, path")
+            
+            # Verify that counting is based on object types, not key names
+            # Expected: 1 direct node + 2 nodes from path = 3 nodes total
+            # Expected: 1 direct relationship + 1 relationship from path = 2 relationships total
+            assert result.metadata["node_count"] == 3
+            assert result.metadata["relationship_count"] == 2
+            assert result.node_count == 3
+            assert result.relationship_count == 2
+            assert len(result.data) == 4  # 4 records total
     
     def test_create_node_success(self, memgraph_store, mock_driver):
         """Test successful node creation."""
