@@ -156,6 +156,7 @@ async def index_all_repositories(
         
         for repo_config in repositories:
             workflow_id = str(uuid.uuid4())
+            repo_name = repo_config["name"]  # Use repository name instead of URL
             
             # Create indexing request from config
             repo_request = IndexRepositoryRequest(
@@ -165,11 +166,11 @@ async def index_all_repositories(
                 max_files=repo_config.get("max_files")
             )
             
-            # Start background indexing workflow
+            # Start background indexing workflow with repository name
             background_tasks.add_task(
                 _run_indexing_workflow,
                 workflow_id,
-                repo_request,
+                repo_name,  # Pass repository name instead of request object
                 indexing_workflow
             )
             
@@ -178,17 +179,17 @@ async def index_all_repositories(
                 "id": workflow_id,
                 "type": "indexing",
                 "status": WorkflowStatus.PENDING,
-                "repository": repo_request.repository_url,
+                "repository": repo_config["url"],  # Keep URL for display
                 "started_at": datetime.now(),
                 "batch_id": batch_id
             }
             
             workflows.append(IndexingResponse(
                 workflow_id=workflow_id,
-                repository=repo_request.repository_url,
+                repository=repo_config["url"],  # Keep URL for display
                 status=WorkflowStatus.PENDING,
                 estimated_duration="10-30 minutes",
-                message=f"Indexing workflow queued for {repo_request.repository_url}"
+                message=f"Indexing workflow queued for {repo_config['url']}"
             ))
         
         logger.info(f"Started batch indexing for {len(workflows)} repositories")
@@ -235,11 +236,28 @@ async def index_repository(
         
         logger.info(f"Starting indexing workflow for repository: {request.repository_url}")
         
+        # Extract repository name from URL (e.g., "anhhai680/car-web-client" from URL)
+        if request.repository_url.startswith("https://github.com/"):
+            repo_path = request.repository_url.replace("https://github.com/", "").rstrip("/")
+            if repo_path.endswith(".git"):
+                repo_path = repo_path[:-4]
+            # Use just the repository name part (after the last "/")
+            repo_name = repo_path.split("/")[-1] if "/" in repo_path else repo_path
+        elif request.repository_url.startswith("git@github.com:"):
+            repo_path = request.repository_url.replace("git@github.com:", "").rstrip("/")
+            if repo_path.endswith(".git"):
+                repo_path = repo_path[:-4]
+            # Use just the repository name part (after the last "/")
+            repo_name = repo_path.split("/")[-1] if "/" in repo_path else repo_path
+        else:
+            # Fallback: use the URL as-is (this will likely fail but allows debugging)
+            repo_name = request.repository_url
+        
         # Start background indexing workflow
         background_tasks.add_task(
             _run_indexing_workflow,
             workflow_id,
-            request,
+            repo_name,
             indexing_workflow
         )
         
@@ -696,7 +714,7 @@ async def list_workflows(
 
 async def _run_indexing_workflow(
     workflow_id: str,
-    request: IndexRepositoryRequest,
+    repo_name: str,
     indexing_workflow: IndexingWorkflow
 ):
     """
@@ -704,11 +722,11 @@ async def _run_indexing_workflow(
     
     Args:
         workflow_id: Unique workflow identifier
-        request: Indexing request parameters
+        repo_name: Repository name (e.g., "car-web-client")
         indexing_workflow: Indexing workflow instance
     """
     try:
-        logger.info(f"Starting indexing workflow {workflow_id} for {request.repository_url}")
+        logger.info(f"Starting indexing workflow {workflow_id} for repository: {repo_name}")
         
         # Update workflow status
         active_workflows[workflow_id]["status"] = WorkflowStatus.RUNNING
@@ -724,8 +742,8 @@ async def _run_indexing_workflow(
             "current_step": "initializing",
             "errors": [],
             "metadata": {},
-            "repositories": [request.repository_url],
-            "current_repo": request.repository_url,
+            "repositories": [repo_name],  # Use repository name
+            "current_repo": repo_name,    # Use repository name
             "processed_files": 0,
             "total_files": 0,
             "embeddings_generated": 0,
