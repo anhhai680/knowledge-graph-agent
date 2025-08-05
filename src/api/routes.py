@@ -34,7 +34,7 @@ from src.api.models import (
 )
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
-from src.utils.feature_flags import is_graph_enabled, require_graph_features
+from src.utils.feature_flags import is_graph_enabled
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
 
@@ -156,15 +156,7 @@ async def index_all_repositories(
         
         for repo_config in repositories:
             workflow_id = str(uuid.uuid4())
-            repo_name = repo_config["name"]  # Use repository name instead of URL
-            
-            # Create indexing request from config
-            repo_request = IndexRepositoryRequest(
-                repository_url=repo_config["url"],
-                branch=repo_config.get("branch", "main"),
-                file_extensions=repo_config.get("file_extensions"),
-                max_files=repo_config.get("max_files")
-            )
+            repo_name = repo_config.get("name", repo_config["url"])  # Use repository name if available, else URL
             
             # Start background indexing workflow with repository name
             background_tasks.add_task(
@@ -840,67 +832,6 @@ async def fix_chroma_dimension(
         raise HTTPException(
             status_code=500,
             detail=f"Error fixing Chroma dimension: {str(e)}"
-        )
-
-
-@router.get("/diagnose/chroma-dimension")
-async def diagnose_chroma_dimension(
-    vector_store=Depends(get_vector_store)
-):
-    """
-    Diagnose Chroma vector store dimension compatibility.
-    
-    This endpoint checks for dimension mismatches and provides detailed
-    information about the current state without making any changes.
-    """
-    try:
-        logger.info("Diagnosing Chroma dimension compatibility")
-        
-        # Check dimension compatibility
-        is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
-        
-        # Get current embedding model info
-        test_embedding = vector_store.embeddings.embed_query("test")
-        current_dimension = len(test_embedding)
-        
-        # Get collection info
-        try:
-            collection_info = vector_store.client.get_collection(vector_store.collection_name)
-            collection_exists = True
-            collection_metadata = collection_info.metadata if hasattr(collection_info, "metadata") else None
-            expected_dimension = None
-            if collection_metadata:
-                expected_dimension = collection_metadata.get("dimension")
-        except Exception as e:
-            collection_exists = False
-            collection_metadata = None
-            expected_dimension = None
-        
-        diagnosis = {
-            "compatible": is_compatible,
-            "message": compatibility_msg,
-            "current_embedding_model": getattr(vector_store.embeddings, 'model', 'unknown'),
-            "current_dimension": current_dimension,
-            "collection_exists": collection_exists,
-            "expected_dimension": expected_dimension,
-            "collection_metadata": collection_metadata,
-            "collection_name": vector_store.collection_name
-        }
-        
-        if not is_compatible:
-            diagnosis["recommended_action"] = "Use POST /fix/chroma-dimension to automatically fix this issue"
-            diagnosis["warning"] = "Fixing will recreate the collection and clear all existing data"
-        
-        return {
-            "status": "success",
-            "diagnosis": diagnosis
-        }
-        
-    except Exception as e:
-        logger.error(f"Error diagnosing Chroma dimension: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error diagnosing Chroma dimension: {str(e)}"
         )
 
 
