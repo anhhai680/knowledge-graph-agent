@@ -14,6 +14,7 @@ from neo4j.graph import Node, Relationship, Path
 from .base_graph_store import BaseGraphStore, GraphNode
 from ..api.models import GraphQueryResult
 from ..config.settings import settings
+from loguru import logger
 
 
 def _serialize_neo4j_object(obj):
@@ -125,12 +126,12 @@ class MemGraphStore(BaseGraphStore):
                     result.single()  # Consume the result
                 
                 self._connected = True
-                print(f"Successfully connected to MemGraph at {self.uri}")
+                logger.info(f"Successfully connected to MemGraph at {self.uri}")
                 return True
                 
             except (ServiceUnavailable, AuthError) as e:
                 last_error = e
-                print(f"MemGraph connection attempt {attempt + 1}/{max_retries} failed: {e}")
+                logger.error(f"MemGraph connection attempt {attempt + 1}/{max_retries} failed: {e}")
                 
                 # Clean up failed driver
                 if self.driver:
@@ -146,8 +147,8 @@ class MemGraphStore(BaseGraphStore):
                     
             except Exception as e:
                 last_error = e
-                print(f"Unexpected error connecting to MemGraph: {e}")
-                
+                logger.error(f"Unexpected error connecting to MemGraph: {e}")
+
                 # Clean up failed driver
                 if self.driver:
                     try:
@@ -158,7 +159,7 @@ class MemGraphStore(BaseGraphStore):
                 break  # Don't retry on unexpected errors
         
         self._connected = False
-        print(f"Failed to connect to MemGraph after {max_retries} attempts. Last error: {last_error}")
+        logger.error(f"Failed to connect to MemGraph after {max_retries} attempts. Last error: {last_error}")
         return False
     
     def disconnect(self) -> None:
