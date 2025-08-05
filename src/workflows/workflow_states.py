@@ -161,6 +161,9 @@ class IndexingState(BaseWorkflowState):
     documents_per_second: Optional[float]
     embeddings_per_second: Optional[float]
     total_processing_time: Optional[float]
+    
+    # Graph storage statistics
+    graph_storage_stats: Optional[Dict[str, Any]]
 
 
 # Document retrieval state
@@ -325,6 +328,7 @@ def create_indexing_state(
         documents_per_second=None,
         embeddings_per_second=None,
         total_processing_time=None,
+        graph_storage_stats=None,
     )
 
 

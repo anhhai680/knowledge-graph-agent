@@ -18,6 +18,8 @@ from src.loaders.enhanced_github_loader import EnhancedGitHubLoader
 from src.processors.document_processor import DocumentProcessor
 from src.llm.embedding_factory import EmbeddingFactory
 from src.vectorstores.store_factory import VectorStoreFactory
+from src.graphstores.memgraph_store import MemGraphStore
+from src.utils.feature_flags import is_graph_enabled
 from src.workflows.base_workflow import BaseWorkflow
 from src.workflows.workflow_states import (
     IndexingState,
@@ -43,6 +45,7 @@ class IndexingWorkflowSteps(str):
     EXTRACT_METADATA = "extract_metadata"
     GENERATE_EMBEDDINGS = "generate_embeddings"
     STORE_IN_VECTOR_DB = "store_in_vector_db"
+    STORE_IN_GRAPH_DB = "store_in_graph_db"
     UPDATE_WORKFLOW_STATE = "update_workflow_state"
     CHECK_COMPLETE = "check_complete"
     FINALIZE_INDEX = "finalize_index"
@@ -131,6 +134,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             IndexingWorkflowSteps.PROCESS_DOCUMENTS,
             IndexingWorkflowSteps.EXTRACT_METADATA,
             IndexingWorkflowSteps.STORE_IN_VECTOR_DB,  # Vector store now handles embedding generation
+            IndexingWorkflowSteps.STORE_IN_GRAPH_DB,   # Graph database storage (conditional)
             IndexingWorkflowSteps.UPDATE_WORKFLOW_STATE,
             IndexingWorkflowSteps.CHECK_COMPLETE,
             IndexingWorkflowSteps.FINALIZE_INDEX,
@@ -204,6 +208,8 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 state = self._extract_metadata(state)
             elif step == IndexingWorkflowSteps.STORE_IN_VECTOR_DB:
                 state = self._store_in_vector_db(state)
+            elif step == IndexingWorkflowSteps.STORE_IN_GRAPH_DB:
+                state = self._store_in_graph_db(state)
             elif step == IndexingWorkflowSteps.UPDATE_WORKFLOW_STATE:
                 state = self._update_workflow_state(state)
             elif step == IndexingWorkflowSteps.CHECK_COMPLETE:
@@ -796,6 +802,95 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
 
         return cast(IndexingState, update_workflow_progress(
             state, 95.0, IndexingWorkflowSteps.STORE_IN_VECTOR_DB
+        ))
+
+    def _store_in_graph_db(self, state: IndexingState) -> IndexingState:
+        """
+        Store documents in graph database if graph features are enabled.
+        
+        Args:
+            state: Current workflow state with processed documents
+            
+        Returns:
+            Updated state with graph storage information
+        """
+        self.logger.info("Checking graph database storage")
+        
+        # Skip if graph features are not enabled
+        if not is_graph_enabled():
+            self.logger.info("Graph features disabled, skipping graph storage")
+            return cast(IndexingState, update_workflow_progress(
+                state, 97.0, IndexingWorkflowSteps.STORE_IN_GRAPH_DB
+            ))
+        
+        try:
+            # Get processed chunks from state metadata
+            processed_chunks = state["metadata"].get("processed_documents", [])
+            if not processed_chunks:
+                self.logger.warning("No processed documents available for graph storage")
+                return cast(IndexingState, update_workflow_progress(
+                    state, 97.0, IndexingWorkflowSteps.STORE_IN_GRAPH_DB
+                ))
+            
+            # Initialize graph store
+            graph_store = MemGraphStore()
+            connected = graph_store.connect()
+            
+            if not connected:
+                self.logger.warning("Failed to connect to graph database, skipping graph storage")
+                return cast(IndexingState, update_workflow_progress(
+                    state, 97.0, IndexingWorkflowSteps.STORE_IN_GRAPH_DB
+                ))
+            
+            # Store documents as graph nodes
+            stored_nodes = 0
+            for chunk in processed_chunks:
+                try:
+                    # Extract metadata from chunk
+                    metadata = chunk.metadata
+                    
+                    # Create file node
+                    file_properties = {
+                        "file_path": metadata.get("file_path", "unknown"),
+                        "repository": metadata.get("repository", "unknown"), 
+                        "language": metadata.get("language", "unknown"),
+                        "file_extension": metadata.get("file_extension", ""),
+                        "chunk_index": metadata.get("chunk_index", 0),
+                        "content_preview": chunk.page_content[:200] + "..." if len(chunk.page_content) > 200 else chunk.page_content
+                    }
+                    
+                    # Create node in graph
+                    node_id = graph_store.create_node(
+                        labels=["File", "Document"],
+                        properties=file_properties
+                    )
+                    stored_nodes += 1
+                    
+                except Exception as chunk_error:
+                    self.logger.error(f"Failed to store chunk in graph: {chunk_error}")
+                    continue
+            
+            graph_store.disconnect()
+            
+            # Update state with graph storage statistics
+            state["graph_storage_stats"] = {
+                "total_chunks": len(processed_chunks),
+                "stored_nodes": stored_nodes,
+                "failed_storage": len(processed_chunks) - stored_nodes
+            }
+            
+            self.logger.info(f"Stored {stored_nodes}/{len(processed_chunks)} documents in graph database")
+            
+        except Exception as e:
+            self.logger.error(f"Error during graph storage: {e}")
+            # Don't fail the workflow, just log the error
+            state["graph_storage_stats"] = {
+                "error": str(e),
+                "stored_nodes": 0
+            }
+        
+        return cast(IndexingState, update_workflow_progress(
+            state, 97.0, IndexingWorkflowSteps.STORE_IN_GRAPH_DB
         ))
 
     def _update_workflow_state(self, state: IndexingState) -> IndexingState:

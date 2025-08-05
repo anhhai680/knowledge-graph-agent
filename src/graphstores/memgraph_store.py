@@ -7,12 +7,63 @@ interface, handling connection management and query execution.
 
 import time
 from typing import Any, Dict, List, Optional
-from neo4j import GraphDatabase, Driver, Session
-from neo4j.exceptions import ServiceUnavailable, AuthError, ClientError
+from neo4j import GraphDatabase, Driver
+from neo4j.exceptions import ServiceUnavailable, AuthError
+from neo4j.graph import Node, Relationship, Path
 
-from .base_graph_store import BaseGraphStore, GraphNode, GraphRelationship
+from .base_graph_store import BaseGraphStore, GraphNode
 from ..api.models import GraphQueryResult
 from ..config.settings import settings
+
+
+def _serialize_neo4j_object(obj):
+    """
+    Convert Neo4j objects to serializable dictionaries.
+    
+    Args:
+        obj: Neo4j object (Node, Relationship, Path) or any other object
+        
+    Returns:
+        Serializable representation of the object
+    """
+    if isinstance(obj, Node):
+        return {
+            "id": obj.element_id if hasattr(obj, 'element_id') else obj.id,
+            "labels": list(obj.labels),
+            "properties": dict(obj.items())
+        }
+    elif isinstance(obj, Relationship):
+        return {
+            "id": obj.element_id if hasattr(obj, 'element_id') else obj.id,
+            "type": obj.type,
+            "start_node": obj.start_node.element_id if hasattr(obj.start_node, 'element_id') else obj.start_node.id,
+            "end_node": obj.end_node.element_id if hasattr(obj.end_node, 'element_id') else obj.end_node.id,
+            "properties": dict(obj.items())
+        }
+    elif isinstance(obj, Path):
+        return {
+            "nodes": [_serialize_neo4j_object(node) for node in obj.nodes],
+            "relationships": [_serialize_neo4j_object(rel) for rel in obj.relationships],
+            "length": len(obj)
+        }
+    else:
+        return obj
+
+
+def _serialize_record(record):
+    """
+    Convert a Neo4j record to a serializable dictionary.
+    
+    Args:
+        record: Neo4j record
+        
+    Returns:
+        Dictionary with serialized values
+    """
+    result = {}
+    for key, value in record.items():
+        result[key] = _serialize_neo4j_object(value)
+    return result
 
 
 class MemGraphStore(BaseGraphStore):
@@ -158,7 +209,7 @@ class MemGraphStore(BaseGraphStore):
         try:
             with self.driver.session() as session:
                 result = session.run(query, parameters or {})
-                data = [dict(record) for record in result]
+                data = [_serialize_record(record) for record in result]
                 
                 execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
                 

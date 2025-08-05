@@ -133,13 +133,11 @@ def test_common_uris():
         }
     ]
     
-    print("
-Testing common MemGraph connection patterns:")
+    print("\nTesting common MemGraph connection patterns:")
     print("=" * 60)
     
     for test_case in test_cases:
-        print(f"
-{test_case['name']}: {test_case['description']}")
+        print(f"\n{test_case['name']}: {test_case['description']}")
         success = test_memgraph_connection(test_case["uri"], max_retries=1)
         if success:
             print(f"✓ {test_case['name']} connection works!")
