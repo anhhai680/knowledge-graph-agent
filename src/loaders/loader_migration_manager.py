@@ -7,6 +7,7 @@ loading to Git-based loading, including performance benchmarking and validation.
 
 import time
 from typing import Any, Dict, List, Optional, Type
+from langchain.schema import Document
 
 from loguru import logger
 
@@ -351,8 +352,8 @@ class LoaderMigrationManager:
 
     def _compare_document_sets(
         self, 
-        api_docs: List[EnhancedGitHubLoader.Document], 
-        git_docs: List[EnhancedGitHubLoader.Document]
+        api_docs: List[Document], 
+        git_docs: List[Document]
     ) -> Dict[str, Any]:
         """
         Compare two sets of documents for equivalence.
@@ -532,7 +533,7 @@ class MultiGitRepositoryLoader:
         
         logger.info(f"Initialized multi-repository Git loader with {len(self.repositories)} repositories")
 
-    def load(self) -> List[EnhancedGitHubLoader.Document]:
+    def load(self) -> List[Document]:
         """
         Load documents from multiple GitHub repositories.
         
