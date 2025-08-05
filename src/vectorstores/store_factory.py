@@ -15,6 +15,8 @@ from src.llm.embedding_factory import EmbeddingFactory
 from src.vectorstores.base_store import BaseStore
 from src.vectorstores.chroma_store import ChromaStore
 from src.vectorstores.pinecone_store import PineconeStore
+from src.graphstores.memgraph_store import MemGraphStore
+from src.utils.feature_flags import is_graph_enabled
 
 
 class VectorStoreFactory:
@@ -30,6 +32,7 @@ class VectorStoreFactory:
         database_type: Optional[DatabaseType] = None,
         collection_name: Optional[str] = None,
         embeddings: Optional[Embeddings] = None,
+        store_type: Optional[str] = None,
         **kwargs,
     ) -> BaseStore:
         """
@@ -47,6 +50,14 @@ class VectorStoreFactory:
         Raises:
             ValueError: If the database type is not supported
         """
+        # Check if graph store is requested
+        if store_type == "graph":
+            if not is_graph_enabled():
+                error_message = "Graph features are not enabled"
+                logger.error(error_message)
+                raise ValueError(error_message)
+            return VectorStoreFactory._create_graph_store(**kwargs)
+        
         # Get database type from settings if not provided
         db_type = database_type or settings.database_type
 
@@ -144,6 +155,34 @@ class VectorStoreFactory:
         return PineconeStore.from_existing(
             collection_name=coll_name, embeddings=embeddings, api_key=api_key, **kwargs
         )
+
+    @staticmethod
+    def _create_graph_store(**kwargs) -> MemGraphStore:
+        """
+        Create a MemGraph graph store.
+
+        Args:
+            **kwargs: Additional arguments for the graph store
+
+        Returns:
+            MemGraphStore instance
+        """
+        logger.debug("Creating MemGraph graph store")
+        
+        # Create graph store with settings
+        graph_store = MemGraphStore(
+            uri=settings.graph_store.url,
+            username=settings.graph_store.username,
+            password=settings.graph_store.password
+        )
+        
+        # Connect to the graph database
+        if not graph_store.connect():
+            error_message = "Failed to connect to MemGraph"
+            logger.error(error_message)
+            raise ValueError(error_message)
+        
+        return graph_store
 
     @staticmethod
     def from_documents(

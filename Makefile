@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration coverage lint format type-check security clean install install-dev setup pre-commit
+.PHONY: help test test-unit test-integration coverage lint format type-check security clean install install-dev setup pre-commit test-memgraph docker-up docker-down docker-logs
 
 # Default target
 help:
@@ -9,12 +9,16 @@ help:
 	@echo "  test            - Run all tests"
 	@echo "  test-unit       - Run unit tests only"
 	@echo "  test-integration - Run integration tests only"
+	@echo "  test-memgraph   - Test MemGraph connectivity"
 	@echo "  coverage        - Run tests with coverage report"
 	@echo "  lint            - Run all linting checks"
 	@echo "  format          - Format code with black and isort"
 	@echo "  type-check      - Run mypy type checking"
 	@echo "  security        - Run security checks"
 	@echo "  pre-commit      - Install and run pre-commit hooks"
+	@echo "  docker-up       - Start all services with Docker Compose"
+	@echo "  docker-down     - Stop all services"
+	@echo "  docker-logs     - Show logs from all services"
 	@echo "  clean           - Clean up generated files"
 
 # Setup
@@ -37,6 +41,23 @@ test-unit:
 test-integration:
 	@echo "🔗 Running integration tests..."
 	pytest tests/integration/ -v --tb=short
+
+test-memgraph:
+	@echo "🗃️ Testing MemGraph connectivity..."
+	python debug/test_memgraph_connection_clean.py
+
+# Docker Commands
+docker-up:
+	@echo "🐳 Starting all services..."
+	docker-compose up -d
+
+docker-down:
+	@echo "🛑 Stopping all services..."
+	docker-compose down
+
+docker-logs:
+	@echo "📋 Showing service logs..."
+	docker-compose logs -f
 
 coverage:
 	@echo "📊 Running tests with coverage..."

@@ -122,9 +122,13 @@ class GenericChunkingStrategy(ChunkingStrategy):
             "html": Language.HTML,
             "csharp": Language.CSHARP,
             "markdown": Language.MARKDOWN,
-            "json": Language.JSON,
-            "yaml": Language.YAML,
-            "shell": Language.BASH,
+            # Note: Language.JSON doesn't exist in current LangChain version
+            # "json": Language.JSON,  # Removed - use default splitter for JSON
+            # Note: Language.YAML doesn't exist in current LangChain version  
+            # "yaml": Language.YAML,  # Removed - use default splitter for YAML
+            "shell": Language.PYTHON,  # Use Python for shell scripts (better than BASH which doesn't exist)
+            "bash": Language.PYTHON,
+            "xml": Language.HTML,  # Use HTML for XML files (similar structure)
         }
 
         language = self.language or document.metadata.get("language", "")

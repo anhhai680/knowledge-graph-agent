@@ -1,20 +1,17 @@
 """
-Loader Migration Manager for the Knowledge Graph Agent.
+Loader migration manager for transitioning from API-based to Git-based loading.
 
-This module manages the migration from API-based to Git-based GitHub loaders,
-providing benchmarking, validation, and configuration migration capabilities.
+This module provides functionality to manage the migration from GitHub API-based
+loading to Git-based loading, including performance benchmarking and validation.
 """
 
 import time
-from typing import Dict, Any, List, Optional, Type
-from pathlib import Path
-
-from langchain.document_loaders.base import BaseLoader
+from typing import Any, Dict, List, Optional, Type
 from langchain.schema import Document
+
 from loguru import logger
 
 from src.config.settings import settings
-from .github_loader import GitHubLoader, MultiRepositoryGitHubLoader
 from .enhanced_github_loader import EnhancedGitHubLoader
 
 
@@ -36,7 +33,7 @@ class LoaderMigrationManager:
         repo_owner: str, 
         repo_name: str, 
         **kwargs
-    ) -> BaseLoader:
+    ) -> EnhancedGitHubLoader:
         """
         Create appropriate loader based on configuration.
         
@@ -46,41 +43,25 @@ class LoaderMigrationManager:
             **kwargs: Additional loader arguments
             
         Returns:
-            Appropriate loader instance (Git-based or API-based)
+            EnhancedGitHubLoader instance
         """
         try:
-            use_git_loader = kwargs.get('use_git_loader', settings.use_git_loader)
-            
-            if use_git_loader:
-                logger.info(f"Creating Git-based loader for {repo_owner}/{repo_name}")
-                return EnhancedGitHubLoader(
-                    repo_owner=repo_owner,
-                    repo_name=repo_name,
-                    **kwargs
-                )
-            else:
-                logger.info(f"Creating API-based loader for {repo_owner}/{repo_name}")
-                return GitHubLoader(
-                    repo_owner=repo_owner,
-                    repo_name=repo_name,
-                    **kwargs
-                )
-                
-        except Exception as e:
-            logger.error(f"Error creating loader for {repo_owner}/{repo_name}: {e}")
-            # Fallback to API-based loader
-            logger.info("Falling back to API-based loader")
-            return GitHubLoader(
+            logger.info(f"Creating Git-based loader for {repo_owner}/{repo_name}")
+            return EnhancedGitHubLoader(
                 repo_owner=repo_owner,
                 repo_name=repo_name,
                 **kwargs
             )
+                
+        except Exception as e:
+            logger.error(f"Error creating loader for {repo_owner}/{repo_name}: {e}")
+            raise
 
     def create_multi_repo_loader(
         self, 
         repositories: Optional[List[Dict[str, str]]] = None,
         **kwargs
-    ) -> BaseLoader:
+    ) -> 'MultiGitRepositoryLoader':
         """
         Create appropriate multi-repository loader.
         
@@ -92,29 +73,15 @@ class LoaderMigrationManager:
             Multi-repository loader instance
         """
         try:
-            use_git_loader = kwargs.get('use_git_loader', settings.use_git_loader)
-            
-            if use_git_loader:
-                logger.info("Creating Git-based multi-repository loader")
-                return MultiGitRepositoryLoader(
-                    repositories=repositories,
-                    **kwargs
-                )
-            else:
-                logger.info("Creating API-based multi-repository loader")
-                return MultiRepositoryGitHubLoader(
-                    repositories=repositories,
-                    **kwargs
-                )
-                
-        except Exception as e:
-            logger.error(f"Error creating multi-repository loader: {e}")
-            # Fallback to API-based loader
-            logger.info("Falling back to API-based multi-repository loader")
-            return MultiRepositoryGitHubLoader(
+            logger.info("Creating Git-based multi-repository loader")
+            return MultiGitRepositoryLoader(
                 repositories=repositories,
                 **kwargs
             )
+                
+        except Exception as e:
+            logger.error(f"Error creating multi-repository loader: {e}")
+            raise
 
     def benchmark_loaders(self, repo_config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -153,7 +120,7 @@ class LoaderMigrationManager:
             # Benchmark API-based loader
             try:
                 api_results = self._benchmark_single_loader(
-                    GitHubLoader,
+                    EnhancedGitHubLoader,
                     repo_owner, 
                     repo_name, 
                     branch,
@@ -195,7 +162,7 @@ class LoaderMigrationManager:
 
     def _benchmark_single_loader(
         self,
-        loader_class: Type[BaseLoader],
+        loader_class: Type[EnhancedGitHubLoader],
         repo_owner: str,
         repo_name: str,
         branch: str,
@@ -220,19 +187,12 @@ class LoaderMigrationManager:
         
         try:
             # Create loader
-            if loader_class == EnhancedGitHubLoader:
-                loader = loader_class(
-                    repo_owner=repo_owner,
-                    repo_name=repo_name,
-                    branch=branch,
-                    cleanup_after_processing=True  # Clean up after benchmark
-                )
-            else:
-                loader = loader_class(
-                    repo_owner=repo_owner,
-                    repo_name=repo_name,
-                    branch=branch
-                )
+            loader = loader_class(
+                repo_owner=repo_owner,
+                repo_name=repo_name,
+                branch=branch,
+                cleanup_after_processing=True  # Clean up after benchmark
+            )
             
             # Load documents
             load_start = time.time()
@@ -364,7 +324,7 @@ class LoaderMigrationManager:
             logger.info(f"Validating Git loader output for {repo_owner}/{repo_name}")
             
             # Load with API loader
-            api_loader = GitHubLoader(
+            api_loader = EnhancedGitHubLoader(
                 repo_owner=repo_owner,
                 repo_name=repo_name,
                 branch=branch
@@ -540,7 +500,7 @@ class LoaderMigrationManager:
             return {"error": str(e)}
 
 
-class MultiGitRepositoryLoader(BaseLoader):
+class MultiGitRepositoryLoader:
     """
     Load documents from multiple GitHub repositories using Git operations.
     

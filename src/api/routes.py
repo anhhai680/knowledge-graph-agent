@@ -27,10 +27,14 @@ from src.api.models import (
     DocumentResult,
     DocumentMetadata,
     QueryIntent,
-    SearchStrategy
+    SearchStrategy,
+    GraphQueryRequest,
+    GraphQueryResponse,
+    GraphInfoResponse
 )
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
+from src.utils.feature_flags import is_graph_enabled
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
 
@@ -96,6 +100,13 @@ def get_vector_store():
     return get_vector_store()
 
 
+def get_graph_store():
+    """Dependency injection for graph store."""
+    # This will be implemented in main.py as a dependency
+    from src.api.main import get_graph_store
+    return get_graph_store()
+
+
 @router.get("/")
 async def root():
     """Welcome endpoint with API information."""
@@ -145,20 +156,13 @@ async def index_all_repositories(
         
         for repo_config in repositories:
             workflow_id = str(uuid.uuid4())
+            repo_name = repo_config.get("name", repo_config["url"])  # Use repository name if available, else URL
             
-            # Create indexing request from config
-            repo_request = IndexRepositoryRequest(
-                repository_url=repo_config["url"],
-                branch=repo_config.get("branch", "main"),
-                file_extensions=repo_config.get("file_extensions"),
-                max_files=repo_config.get("max_files")
-            )
-            
-            # Start background indexing workflow
+            # Start background indexing workflow with repository name
             background_tasks.add_task(
                 _run_indexing_workflow,
                 workflow_id,
-                repo_request,
+                repo_name,  # Pass repository name instead of request object
                 indexing_workflow
             )
             
@@ -167,17 +171,17 @@ async def index_all_repositories(
                 "id": workflow_id,
                 "type": "indexing",
                 "status": WorkflowStatus.PENDING,
-                "repository": repo_request.repository_url,
+                "repository": repo_config["url"],  # Keep URL for display
                 "started_at": datetime.now(),
                 "batch_id": batch_id
             }
             
             workflows.append(IndexingResponse(
                 workflow_id=workflow_id,
-                repository=repo_request.repository_url,
+                repository=repo_config["url"],  # Keep URL for display
                 status=WorkflowStatus.PENDING,
                 estimated_duration="10-30 minutes",
-                message=f"Indexing workflow queued for {repo_request.repository_url}"
+                message=f"Indexing workflow queued for {repo_config['url']}"
             ))
         
         logger.info(f"Started batch indexing for {len(workflows)} repositories")
@@ -224,11 +228,28 @@ async def index_repository(
         
         logger.info(f"Starting indexing workflow for repository: {request.repository_url}")
         
+        # Extract repository name from URL (e.g., "anhhai680/car-web-client" from URL)
+        if request.repository_url.startswith("https://github.com/"):
+            repo_path = request.repository_url.replace("https://github.com/", "").rstrip("/")
+            if repo_path.endswith(".git"):
+                repo_path = repo_path[:-4]
+            # Use just the repository name part (after the last "/")
+            repo_name = repo_path.split("/")[-1] if "/" in repo_path else repo_path
+        elif request.repository_url.startswith("git@github.com:"):
+            repo_path = request.repository_url.replace("git@github.com:", "").rstrip("/")
+            if repo_path.endswith(".git"):
+                repo_path = repo_path[:-4]
+            # Use just the repository name part (after the last "/")
+            repo_name = repo_path.split("/")[-1] if "/" in repo_path else repo_path
+        else:
+            # Fallback: use the URL as-is (this will likely fail but allows debugging)
+            repo_name = request.repository_url
+        
         # Start background indexing workflow
         background_tasks.add_task(
             _run_indexing_workflow,
             workflow_id,
-            request,
+            repo_name,
             indexing_workflow
         )
         
@@ -685,7 +706,7 @@ async def list_workflows(
 
 async def _run_indexing_workflow(
     workflow_id: str,
-    request: IndexRepositoryRequest,
+    repo_name: str,
     indexing_workflow: IndexingWorkflow
 ):
     """
@@ -693,11 +714,11 @@ async def _run_indexing_workflow(
     
     Args:
         workflow_id: Unique workflow identifier
-        request: Indexing request parameters
+        repo_name: Repository name (e.g., "car-web-client")
         indexing_workflow: Indexing workflow instance
     """
     try:
-        logger.info(f"Starting indexing workflow {workflow_id} for {request.repository_url}")
+        logger.info(f"Starting indexing workflow {workflow_id} for repository: {repo_name}")
         
         # Update workflow status
         active_workflows[workflow_id]["status"] = WorkflowStatus.RUNNING
@@ -713,8 +734,8 @@ async def _run_indexing_workflow(
             "current_step": "initializing",
             "errors": [],
             "metadata": {},
-            "repositories": [request.repository_url],
-            "current_repo": request.repository_url,
+            "repositories": [repo_name],  # Use repository name
+            "current_repo": repo_name,    # Use repository name
             "processed_files": 0,
             "total_files": 0,
             "embeddings_generated": 0,
@@ -814,62 +835,156 @@ async def fix_chroma_dimension(
         )
 
 
-@router.get("/diagnose/chroma-dimension")
-async def diagnose_chroma_dimension(
-    vector_store=Depends(get_vector_store)
+@router.post("/graph/query", response_model=GraphQueryResponse)
+async def execute_graph_query(
+    request: GraphQueryRequest,
+    graph_store=Depends(get_graph_store)
 ):
     """
-    Diagnose Chroma vector store dimension compatibility.
+    Execute a Cypher query against the knowledge graph.
     
-    This endpoint checks for dimension mismatches and provides detailed
-    information about the current state without making any changes.
+    This endpoint allows executing Cypher queries against the graph database
+    when graph features are enabled.
     """
+    if not is_graph_enabled():
+        raise HTTPException(
+            status_code=400, 
+            detail="Graph features are not enabled"
+        )
+    
+    start_time = datetime.now()
+    
     try:
-        logger.info("Diagnosing Chroma dimension compatibility")
+        # Execute the query
+        result = graph_store.execute_query(
+            query=request.query,
+            parameters=request.parameters
+        )
         
-        # Check dimension compatibility
-        is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+        processing_time = (datetime.now() - start_time).total_seconds()
         
-        # Get current embedding model info
-        test_embedding = vector_store.embeddings.embed_query("test")
-        current_dimension = len(test_embedding)
+        return GraphQueryResponse(
+            success=True,
+            result=result,
+            error=None,
+            processing_time=processing_time,
+            query=request.query
+        )
         
-        # Get collection info
-        try:
-            collection_info = vector_store.client.get_collection(vector_store.collection_name)
-            collection_exists = True
-            collection_metadata = collection_info.metadata if hasattr(collection_info, "metadata") else None
-            expected_dimension = None
-            if collection_metadata:
-                expected_dimension = collection_metadata.get("dimension")
-        except Exception as e:
-            collection_exists = False
-            collection_metadata = None
-            expected_dimension = None
+    except Exception as e:
+        processing_time = (datetime.now() - start_time).total_seconds()
+        logger.error(f"Graph query failed: {str(e)}")
         
-        diagnosis = {
-            "compatible": is_compatible,
-            "message": compatibility_msg,
-            "current_embedding_model": getattr(vector_store.embeddings, 'model', 'unknown'),
-            "current_dimension": current_dimension,
-            "collection_exists": collection_exists,
-            "expected_dimension": expected_dimension,
-            "collection_metadata": collection_metadata,
-            "collection_name": vector_store.collection_name
+        return GraphQueryResponse(
+            success=False,
+            result=None,
+            error=str(e),
+            processing_time=processing_time,
+            query=request.query
+        )
+
+
+@router.get("/graph/info", response_model=GraphInfoResponse)
+async def get_graph_info(
+    graph_store=Depends(get_graph_store)
+):
+    """
+    Get information about the graph database.
+    
+    This endpoint provides information about the graph database
+    when graph features are enabled.
+    """
+    if not is_graph_enabled():
+        raise HTTPException(
+            status_code=400, 
+            detail="Graph features are not enabled"
+        )
+    
+    try:
+        info = graph_store.get_graph_info()
+        
+        return GraphInfoResponse(
+            connected=info.get("connected", False),
+            node_count=info.get("node_count", 0),
+            relationship_count=info.get("relationship_count", 0),
+            database_type=info.get("database_type", "Unknown"),
+            schema_info=None,  # TODO: Add schema info
+            performance_metrics=None  # TODO: Add performance metrics
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get graph info: {str(e)}")
+        
+        # Check if it's a connection error
+        if "Failed to connect to MemGraph" in str(e) or "Connection refused" in str(e):
+            raise HTTPException(
+                status_code=503,
+                detail="MemGraph database is not available. Please ensure MemGraph is running and accessible at the configured URL."
+            )
+        
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get graph info: {str(e)}"
+        )
+
+
+@router.get("/graph/health")
+async def get_graph_health():
+    """
+    Health check endpoint for graph database connectivity.
+    
+    This endpoint checks if graph features are enabled and if the
+    graph database is accessible, providing detailed diagnostic information.
+    """
+    if not is_graph_enabled():
+        return {
+            "status": "disabled",
+            "message": "Graph features are not enabled",
+            "enabled": False,
+            "connected": False,
+            "configuration": None
+        }
+    
+    try:
+        from ..vectorstores.store_factory import VectorStoreFactory
+        from ..config.settings import get_settings
+        
+        settings = get_settings()
+        graph_config = {
+            "type": settings.graph_store.type,
+            "url": settings.graph_store.url,
+            "has_auth": bool(settings.graph_store.username and settings.graph_store.password)
         }
         
-        if not is_compatible:
-            diagnosis["recommended_action"] = "Use POST /fix/chroma-dimension to automatically fix this issue"
-            diagnosis["warning"] = "Fixing will recreate the collection and clear all existing data"
+        # Try to create and connect to graph store
+        vector_store_factory = VectorStoreFactory()
+        graph_store = vector_store_factory.create(store_type="graph")
         
         return {
-            "status": "success",
-            "diagnosis": diagnosis
+            "status": "healthy",
+            "message": "Graph database is accessible",
+            "enabled": True,
+            "connected": True,
+            "configuration": graph_config,
+            "database_info": graph_store.get_graph_info() if hasattr(graph_store, 'get_graph_info') else None
         }
         
     except Exception as e:
-        logger.error(f"Error diagnosing Chroma dimension: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error diagnosing Chroma dimension: {str(e)}"
-        )
+        error_msg = str(e)
+        
+        # Provide specific guidance based on error type
+        if "Failed to connect to MemGraph" in error_msg or "Connection refused" in error_msg:
+            status_msg = "MemGraph database is not accessible"
+            if "localhost" in settings.graph_store.url:
+                status_msg += " (Check if running in Docker with correct hostname)"
+        else:
+            status_msg = f"Graph database error: {error_msg}"
+        
+        return {
+            "status": "unhealthy",
+            "message": status_msg,
+            "enabled": True,
+            "connected": False,
+            "configuration": graph_config if 'graph_config' in locals() else None,
+            "error": error_msg
+        }

@@ -57,6 +57,13 @@ class DatabaseType(str, Enum):
     PINECONE = "pinecone"
 
 
+class GraphStoreType(str, Enum):
+    """Graph database type enum."""
+
+    MEMGRAPH = "memgraph"
+    NEO4J = "neo4j"
+
+
 class WorkflowStateBackend(str, Enum):
     """Workflow state backend enum."""
 
@@ -106,6 +113,18 @@ class PineconeSettings(BaseModel):
         if not v or v == "pinecone-api-key":
             raise ValueError("Pinecone API key is required when using Pinecone")
         return v
+
+
+class GraphStoreSettings(BaseModel):
+    """Graph database settings."""
+
+    store_type: GraphStoreType = Field(
+        GraphStoreType.MEMGRAPH, description="Graph database type"
+    )
+    url: str = Field("bolt://localhost:7687", description="Graph database URL")
+    username: str = Field("", description="Graph database username")
+    password: str = Field("", description="Graph database password")
+    database: str = Field("memgraph", description="Graph database name")
 
 
 class GitHubSettings(BaseModel):
@@ -225,6 +244,7 @@ class AppSettings(BaseModel):
     openai: OpenAISettings
     chroma: ChromaSettings
     pinecone: Optional[PineconeSettings] = None
+    graph_store: GraphStoreSettings = GraphStoreSettings()
     github: GitHubSettings
     git: GitSettings = GitSettings()
     embedding: EmbeddingSettings
@@ -236,6 +256,20 @@ class AppSettings(BaseModel):
     use_git_loader: bool = Field(
         True, 
         description="Use Git-based loader instead of API-based loader"
+    )
+    
+    # Graph feature flags
+    enable_graph_features: bool = Field(
+        False, 
+        description="Enable graph database features"
+    )
+    enable_hybrid_search: bool = Field(
+        False, 
+        description="Enable hybrid search (vector + graph)"
+    )
+    enable_graph_visualization: bool = Field(
+        False, 
+        description="Enable graph visualization features"
     )
 
     # Repository configurations from appSettings.json
@@ -296,6 +330,10 @@ def get_settings() -> AppSettings:
                 "LLM_API_BASE_URL", "https://api.openai.com/v1"
             ),
             "database_type": os.getenv("DATABASE_TYPE", DatabaseType.CHROMA.value),
+            # Graph feature flags
+            "enable_graph_features": os.getenv("ENABLE_GRAPH_FEATURES", "false").lower() == "true",
+            "enable_hybrid_search": os.getenv("ENABLE_HYBRID_SEARCH", "false").lower() == "true",
+            "enable_graph_visualization": os.getenv("ENABLE_GRAPH_VISUALIZATION", "false").lower() == "true",
             # OpenAI settings
             "openai": {
                 "api_key": os.getenv("OPENAI_API_KEY", ""),
@@ -361,6 +399,14 @@ def get_settings() -> AppSettings:
                 "state_backend": os.getenv(
                     "WORKFLOW_STATE_BACKEND", WorkflowStateBackend.MEMORY.value
                 ),
+            },
+            # Graph store settings
+            "graph_store": {
+                "store_type": os.getenv("GRAPH_STORE_TYPE", GraphStoreType.MEMGRAPH.value),
+                "url": os.getenv("GRAPH_STORE_URL", "bolt://localhost:7687"),
+                "username": os.getenv("GRAPH_STORE_USER", ""),
+                "password": os.getenv("GRAPH_STORE_PASSWORD", ""),
+                "database": os.getenv("GRAPH_STORE_DATABASE", "memgraph"),
             },
             # LangChain settings
             "langchain": {
