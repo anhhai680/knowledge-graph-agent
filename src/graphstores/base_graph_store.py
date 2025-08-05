@@ -6,11 +6,19 @@ must follow, ensuring consistent behavior across different graph databases.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
-from pydantic import BaseModel
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, Field
 
-if TYPE_CHECKING:
-    from ..api.models import GraphQueryResult
+
+class GraphQueryResult(BaseModel):
+    """Result model for graph query execution."""
+    
+    data: List[Dict[str, Any]] = Field(..., description="Query result data")
+    metadata: Dict[str, Any] = Field(..., description="Query metadata")
+    execution_time_ms: float = Field(..., description="Query execution time in milliseconds")
+    query: str = Field(..., description="Original query executed")
+    node_count: Optional[int] = Field(None, description="Number of nodes in result")
+    relationship_count: Optional[int] = Field(None, description="Number of relationships in result")
 
 
 class GraphNode(BaseModel):
@@ -65,7 +73,7 @@ class BaseGraphStore(ABC):
         pass
     
     @abstractmethod
-    def execute_query(self, query: str, parameters: Optional[Dict[str, Any]] = None) -> "GraphQueryResult":
+    def execute_query(self, query: str, parameters: Optional[Dict[str, Any]] = None) -> GraphQueryResult:
         """
         Execute a Cypher query against the graph database.
         

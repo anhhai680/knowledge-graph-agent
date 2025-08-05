@@ -7,9 +7,12 @@ request validation, response formatting, and workflow state representations.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
+
+# Import GraphQueryResult from core graph domain
+from ..graphstores.base_graph_store import GraphQueryResult
 
 
 class QueryIntent(str, Enum):
@@ -296,17 +299,6 @@ class GraphQueryRequest(BaseModel):
         if not v.strip().upper().startswith(('MATCH', 'CREATE', 'MERGE', 'RETURN', 'WITH')):
             raise ValueError('Query must be a valid Cypher query starting with MATCH, CREATE, MERGE, RETURN, or WITH')
         return v
-
-
-class GraphQueryResult(BaseModel):
-    """Result model for graph query execution."""
-    
-    data: List[Dict[str, Any]] = Field(..., description="Query result data")
-    metadata: Dict[str, Any] = Field(..., description="Query metadata")
-    execution_time_ms: float = Field(..., description="Query execution time in milliseconds")
-    query: str = Field(..., description="Original query executed")
-    node_count: Optional[int] = Field(None, description="Number of nodes in result")
-    relationship_count: Optional[int] = Field(None, description="Number of relationships in result")
 
 
 class GraphQueryResponse(BaseModel):

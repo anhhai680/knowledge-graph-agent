@@ -11,8 +11,7 @@ from neo4j import GraphDatabase, Driver
 from neo4j.exceptions import ServiceUnavailable, AuthError
 from neo4j.graph import Node, Relationship, Path
 
-from .base_graph_store import BaseGraphStore, GraphNode
-from ..api.models import GraphQueryResult
+from .base_graph_store import BaseGraphStore, GraphNode, GraphQueryResult
 from ..config.settings import settings
 from loguru import logger
 

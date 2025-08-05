@@ -11,7 +11,7 @@ from typing import Dict, Any
 
 from src.graphstores.memgraph_store import MemGraphStore
 from src.graphstores.base_graph_store import GraphNode
-from src.api.models import GraphQueryResult
+from src.graphstores.base_graph_store import GraphQueryResult
 from src.config.settings import settings
 
 

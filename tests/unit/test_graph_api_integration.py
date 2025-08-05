@@ -40,14 +40,16 @@ class TestGraphAPIIntegration:
         mock_is_enabled.return_value = True
         
         # Mock graph store
-        from src.api.models import GraphQueryResult
+        from src.graphstores.base_graph_store import GraphQueryResult
         
         mock_graph_store = Mock()
         mock_graph_store.execute_query.return_value = GraphQueryResult(
             data=[{"node": {"id": 1, "name": "test"}}],
             metadata={"node_count": 1, "relationship_count": 0},
             execution_time_ms=10.5,
-            query="MATCH (n) RETURN n LIMIT 5"
+            query="MATCH (n) RETURN n LIMIT 5",
+            node_count=1,
+            relationship_count=0
         )
         mock_get_graph_store.return_value = mock_graph_store
         
@@ -127,13 +129,16 @@ class TestGraphAPIIntegration:
     
     def test_graph_query_response_model(self):
         """Test graph query response model."""
-        from src.api.models import GraphQueryResponse, GraphQueryResult
+        from src.api.models import GraphQueryResponse
+        from src.graphstores.base_graph_store import GraphQueryResult
         
         result = GraphQueryResult(
             data=[{"node": {"id": 1}}],
             metadata={"node_count": 1},
             execution_time_ms=10.5,
-            query="MATCH (n) RETURN n"
+            query="MATCH (n) RETURN n",
+            node_count=1,
+            relationship_count=0
         )
         
         response = GraphQueryResponse(
