@@ -321,13 +321,9 @@ def get_settings() -> AppSettings:
         AppSettings object with configuration values
     """
     try:
-        # Check if we're in test environment
-        app_env = os.getenv("APP_ENV", AppEnvironment.DEVELOPMENT.value)
-        is_testing = app_env == AppEnvironment.TESTING.value
-        
         # Load basic settings from environment
         settings_dict = {
-            "app_env": app_env,
+            "app_env": os.getenv("APP_ENV", AppEnvironment.DEVELOPMENT.value),
             "log_level": os.getenv("LOG_LEVEL", LogLevel.INFO.value),
             "llm_provider": os.getenv("LLM_PROVIDER", LLMProvider.OPENAI.value),
             "llm_api_base_url": os.getenv(
@@ -340,7 +336,7 @@ def get_settings() -> AppSettings:
             "enable_graph_visualization": os.getenv("ENABLE_GRAPH_VISUALIZATION", "false").lower() == "true",
             # OpenAI settings
             "openai": {
-                "api_key": os.getenv("OPENAI_API_KEY", "test_openai_key" if is_testing else ""),
+                "api_key": os.getenv("OPENAI_API_KEY", ""),
                 "model": os.getenv("LLM_MODEL", "gpt-4o-mini"),
                 "temperature": float(os.getenv("TEMPERATURE", "0.7")),
                 "max_tokens": int(os.getenv("MAX_TOKENS", "4000")),
@@ -356,7 +352,7 @@ def get_settings() -> AppSettings:
             # Pinecone settings (optional)
             "pinecone": (
                 {
-                    "api_key": os.getenv("PINECONE_API_KEY", "test_pinecone_key" if is_testing else ""),
+                    "api_key": os.getenv("PINECONE_API_KEY", ""),
                     "collection_name": os.getenv(
                         "PINECONE_COLLECTION_NAME", "knowledge-base-graph"
                     ),
@@ -366,7 +362,7 @@ def get_settings() -> AppSettings:
             ),
             # GitHub settings
             "github": {
-                "token": os.getenv("GITHUB_TOKEN", "test_github_token" if is_testing else ""),
+                "token": os.getenv("GITHUB_TOKEN", ""),
                 "file_extensions": json.loads(
                     os.getenv("GITHUB_FILE_EXTENSIONS", "[]")
                 ),
@@ -381,7 +377,7 @@ def get_settings() -> AppSettings:
                 "max_tokens_per_batch": int(
                     os.getenv("MAX_TOKENS_PER_BATCH", "250000")
                 ),
-                "embedding_api_key": os.getenv("EMBEDDING_API_KEY", "test_embedding_key" if is_testing else None),
+                "embedding_api_key": os.getenv("EMBEDDING_API_KEY"),
             },
             # Document processing settings
             "document_processing": {
@@ -415,18 +411,14 @@ def get_settings() -> AppSettings:
             # LangChain settings
             "langchain": {
                 "tracing": os.getenv("LANGCHAIN_TRACING", "false").lower() == "true",
-                "api_key": os.getenv("LANGCHAIN_API_KEY", "test_langchain_key" if is_testing else None),
+                "api_key": os.getenv("LANGCHAIN_API_KEY"),
                 "project": os.getenv("LANGCHAIN_PROJECT", "knowledge-graph-agent"),
             },
         }
 
         # Load repository configurations from appSettings.json
-        try:
-            repositories = load_app_settings_from_json("appSettings.json")
-            settings_dict["repositories"] = [repo.model_dump() for repo in repositories]
-        except Exception:
-            # If appSettings.json doesn't exist or can't be loaded, use empty list for tests
-            settings_dict["repositories"] = []
+        repositories = load_app_settings_from_json("appSettings.json")
+        settings_dict["repositories"] = [repo.model_dump() for repo in repositories]
 
         # Create and validate settings object
         settings = AppSettings(**settings_dict)
