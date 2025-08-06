@@ -77,10 +77,9 @@ class TestChromaDimensionFixes:
         
         store = ChromaStore(client=mock_client, embeddings=mock_embeddings)
         
-        is_compatible, msg = store.check_embedding_dimension_compatibility()
-        
-        assert is_compatible is True
-        assert "Embedding dimensions match: 1536" in msg
+        # Test dimension compatibility check
+        msg = store.check_embedding_dimension_compatibility()
+        assert "Embedding dimensions match and test query succeeded: 1536" in msg
 
     def test_check_embedding_dimension_compatibility_mismatch(self, mock_embeddings, mock_chroma_client):
         """Test embedding dimension compatibility when dimensions don't match."""

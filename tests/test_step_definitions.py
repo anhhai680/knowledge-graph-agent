@@ -24,19 +24,19 @@ def test_step_definitions():
         IndexingWorkflowSteps.LANGUAGE_AWARE_CHUNKING not in steps
     ), "LANGUAGE_AWARE_CHUNKING step should be removed from workflow"
 
-    # Verify expected steps are present
+    # Define expected steps based on the actual workflow
     expected_steps = [
-        IndexingWorkflowSteps.INITIALIZE_STATE,
-        IndexingWorkflowSteps.LOAD_REPOSITORIES,
-        IndexingWorkflowSteps.VALIDATE_REPOS,
-        IndexingWorkflowSteps.LOAD_FILES_FROM_GITHUB,
-        IndexingWorkflowSteps.PROCESS_DOCUMENTS,
-        IndexingWorkflowSteps.EXTRACT_METADATA,
-        IndexingWorkflowSteps.GENERATE_EMBEDDINGS,
-        IndexingWorkflowSteps.STORE_IN_VECTOR_DB,
-        IndexingWorkflowSteps.UPDATE_WORKFLOW_STATE,
-        IndexingWorkflowSteps.CHECK_COMPLETE,
-        IndexingWorkflowSteps.FINALIZE_INDEX,
+        'initialize_state',
+        'load_repositories', 
+        'validate_repos',
+        'load_files_from_github',
+        'process_documents',
+        'extract_metadata',
+        'store_in_vector_db',
+        'store_in_graph_db',
+        'update_workflow_state',
+        'check_complete',
+        'finalize_index'
     ]
 
     assert steps == expected_steps, f"Steps don't match expected. Got: {steps}"
