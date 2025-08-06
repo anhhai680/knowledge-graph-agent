@@ -232,7 +232,7 @@ class TestQueryPatternsIntegration:
         config = get_default_query_patterns()
         
         # Convert to dict and back
-        config_dict = config.dict()
+        config_dict = config.model_dump()
         new_config = QueryPatternsConfig(**config_dict)
         
         # Should be equivalent
