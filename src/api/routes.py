@@ -50,9 +50,11 @@ def _map_workflow_intent_to_api(workflow_intent: str) -> QueryIntent:
     mapping = {
         "code_search": QueryIntent.CODE_SEARCH,
         "documentation": QueryIntent.DOCUMENTATION,
-        "explanation": QueryIntent.GENERAL,  # Map explanation to general
+        "explanation": QueryIntent.EXPLANATION,  # Now available in API enum
         "debugging": QueryIntent.DEBUGGING,
-        "architecture": QueryIntent.GENERAL,  # Map architecture to general
+        "architecture": QueryIntent.ARCHITECTURE,  # Now available in API enum
+        "implementation": QueryIntent.IMPLEMENTATION,
+        "general": QueryIntent.GENERAL,
     }
     return mapping.get(workflow_intent, QueryIntent.GENERAL)
 
@@ -301,6 +303,8 @@ async def process_query(
             languages=request.language_filter,
             k=request.top_k or 5
         )
+
+        logger.debug(f"Final workflow state: {result_state}")
         
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()
@@ -340,9 +344,17 @@ async def process_query(
                 content_confidence = min(total_content_length / 2000.0, 1.0)  # More content = higher confidence  
                 confidence_score = (base_confidence * 0.6 + content_confidence * 0.4) # Weighted average
         
+        # Extract and properly format the query intent
+        query_intent = result_state.get("query_intent")
+        intent_value = query_intent.value if query_intent else "general"
+        
+        logger.info(f"API ROUTE DEBUG: Final result_state keys: {list(result_state.keys())}")
+        logger.info(f"API ROUTE DEBUG: Query='{request.query}', Intent from workflow={query_intent}, Intent value={intent_value}")
+        logger.info(f"API ROUTE DEBUG: Intent type: {type(query_intent)}")
+        
         response = QueryResponse(
             query=request.query,
-            intent=_map_workflow_intent_to_api(str(result_state.get("query_intent", "general") or "general")),  # Fixed: ensure string type
+            intent=_map_workflow_intent_to_api(intent_value),
             strategy=_map_workflow_strategy_to_api(result_state.get("search_strategy", "hybrid")),  # Fixed: use mapping function
             results=document_results,
             total_results=len(document_results),

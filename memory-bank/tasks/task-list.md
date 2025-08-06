@@ -1,6 +1,6 @@
 # Tasks Index
 
-**Last Updated:** August 5, 2025
+**Last Updated:** August 6, 2025
 
 ## In Progress
 *No tasks currently in progress - system is production ready*
@@ -11,6 +11,8 @@
 - [TASK009] Production Deployment Configuration - Final optimization and documentation for production (LOW PRIORITY)
 
 ## Recently Completed
+- [TASK008] Query Intent Classification Bug Fix - Fixed critical bug where query_intent was always CODE_SEARCH regardless of user intent - Completed January 2, 2025
+- [TASK012] Query Intent Detection Bug Fix - Fixed critical bug where query_intent was always CODE_SEARCH regardless of user intent - Completed August 6, 2025
 - [TASK011] Neo4j Graph Serialization Fix - Fixed FastAPI serialization errors for Neo4j Node objects in graph query responses - Completed August 5, 2025
 
 ## Completed  

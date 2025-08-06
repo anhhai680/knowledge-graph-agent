@@ -5,14 +5,11 @@ This module provides the base class for vector store implementations.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
-from langchain.vectorstores.base import VectorStore
-from loguru import logger
 
-from src.config.settings import settings
 
 
 class BaseStore(ABC):

@@ -144,34 +144,46 @@ class RAGAgent(BaseAgent):
             lang_filter = query_dict.get("language_filter", [])
             query_intent = query_dict.get("query_intent")
 
-            # Create initial query state - simplified for mock workflow
+            # Create initial query state - let workflow determine intent
+            # Do NOT pre-set intent, let the query parsing handler analyze it
             query_data = {
                 "query": query_text,
-                "intent": query_intent or QueryIntent.CODE_SEARCH,
+                "intent": query_intent,  # Only set if explicitly provided, otherwise None
                 "top_k": top_k,
                 "repository_filter": repo_filter,
                 "language_filter": lang_filter,
             }
 
-            # Execute the query workflow (mock implementation for now)
+            # Execute the query workflow using the proper run method
+            # This ensures all workflow steps including intent analysis are executed
             logger.info(f"Processing query: {query_text[:100]}...")
             
-            # For now, create a mock result - will be replaced with actual workflow
-            # result = {
-            #     "retrieved_documents": [],
-            #     "answer": f"Mock response for: {query_text}",
-            #     "processing_time": 0.1,
-            # }
-            result = await self.workflow._execute_workflow(query_data)
+            result = await self.workflow.run(
+                query=query_text,
+                repositories=repo_filter,
+                languages=lang_filter,
+                k=top_k,
+            )
 
-            # Get retrieved documents
-            retrieved_docs = result.get("retrieved_documents", [])
+            # Get retrieved documents from QueryState
+            retrieved_docs = result.get("document_retrieval", {}).get("retrieved_documents", [])
+            
+            # Get the actual query intent determined by the workflow
+            actual_query_intent = result.get("query_intent")
+            
+            # Convert dict documents to Document objects for PromptManager compatibility
+            document_objects = []
+            for doc_dict in retrieved_docs:
+                document_objects.append(Document(
+                    page_content=doc_dict.get("page_content", doc_dict.get("content", "")),
+                    metadata=doc_dict.get("metadata", {})
+                ))
             
             # Generate context-aware prompt using PromptManager
             prompt_result = self.prompt_manager.create_query_prompt(
                 query=query_text,
-                context_documents=retrieved_docs,
-                query_intent=query_intent,
+                context_documents=document_objects,
+                query_intent=actual_query_intent,  # Use the determined intent
                 repository_filter=repo_filter,
                 language_filter=lang_filter,
                 top_k=top_k,
@@ -188,18 +200,18 @@ class RAGAgent(BaseAgent):
 
             # Format response with enhanced context
             formatted_response = {
-                "answer": result.get("answer", "No answer generated"),
-                "sources": self._format_sources(retrieved_docs),
+                "answer": result.get("llm_generation", {}).get("generated_response", "No answer generated"),
+                "sources": self._format_sources_from_dict(retrieved_docs),
                 "confidence": confidence_score,
-                "query_intent": query_intent,
+                "query_intent": actual_query_intent,
                 "context_summary": {
                     "documents_found": len(retrieved_docs),
                     "repositories": list(set(
-                        doc.metadata.get("repository", "unknown") 
+                        doc.get("metadata", {}).get("repository", "unknown") 
                         for doc in retrieved_docs
                     )),
                     "languages": list(set(
-                        doc.metadata.get("language", "unknown") 
+                        doc.get("metadata", {}).get("language", "unknown") 
                         for doc in retrieved_docs
                     )),
                 },
@@ -208,7 +220,7 @@ class RAGAgent(BaseAgent):
                     "system_prompt_type": prompt_result.get("system_prompt_type"),
                     "confidence_assessment": confidence_score,
                 },
-                "processing_time": result.get("processing_time", 0),
+                "processing_time": result.get("total_query_time", 0),
             }
 
             logger.info(f"Successfully processed query with {len(retrieved_docs)} sources")
@@ -243,7 +255,7 @@ class RAGAgent(BaseAgent):
             "answer": "I apologize, but I encountered an error processing your query. Please try rephrasing your question or check if the system is properly configured.",
             "sources": [],
             "confidence": 0.1,
-            "query_intent": QueryIntent.CODE_SEARCH,
+            "query_intent": None,  # Don't assume CODE_SEARCH for errors
             "context_summary": {
                 "documents_found": 0,
                 "repositories": [],
@@ -276,6 +288,35 @@ class RAGAgent(BaseAgent):
                     "chunk_type": doc.metadata.get("chunk_type", "unknown"),
                     "line_start": doc.metadata.get("line_start"),
                     "line_end": doc.metadata.get("line_end"),
+                }
+            }
+            sources.append(source)
+        return sources
+
+    def _format_sources_from_dict(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Format retrieved documents from dictionary format as source references.
+        
+        Args:
+            documents: List of retrieved document dictionaries from QueryState
+            
+        Returns:
+            List of formatted source dictionaries
+        """
+        sources = []
+        for i, doc in enumerate(documents, 1):
+            content = doc.get("page_content", doc.get("content", ""))
+            metadata = doc.get("metadata", {})
+            source = {
+                "id": i,
+                "content": content[:500] + ("..." if len(content) > 500 else ""),
+                "metadata": {
+                    "file_path": metadata.get("file_path", "unknown"),
+                    "repository": metadata.get("repository", "unknown"),
+                    "language": metadata.get("language", "unknown"),
+                    "chunk_type": metadata.get("chunk_type", "unknown"),
+                    "line_start": metadata.get("line_start"),
+                    "line_end": metadata.get("line_end"),
                 }
             }
             sources.append(source)
