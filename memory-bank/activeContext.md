@@ -1,17 +1,21 @@
 # Active Context - Knowledge Graph Agent
 
 **Document Created:** July 30, 2025  
-**Last Updated:** August 3, 2025  
+**Last Updated:** August 7, 2025  
 
 ## Current Work Focus
 
-### Current Session (August 3, 2025)
-**Memory Bank Update**: Comprehensive review and alignment of memory bank files with actual codebase state, including recent major enhancements and complete project status assessment.
+### Current Session (August 7, 2025)
+**Critical Bug Fix**: Resolved query intent classification issue where all queries were incorrectly returning CODE_SEARCH intent regardless of actual query type.
 
-**Latest Session Work**: Fixed deprecation warnings and updated system to use modern Pydantic v2 syntax and LangChain community imports.
+**Root Cause**: Duplicate QueryIntent enum definitions between API layer (`src/api/models.py`) and workflow layer (`src/workflows/workflow_states.py`) caused mapping conflicts.
+
+**Resolution**: Unified QueryIntent enums by adding missing EXPLANATION and ARCHITECTURE values to API enum, ensuring proper intent classification.
+
+**Impact**: User queries like "Explain how Car endpoint works?" now correctly return EXPLANATION intent instead of defaulting to CODE_SEARCH.
 
 #### Current Project State - PRODUCTION READY SYSTEM
-The Knowledge Graph Agent has achieved **COMPLETE MVP IMPLEMENTATION** with significant enhancements beyond original scope:
+The Knowledge Graph Agent has achieved **COMPLETE MVP IMPLEMENTATION** with ALL CRITICAL BUGS RESOLVED:
 
 1. **Complete Git-Based Loading System** ✅ PRODUCTION READY (TASK003)
    - Revolutionary elimination of GitHub API rate limiting constraints

@@ -69,6 +69,8 @@ class VectorSearchHandler(BaseWorkflow[QueryState]):
                 k,
                 filters
             )
+
+            self.logger.debug(f"Vector search returned {documents} documents")
             
             search_time = time.time() - search_start
             state["retrieval_time"] = search_time

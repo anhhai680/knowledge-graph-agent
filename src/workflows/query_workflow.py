@@ -161,6 +161,8 @@ class QueryWorkflow(BaseWorkflow):
                 k=k,
                 **kwargs
             )
+
+            self.logger.debug(f"Final workflow state: {final_state}")
             
             total_time = final_state.get('total_query_time', 0) or 0
             self.logger.info(f"Query workflow completed in {total_time:.2f}s")

@@ -46,6 +46,8 @@ class LLMGenerationHandler(BaseWorkflow[QueryState]):
         Returns:
             Updated query state
         """
+        self.logger.debug(f"Executing LLM generation step: {step} and current state: {state}")
+        
         if step == "generate_prompt":
             # Generate contextual prompt
             context = state["retrieval_config"].get("prepared_context", "")
@@ -196,4 +198,8 @@ Focus on:
 """
         }
 
-        return base_prompt + intent_specific_prompts.get(query_intent, intent_specific_prompts[QueryIntent.CODE_SEARCH])
+        final_prompt = base_prompt + intent_specific_prompts.get(query_intent, intent_specific_prompts[QueryIntent.CODE_SEARCH])
+
+        self.logger.debug(f"Generated system prompt for intent {query_intent}: {final_prompt}")
+
+        return final_prompt

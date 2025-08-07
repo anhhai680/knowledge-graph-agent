@@ -8,7 +8,7 @@ by extending the existing BaseWorkflow infrastructure.
 from typing import List, Optional
 from src.workflows.base_workflow import BaseWorkflow
 from src.workflows.workflow_states import QueryState, QueryIntent
-from src.config.query_patterns import QueryPatternsConfig, load_query_patterns
+from src.config.query_patterns import load_query_patterns
 
 
 class QueryParsingHandler(BaseWorkflow[QueryState]):
@@ -68,10 +68,22 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
                 raise ValueError("Query is too long (max 1000 characters)")
                 
         elif step == "analyze_intent":
-            # Analyze query intent using existing enum
-            state["query_intent"] = self._determine_query_intent(state["processed_query"])
-            self.logger.info(f"Determined query intent: {state['query_intent']}")
-        
+            # Analyze query intent using original query (not processed/simplified version)
+            original_intent = state.get("query_intent")
+            original_query = state.get("original_query", "")
+            processed_query = state.get("processed_query", "")
+            determined_intent = self._determine_query_intent(original_query)
+            state["query_intent"] = determined_intent
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Processed query was: '{processed_query}'")
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: State before setting intent: {original_intent}")
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: State after setting intent: {state.get('query_intent')}")
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Intent type: {type(state.get('query_intent'))}")
+            self.logger.debug(f"INTENT DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
+            self.logger.debug(f"INTENT DEBUG: State before setting intent: {original_intent}")
+            self.logger.debug(f"INTENT DEBUG: State after setting intent: {state.get('query_intent')}")
+            self.logger.debug(f"INTENT DEBUG: Intent type: {type(state.get('query_intent'))}")
+
         return state
     
     def validate_state(self, state: QueryState) -> bool:
@@ -124,8 +136,8 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         # Code search patterns (moved to end to avoid conflicts)
         elif any(keyword in query_lower for keyword in [
             "function", "method", "class", "variable", "implement", "code",
-            "algorithm", "pattern", "design pattern", "how to", "example"
-        ]):
+            "algorithm", "pattern", "design pattern", "example"
+        ]) or "how to " in query_lower:  # More specific "how to" matching
             return QueryIntent.CODE_SEARCH
 
         # Default to code search
