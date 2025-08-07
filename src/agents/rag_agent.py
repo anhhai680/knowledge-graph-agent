@@ -201,7 +201,7 @@ class RAGAgent(BaseAgent):
             # Format response with enhanced context
             formatted_response = {
                 "answer": result.get("llm_generation", {}).get("generated_response", "No answer generated"),
-                "sources": self._format_sources_from_dict(retrieved_docs),
+                "sources": self._format_sources(retrieved_docs),
                 "confidence": confidence_score,
                 "query_intent": actual_query_intent,
                 "context_summary": {
@@ -266,47 +266,24 @@ class RAGAgent(BaseAgent):
             "error": True,
         }
 
-    def _format_sources(self, documents: List[Document]) -> List[Dict[str, Any]]:
+    def _format_sources(self, documents: Union[List[Document], List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         """
         Format retrieved documents as source references.
         
         Args:
             documents: List of retrieved documents
-            
-        Returns:
-            List of formatted source dictionaries
-        """
-        sources = []
-        for i, doc in enumerate(documents, 1):
-            source = {
-                "id": i,
-                "content": doc.page_content[:500] + ("..." if len(doc.page_content) > 500 else ""),
-                "metadata": {
-                    "file_path": doc.metadata.get("file_path", "unknown"),
-                    "repository": doc.metadata.get("repository", "unknown"),
-                    "language": doc.metadata.get("language", "unknown"),
-                    "chunk_type": doc.metadata.get("chunk_type", "unknown"),
-                    "line_start": doc.metadata.get("line_start"),
-                    "line_end": doc.metadata.get("line_end"),
-                }
-            }
-            sources.append(source)
-        return sources
 
-    def _format_sources_from_dict(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Format retrieved documents from dictionary format as source references.
-        
-        Args:
-            documents: List of retrieved document dictionaries from QueryState
-            
         Returns:
             List of formatted source dictionaries
         """
         sources = []
         for i, doc in enumerate(documents, 1):
-            content = doc.get("page_content", doc.get("content", ""))
-            metadata = doc.get("metadata", {})
+            if isinstance(doc, Document):
+                content = doc.page_content
+                metadata = doc.metadata
+            else:
+                content = doc.get("page_content", doc.get("content", ""))
+                metadata = doc.get("metadata", {})
             source = {
                 "id": i,
                 "content": content[:500] + ("..." if len(content) > 500 else ""),
@@ -321,6 +298,7 @@ class RAGAgent(BaseAgent):
             }
             sources.append(source)
         return sources
+
 
     def update_filters(
         self,
