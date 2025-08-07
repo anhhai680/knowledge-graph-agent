@@ -348,9 +348,9 @@ async def process_query(
         query_intent = result_state.get("query_intent")
         intent_value = query_intent.value if query_intent else "general"
         
-        logger.info(f"API ROUTE DEBUG: Final result_state keys: {list(result_state.keys())}")
-        logger.info(f"API ROUTE DEBUG: Query='{request.query}', Intent from workflow={query_intent}, Intent value={intent_value}")
-        logger.info(f"API ROUTE DEBUG: Intent type: {type(query_intent)}")
+        logger.debug(f"API ROUTE DEBUG: Final result_state keys: {list(result_state.keys())}")
+        logger.debug(f"API ROUTE DEBUG: Query='{request.query}', Intent from workflow={query_intent}, Intent value={intent_value}")
+        logger.debug(f"API ROUTE DEBUG: Intent type: {type(query_intent)}")
         
         response = QueryResponse(
             query=request.query,
@@ -483,11 +483,6 @@ async def list_repositories(
         )
         
     except Exception as e:
-        logger.error(f"Failed to list repositories: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to list repositories: {str(e)}"
-        )
         logger.error(f"Failed to list repositories: {e}")
         raise HTTPException(
             status_code=500,
