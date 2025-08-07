@@ -7,6 +7,7 @@ while maintaining LangGraph integration and existing state management.
 
 import time
 from typing import List, Dict, Any, Optional
+
 from src.workflows.base_workflow import BaseWorkflow
 from src.workflows.workflow_states import (
     QueryState, 
@@ -211,13 +212,18 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
         """
         if step == "parse_and_analyze":
             # Use parsing handler's invoke method (inherits from BaseWorkflow)
+            self.logger.debug(f"ORCHESTRATOR DEBUG: State before parsing: query_intent={state.get('query_intent')}")
             state = self.parsing_handler.invoke(state)
-            
+            self.logger.debug(f"ORCHESTRATOR DEBUG: State after parsing: query_intent={state.get('query_intent')}")
+
             # Determine search strategy based on intent
             if state.get("query_intent"):
                 state["search_strategy"] = self._determine_search_strategy(
                     state["query_intent"], state["processed_query"]
                 )
+                self.logger.info(f"ORCHESTRATOR: Determined search strategy: {state.get('search_strategy')}")
+            else:
+                self.logger.warning(f"ORCHESTRATOR: No query_intent found after parsing!")
             
         elif step == "search_documents":
             # Use search handler's invoke method
@@ -283,6 +289,9 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
             target_file_types=file_types,
             retrieval_config={"k": k or self.default_k}
         )
+
+        self.logger.debug(f"ORCHESTRATOR DEBUG: Created initial state with query_intent: {state.get('query_intent')}")
+        self.logger.info(f"Starting query workflow with initial state: {state}")    
         
         # Use inherited invoke method from BaseWorkflow
         final_state = self.invoke(state)
@@ -367,7 +376,6 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
             Updated state with finalized response
         """
         # Format final response with sources
-        response_text = state["llm_generation"]["generated_response"]
         sources = []
 
         for doc in state["context_documents"]:

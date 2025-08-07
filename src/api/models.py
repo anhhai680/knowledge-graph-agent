@@ -20,6 +20,8 @@ class QueryIntent(str, Enum):
     CODE_SEARCH = "code_search"
     DOCUMENTATION = "documentation"
     DEBUGGING = "debugging"
+    EXPLANATION = "explanation"
+    ARCHITECTURE = "architecture"
     IMPLEMENTATION = "implementation"
     GENERAL = "general"
 
