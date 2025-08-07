@@ -74,16 +74,16 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
             processed_query = state.get("processed_query", "")
             determined_intent = self._determine_query_intent(original_query)
             state["query_intent"] = determined_intent
-            print(f"🔥🔥🔥 FORCE DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
-            print(f"🔥🔥🔥 FORCE DEBUG: Processed query was: '{processed_query}'")
-            print(f"🔥🔥🔥 FORCE DEBUG: State before setting intent: {original_intent}")
-            print(f"🔥🔥🔥 FORCE DEBUG: State after setting intent: {state.get('query_intent')}")
-            print(f"🔥🔥🔥 FORCE DEBUG: Intent type: {type(state.get('query_intent'))}")
-            self.logger.info(f"INTENT DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
-            self.logger.info(f"INTENT DEBUG: State before setting intent: {original_intent}")
-            self.logger.info(f"INTENT DEBUG: State after setting intent: {state.get('query_intent')}")
-            self.logger.info(f"INTENT DEBUG: Intent type: {type(state.get('query_intent'))}")
-        
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Processed query was: '{processed_query}'")
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: State before setting intent: {original_intent}")
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: State after setting intent: {state.get('query_intent')}")
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Intent type: {type(state.get('query_intent'))}")
+            self.logger.debug(f"INTENT DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
+            self.logger.debug(f"INTENT DEBUG: State before setting intent: {original_intent}")
+            self.logger.debug(f"INTENT DEBUG: State after setting intent: {state.get('query_intent')}")
+            self.logger.debug(f"INTENT DEBUG: Intent type: {type(state.get('query_intent'))}")
+
         return state
     
     def validate_state(self, state: QueryState) -> bool:
