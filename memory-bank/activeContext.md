@@ -1,11 +1,11 @@
 # Active Context - Knowledge Graph Agent
 
 **Document Created:** July 30, 2025  
-**Last Updated:** August 3, 2025  
+**Last Updated:** August 7, 2025  
 
 ## Current Work Focus
 
-### Current Session (January 2, 2025)
+### Current Session (August 7, 2025)
 **Critical Bug Fix**: Resolved query intent classification issue where all queries were incorrectly returning CODE_SEARCH intent regardless of actual query type.
 
 **Root Cause**: Duplicate QueryIntent enum definitions between API layer (`src/api/models.py`) and workflow layer (`src/workflows/workflow_states.py`) caused mapping conflicts.
