@@ -212,18 +212,18 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
         """
         if step == "parse_and_analyze":
             # Use parsing handler's invoke method (inherits from BaseWorkflow)
-            self.logger.info(f"ORCHESTRATOR DEBUG: State before parsing: query_intent={state.get('query_intent')}")
+            self.logger.debug(f"ORCHESTRATOR DEBUG: State before parsing: query_intent={state.get('query_intent')}")
             state = self.parsing_handler.invoke(state)
-            self.logger.info(f"ORCHESTRATOR DEBUG: State after parsing: query_intent={state.get('query_intent')}")
-            
+            self.logger.debug(f"ORCHESTRATOR DEBUG: State after parsing: query_intent={state.get('query_intent')}")
+
             # Determine search strategy based on intent
             if state.get("query_intent"):
                 state["search_strategy"] = self._determine_search_strategy(
                     state["query_intent"], state["processed_query"]
                 )
-                self.logger.info(f"ORCHESTRATOR DEBUG: Determined search strategy: {state.get('search_strategy')}")
+                self.logger.info(f"ORCHESTRATOR: Determined search strategy: {state.get('search_strategy')}")
             else:
-                self.logger.warning(f"ORCHESTRATOR DEBUG: No query_intent found after parsing!")
+                self.logger.warning(f"ORCHESTRATOR: No query_intent found after parsing!")
             
         elif step == "search_documents":
             # Use search handler's invoke method
@@ -290,8 +290,8 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
             retrieval_config={"k": k or self.default_k}
         )
 
-        self.logger.info(f"ORCHESTRATOR DEBUG: Created initial state with query_intent: {state.get('query_intent')}")
-        self.logger.debug(f"Starting query workflow with initial state: {state}")    
+        self.logger.debug(f"ORCHESTRATOR DEBUG: Created initial state with query_intent: {state.get('query_intent')}")
+        self.logger.info(f"Starting query workflow with initial state: {state}")    
         
         # Use inherited invoke method from BaseWorkflow
         final_state = self.invoke(state)
