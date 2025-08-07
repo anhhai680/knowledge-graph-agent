@@ -314,14 +314,14 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
         steps = self.define_steps()
         total_steps = len(steps)
 
-        self.logger.info(f"BASE_WORKFLOW DEBUG: Executing {total_steps} steps: {steps}")
+        self.logger.debug(f"BASE_WORKFLOW DEBUG: Executing {total_steps} steps: {steps}")
 
         for i, step in enumerate(steps):
             try:
-                self.logger.info(f"BASE_WORKFLOW DEBUG: Executing step {i+1}/{total_steps}: {step}")
+                self.logger.debug(f"BASE_WORKFLOW DEBUG: Executing step {i+1}/{total_steps}: {step}")
                 self.metadata.add_step(step)
                 current_state = self.retrier(self.execute_step, step, current_state)
-                self.logger.info(f"BASE_WORKFLOW DEBUG: Step {step} completed successfully")
+                self.logger.debug(f"BASE_WORKFLOW DEBUG: Step {step} completed successfully")
 
                 # Update progress
                 progress = ((i + 1) / total_steps) * 100
