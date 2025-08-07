@@ -6,7 +6,7 @@ This module provides a Pinecone implementation of the vector store.
 
 from typing import Any, Dict, List, Optional, Tuple
 
-import pinecone
+from pinecone import Pinecone, ServerlessSpec
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
 from langchain_community.vectorstores import Pinecone as LangchainPinecone
@@ -52,13 +52,13 @@ class PineconeStore(BaseStore):
         # Create embeddings if not provided
         self.embeddings = embeddings or EmbeddingFactory.create()
 
-        # Initialize Pinecone
-        pinecone.init(api_key=self.api_key)
+        # Initialize Pinecone client
+        self.pc = Pinecone(api_key=self.api_key)
 
         # Get or create index
         try:
             # Check if index exists
-            indexes = pinecone.list_indexes()
+            indexes = [index.name for index in self.pc.list_indexes()]
 
             if self.collection_name not in indexes:
                 # Create index if it doesn't exist
@@ -66,14 +66,18 @@ class PineconeStore(BaseStore):
 
                 # Create index with appropriate settings
                 # Dimension based on the embedding model (OpenAI ada = 1536)
-                pinecone.create_index(
+                self.pc.create_index(
                     name=self.collection_name,
                     dimension=LLM_CONSTANTS.EMBEDDING_DIMENSION.value,  # Dimension of OpenAI embeddings
                     metric="cosine",
+                    spec=ServerlessSpec(
+                        cloud='aws',
+                        region='us-east-1'
+                    )
                 )
 
             # Connect to the index
-            self.index = pinecone.Index(self.collection_name)
+            self.index = self.pc.Index(self.collection_name)
             logger.debug(f"Connected to Pinecone index: {self.collection_name}")
 
             # Create LangChain Pinecone instance

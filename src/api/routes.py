@@ -97,16 +97,16 @@ def get_query_workflow() -> QueryWorkflow:
 
 def get_vector_store():
     """Dependency injection for vector store."""
-    # This will be implemented in main.py as a dependency
-    from src.api.main import get_vector_store
-    return get_vector_store()
+    # Import here to avoid circular imports
+    from src.api.main import get_vector_store as _get_vector_store
+    return _get_vector_store()
 
 
 def get_graph_store():
     """Dependency injection for graph store."""
-    # This will be implemented in main.py as a dependency
-    from src.api.main import get_graph_store
-    return get_graph_store()
+    # Import here to avoid circular imports
+    from src.api.main import get_graph_store as _get_graph_store
+    return _get_graph_store()
 
 
 @router.get("/")

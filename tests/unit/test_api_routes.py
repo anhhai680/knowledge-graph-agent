@@ -6,7 +6,7 @@ including request validation, response formatting, and error handling.
 """
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from datetime import datetime
 from fastapi.testclient import TestClient
 
@@ -44,9 +44,10 @@ def mock_indexing_workflow():
 def mock_query_workflow():
     """Mock query workflow for testing."""
     workflow = AsyncMock()
-    workflow.ainvoke.return_value = {
-        "intent": "code_search",
-        "search_strategy": "hybrid",
+    # Mock the run method that's actually called in the routes
+    workflow.run.return_value = {
+        "query_intent": QueryIntent.CODE_SEARCH,
+        "search_strategy": "hybrid", 
         "context_documents": [
             {
                 "page_content": "def test_function(): pass",
@@ -59,7 +60,19 @@ def mock_query_workflow():
             }
         ],
         "confidence_score": 0.85,
-        "suggestions": ["Try more specific terms"]
+        "suggestions": ["Try more specific terms"],
+        "generated_response": "Here's how to implement authentication...",
+        "results": [
+            {
+                "content": "def test_function(): pass",
+                "metadata": {
+                    "source": "test.py",
+                    "repository": "test/repo", 
+                    "language": "python",
+                    "score": 0.95
+                }
+            }
+        ]
     }
     return workflow
 
@@ -80,8 +93,18 @@ class TestAPIRoutes:
 
     def test_health_endpoint(self, client):
         """Test the health check endpoint."""
-        with patch("src.api.routes.get_indexing_workflow"), \
-             patch("src.api.routes.get_query_workflow"):
+        with patch("src.api.main.get_indexing_workflow") as mock_indexing, \
+             patch("src.api.main.get_query_workflow") as mock_query, \
+             patch("src.api.main.get_vector_store") as mock_vector_store:
+            
+            # Mock the workflows
+            mock_indexing.return_value = MagicMock()
+            mock_query.return_value = MagicMock()
+            
+            # Mock the vector store to have a health_check method
+            mock_store = MagicMock()
+            mock_store.health_check.return_value = (True, "healthy")
+            mock_vector_store.return_value = mock_store
             
             response = client.get("/api/v1/health")
             assert response.status_code == 200
@@ -94,7 +117,7 @@ class TestAPIRoutes:
 
     def test_stats_endpoint(self, client):
         """Test the statistics endpoint."""
-        with patch("src.api.routes.get_indexing_workflow"):
+        with patch("src.api.main.get_indexing_workflow"):
             response = client.get("/api/v1/stats")
             assert response.status_code == 200
             
@@ -107,7 +130,7 @@ class TestAPIRoutes:
 
     def test_repositories_endpoint(self, client):
         """Test the repositories listing endpoint."""
-        with patch("src.api.routes.get_indexing_workflow"):
+        with patch("src.api.main.get_indexing_workflow"):
             response = client.get("/api/v1/repositories")
             assert response.status_code == 200
             
@@ -117,7 +140,7 @@ class TestAPIRoutes:
             assert "last_updated" in data
             assert isinstance(data["repositories"], list)
 
-    @patch("src.api.routes.get_indexing_workflow")
+    @patch("src.api.main.get_indexing_workflow")
     def test_index_repository_endpoint(self, mock_workflow_dep, client, mock_indexing_workflow):
         """Test single repository indexing endpoint."""
         mock_workflow_dep.return_value = mock_indexing_workflow
@@ -138,8 +161,11 @@ class TestAPIRoutes:
         assert data["repository"] == request_data["repository_url"]
         assert data["status"] == "pending"
 
-    def test_index_repository_invalid_url(self, client):
+    @patch("src.api.main.get_indexing_workflow")
+    def test_index_repository_invalid_url(self, mock_indexing, client):
         """Test repository indexing with invalid URL."""
+        mock_indexing.return_value = MagicMock()
+        
         request_data = {
             "repository_url": "invalid-url",
             "branch": "main"
@@ -148,7 +174,7 @@ class TestAPIRoutes:
         response = client.post("/api/v1/index/repository", json=request_data)
         assert response.status_code == 422  # Validation error
 
-    @patch("src.api.routes.get_query_workflow")
+    @patch("src.api.main.get_query_workflow")
     def test_query_endpoint(self, mock_workflow_dep, client, mock_query_workflow):
         """Test query processing endpoint."""
         mock_workflow_dep.return_value = mock_query_workflow
@@ -177,8 +203,11 @@ class TestAPIRoutes:
         assert data["intent"] == "code_search"
         assert isinstance(data["results"], list)
 
-    def test_query_endpoint_validation(self, client):
+    @patch("src.api.main.get_query_workflow")
+    def test_query_endpoint_validation(self, mock_query, client):
         """Test query endpoint with validation errors."""
+        mock_query.return_value = MagicMock()
+        
         # Empty query
         response = client.post("/api/v1/query", json={"query": ""})
         assert response.status_code == 422
@@ -191,7 +220,7 @@ class TestAPIRoutes:
     def test_workflow_status_endpoint(self, client):
         """Test workflow status endpoint."""
         # First create a workflow
-        with patch("src.api.routes.get_indexing_workflow"):
+        with patch("src.api.main.get_indexing_workflow"):
             request_data = {
                 "repository_url": "https://github.com/test/repo"
             }
@@ -217,7 +246,7 @@ class TestAPIRoutes:
     def test_list_workflows_endpoint(self, client):
         """Test workflow listing endpoint."""
         # Create some workflows first
-        with patch("src.api.routes.get_indexing_workflow"):
+        with patch("src.api.main.get_indexing_workflow"):
             for i in range(3):
                 request_data = {
                     "repository_url": f"https://github.com/test/repo{i}"
@@ -238,7 +267,7 @@ class TestAPIRoutes:
 
     @patch("builtins.open")
     @patch("json.load")
-    @patch("src.api.routes.get_indexing_workflow")
+    @patch("src.api.main.get_indexing_workflow")
     def test_batch_index_endpoint(self, mock_workflow_dep, mock_json_load, mock_open, client, mock_indexing_workflow):
         """Test batch indexing endpoint."""
         mock_workflow_dep.return_value = mock_indexing_workflow
@@ -261,18 +290,22 @@ class TestAPIRoutes:
         assert len(data["workflows"]) == 2
         assert data["total_repositories"] == 2
 
+    @patch("src.api.main.get_indexing_workflow")
     @patch("builtins.open")
-    def test_batch_index_no_settings_file(self, mock_open, client):
+    def test_batch_index_no_settings_file(self, mock_open, mock_indexing, client):
         """Test batch indexing when appSettings.json is missing."""
+        mock_indexing.return_value = MagicMock()
         mock_open.side_effect = FileNotFoundError()
         
         response = client.post("/api/v1/index")
         assert response.status_code == 404
 
+    @patch("src.api.main.get_indexing_workflow")
     @patch("builtins.open")
     @patch("json.load")
-    def test_batch_index_empty_repositories(self, mock_json_load, mock_open, client):
+    def test_batch_index_empty_repositories(self, mock_json_load, mock_open, mock_indexing, client):
         """Test batch indexing with empty repositories list."""
+        mock_indexing.return_value = MagicMock()
         mock_json_load.return_value = {"repositories": []}
         
         response = client.post("/api/v1/index")
@@ -347,8 +380,8 @@ class TestAPIModels:
 class TestAPIIntegration:
     """Integration tests for API functionality."""
 
-    @patch("src.api.routes.get_indexing_workflow")
-    @patch("src.api.routes.get_query_workflow")
+    @patch("src.api.main.get_indexing_workflow")
+    @patch("src.api.main.get_query_workflow")
     def test_full_workflow_integration(self, mock_query_dep, mock_index_dep, client, mock_indexing_workflow, mock_query_workflow):
         """Test full workflow from indexing to querying."""
         mock_index_dep.return_value = mock_indexing_workflow
@@ -381,8 +414,11 @@ class TestAPIIntegration:
         assert len(query_data["results"]) > 0
         assert query_data["confidence_score"] > 0
 
-    def test_error_handling(self, client):
+    @patch("src.api.main.get_indexing_workflow")
+    def test_error_handling(self, mock_indexing, client):
         """Test API error handling."""
+        mock_indexing.return_value = MagicMock()
+        
         # Test 404 for non-existent workflow
         response = client.get("/api/v1/workflows/non-existent/status")
         assert response.status_code == 404
