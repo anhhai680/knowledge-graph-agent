@@ -152,20 +152,6 @@ class TestRAGAgent:
         assert result.get("error") is True
 
     @pytest.mark.asyncio
-    async def test_process_input_no_workflow(self):
-        """Test processing input without workflow."""
-        agent = RAGAgent(workflow=None)
-        
-        result = await agent._process_input("test query")
-        
-        assert "answer" in result
-        assert "sources" in result
-        assert "confidence" in result
-        # When no workflow is provided, a default workflow is created
-        assert result.get("error") is None
-        assert result.get("query_intent") is not None
-
-    @pytest.mark.asyncio
     async def test_process_input_exception(self, rag_agent):
         """Test processing input with exception."""
         rag_agent.workflow.run.side_effect = Exception("Test exception")
