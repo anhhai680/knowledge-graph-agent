@@ -727,64 +727,75 @@ async def _run_indexing_workflow(
     try:
         logger.info(f"Starting indexing workflow {workflow_id} for repository: {repo_name}")
         
-        # Update workflow status
-        active_workflows[workflow_id]["status"] = WorkflowStatus.RUNNING
+        # Update workflow status to running
+        if workflow_id in active_workflows:
+            active_workflows[workflow_id]["status"] = WorkflowStatus.RUNNING
+            active_workflows[workflow_id]["current_step"] = "initializing"
         
-        # Create indexing state as dictionary (TypedDict)
-        indexing_state = {
-            "workflow_id": workflow_id,
-            "workflow_type": "indexing", 
-            "status": "in_progress",
-            "created_at": datetime.now().timestamp(),
-            "updated_at": datetime.now().timestamp(),
-            "progress_percentage": 0.0,
-            "current_step": "initializing",
-            "errors": [],
-            "metadata": {},
-            "repositories": [repo_name],  # Use repository name
-            "current_repo": repo_name,    # Use repository name
-            "processed_files": 0,
-            "total_files": 0,
-            "embeddings_generated": 0,
-            "repository_states": {},
-            "file_processing_states": [],
-            "vector_store_type": "chroma",
-            "collection_name": "knowledge_graph",
-            "batch_size": 100,
-            "total_chunks": 0,
-            "successful_embeddings": 0,
-            "failed_embeddings": 0,
-            "documents_per_second": None,
-            "embeddings_per_second": None,
-            "total_processing_time": None
-        }
+        # Create proper indexing state using the workflow state factory
+        from src.workflows.workflow_states import create_indexing_state
         
-        # Execute indexing workflow (simplified for now)
-        result_state = await indexing_workflow.ainvoke(indexing_state)
+        indexing_state = create_indexing_state(
+            workflow_id=workflow_id,
+            repositories=[repo_name],
+            vector_store_type="chroma",
+            collection_name="knowledge-base-graph",  # Match the collection name used in ChromaStore
+            batch_size=100
+        )
         
-        # Update workflow completion
-        active_workflows[workflow_id].update({
-            "status": WorkflowStatus.COMPLETED,
-            "completed_at": datetime.now(),
-            "metadata": {
-                "processed_files": result_state.get("processed_files", 0),
-                "embeddings_generated": result_state.get("embeddings_generated", 0),
-                "errors": result_state.get("errors", [])
-            }
-        })
+        # Update state to in_progress
+        indexing_state["status"] = "in_progress"
+        indexing_state["current_step"] = "initializing"
         
-        logger.info(f"Indexing workflow {workflow_id} completed successfully")
+        # Execute indexing workflow with proper state management
+        logger.info(f"Executing indexing workflow for {repo_name}")
+        result_state = indexing_workflow.invoke(indexing_state)
+        
+        # Check workflow completion status
+        workflow_status = result_state.get("status")
+        workflow_metadata = indexing_workflow.get_metadata()
+        
+        logger.info(f"Workflow completed with status: {workflow_status}")
+        logger.info(f"Workflow metadata status: {workflow_metadata.get('status')}")
+        
+        # Update API workflow status based on workflow completion
+        if workflow_id in active_workflows:
+            if workflow_status == "completed" or workflow_metadata.get("status") == "completed":
+                active_workflows[workflow_id].update({
+                    "status": WorkflowStatus.COMPLETED,
+                    "completed_at": datetime.now(),
+                    "current_step": "completed",
+                    "metadata": {
+                        "processed_files": result_state.get("processed_files", 0),
+                        "embeddings_generated": result_state.get("embeddings_generated", 0),
+                        "total_chunks": result_state.get("total_chunks", 0),
+                        "errors": result_state.get("errors", []),
+                        "repository": repo_name,
+                        "workflow_metadata": workflow_metadata
+                    }
+                })
+                logger.info(f"Indexing workflow {workflow_id} completed successfully")
+            else:
+                # Workflow failed or didn't complete properly
+                active_workflows[workflow_id].update({
+                    "status": WorkflowStatus.FAILED,
+                    "completed_at": datetime.now(),
+                    "current_step": "failed",
+                    "error_message": f"Workflow did not complete successfully. Final status: {workflow_status}"
+                })
+                logger.error(f"Indexing workflow {workflow_id} did not complete successfully")
         
     except Exception as e:
-        # TODO: Implement proper workflow execution
         logger.error(f"Indexing workflow {workflow_id} failed: {e}")
         
         # Update workflow failure
-        active_workflows[workflow_id].update({
-            "status": WorkflowStatus.FAILED,
-            "completed_at": datetime.now(),
-            "error_message": str(e)
-        })
+        if workflow_id in active_workflows:
+            active_workflows[workflow_id].update({
+                "status": WorkflowStatus.FAILED,
+                "completed_at": datetime.now(),
+                "current_step": "failed",
+                "error_message": str(e)
+            })
 
 
 @router.post("/fix/chroma-dimension")
@@ -995,3 +1006,60 @@ async def get_graph_health():
             "configuration": graph_config if 'graph_config' in locals() else None,
             "error": error_msg
         }
+
+
+@router.get("/debug/vector-store")
+async def debug_vector_store(
+    vector_store=Depends(get_vector_store)
+):
+    """
+    Debug endpoint to check vector store contents.
+    
+    This endpoint helps diagnose issues with document storage and retrieval.
+    """
+    try:
+        logger.info("Debugging vector store contents")
+        
+        # Check embedding compatibility
+        is_compatible, compatibility_msg = vector_store.check_embedding_dimension_compatibility()
+        
+        # Get collection stats
+        collection_stats = vector_store.get_collection_stats()
+        
+        # Get repository metadata
+        repository_metadata = vector_store.get_repository_metadata()
+        
+        # Try to get all documents from collection
+        try:
+            # Use the collection's get method to retrieve all documents
+            all_docs = vector_store.collection.get(include=["metadatas", "documents"])
+            doc_count = len(all_docs.get("metadatas", [])) if all_docs else 0
+            
+            # Sample some metadata for debugging
+            sample_metadata = []
+            if all_docs and "metadatas" in all_docs:
+                sample_metadata = all_docs["metadatas"][:5]  # First 5 documents
+                
+        except Exception as e:
+            doc_count = 0
+            sample_metadata = []
+            logger.error(f"Error retrieving documents: {e}")
+        
+        return {
+            "embedding_compatibility": {
+                "is_compatible": is_compatible,
+                "message": compatibility_msg
+            },
+            "collection_stats": collection_stats,
+            "repository_metadata": repository_metadata,
+            "total_documents_in_collection": doc_count,
+            "sample_metadata": sample_metadata,
+            "debug_timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Debug vector store failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Debug vector store failed: {str(e)}"
+        )
