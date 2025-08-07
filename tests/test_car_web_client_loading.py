@@ -61,13 +61,13 @@ def test_car_web_client_loading():
             for file_path in sorted(unique_files):
                 print(f"  - {file_path}")
         
-        return len(unique_files)
+        assert len(unique_files) > 0, "No files were loaded from the repository"
         
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
-        return 0
+        assert False, f"Repository loading failed: {e}"
 
 if __name__ == "__main__":
     file_count = test_car_web_client_loading()

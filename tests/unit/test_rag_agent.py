@@ -19,9 +19,14 @@ from src.workflows.workflow_states import QueryIntent
 def mock_workflow():
     """Create a mock workflow for testing."""
     workflow = AsyncMock(spec=QueryWorkflow)
-    workflow._execute_workflow.return_value = {
-        "retrieved_documents": [],
-        "answer": "Mock response",
+    workflow.run.return_value = {
+        "document_retrieval": {
+            "retrieved_documents": []
+        },
+        "llm_generation": {
+            "generated_response": "Mock response"
+        },
+        "query_intent": QueryIntent.CODE_SEARCH,
         "processing_time": 0.1
     }
     return workflow
@@ -137,15 +142,14 @@ class TestRAGAgent:
     @pytest.mark.asyncio
     async def test_process_input_workflow_failure(self, rag_agent):
         """Test processing input when workflow fails."""
-        rag_agent.workflow._execute_workflow.side_effect = Exception("Workflow error")
+        rag_agent.workflow.run.side_effect = Exception("Workflow error")
         
         result = await rag_agent._process_input("test query")
         
         assert "answer" in result
         assert "sources" in result
         assert "confidence" in result
-        assert "error" in result
-        assert result["error"] is True
+        assert result.get("error") is True
 
     @pytest.mark.asyncio
     async def test_process_input_no_workflow(self):
@@ -157,19 +161,21 @@ class TestRAGAgent:
         assert "answer" in result
         assert "sources" in result
         assert "confidence" in result
-        assert "error" in result
+        # When no workflow is provided, a default workflow is created
+        assert result.get("error") is None
+        assert result.get("query_intent") is not None
 
     @pytest.mark.asyncio
     async def test_process_input_exception(self, rag_agent):
         """Test processing input with exception."""
-        rag_agent.workflow._execute_workflow.side_effect = Exception("Test exception")
+        rag_agent.workflow.run.side_effect = Exception("Test exception")
         
         result = await rag_agent._process_input("test query")
         
         assert "answer" in result
         assert "sources" in result
         assert "confidence" in result
-        assert "error" in result
+        assert result.get("error") is True
 
     def test_format_sources_empty(self, rag_agent):
         """Test formatting empty sources list."""
@@ -267,7 +273,7 @@ class TestRAGAgent:
         results = await rag_agent.batch_query(queries, max_concurrent=3)
         
         assert len(results) == 2
-        assert rag_agent.workflow._execute_workflow.call_count == 2
+        assert rag_agent.workflow.run.call_count == 2
 
     def test_get_supported_query_types(self, rag_agent):
         """Test getting supported query types."""

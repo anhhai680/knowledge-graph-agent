@@ -255,7 +255,7 @@ class RAGAgent(BaseAgent):
             "answer": "I apologize, but I encountered an error processing your query. Please try rephrasing your question or check if the system is properly configured.",
             "sources": [],
             "confidence": 0.1,
-            "query_intent": None,  # Don't assume CODE_SEARCH for errors
+            "query_intent": QueryIntent.CODE_SEARCH,  # Default to CODE_SEARCH for fallback
             "context_summary": {
                 "documents_found": 0,
                 "repositories": [],

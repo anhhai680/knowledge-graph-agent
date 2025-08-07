@@ -19,9 +19,14 @@ from src.workflows.workflow_states import QueryIntent
 def mock_workflow():
     """Create a mock workflow for testing."""
     workflow = AsyncMock(spec=QueryWorkflow)
-    workflow._execute_workflow.return_value = {
-        "retrieved_documents": [],
-        "answer": "Mock response",
+    workflow.run.return_value = {
+        "document_retrieval": {
+            "retrieved_documents": []
+        },
+        "llm_generation": {
+            "generated_response": "Mock response"
+        },
+        "query_intent": QueryIntent.CODE_SEARCH,
         "processing_time": 0.1
     }
     return workflow
@@ -124,8 +129,8 @@ class TestRAGAgent:
         assert "prompt_metadata" in result
         assert "processing_time" in result
         
-        # The confidence should be from the fallback processing (0.1) due to workflow failure
-        assert result["confidence"] == 0.1
+        # The confidence should be from the successful workflow processing
+        assert result["confidence"] == 0.8
 
     @pytest.mark.asyncio
     async def test_process_input_dict(self, rag_agent):
@@ -153,15 +158,14 @@ class TestRAGAgent:
     @pytest.mark.asyncio
     async def test_fallback_processing(self, rag_agent):
         """Test fallback processing when workflow fails."""
-        rag_agent.workflow._execute_workflow.side_effect = Exception("Workflow error")
+        rag_agent.workflow.run.side_effect = Exception("Workflow error")
         
         result = await rag_agent._fallback_processing("test query")
         
         assert "answer" in result
         assert "sources" in result
         assert "confidence" in result
-        assert "error" in result
-        assert result["error"] is True
+        assert result.get("error") is True
         assert result["confidence"] == 0.1
 
     def test_format_sources_empty(self, rag_agent):
@@ -279,16 +283,21 @@ class TestRAGAgent:
     @pytest.mark.asyncio
     async def test_batch_query_with_exceptions(self, rag_agent):
         """Test batch query with some queries failing."""
-        rag_agent.workflow._execute_workflow.side_effect = [
+        rag_agent.workflow.run.side_effect = [
             Exception("Error 1"),
-            {"retrieved_documents": [], "answer": "Success", "processing_time": 0.1}
+            {
+                "document_retrieval": {"retrieved_documents": []},
+                "llm_generation": {"generated_response": "Success"},
+                "query_intent": QueryIntent.CODE_SEARCH,
+                "processing_time": 0.1
+            }
         ]
         
         queries = ["query 1", "query 2"]
         results = await rag_agent.batch_query(queries, max_concurrent=2)
         
         assert len(results) == 2
-        assert "error" in results[0]
+        assert results[0].get("error") is True
         assert "answer" in results[1]
 
     def test_get_supported_query_types(self, rag_agent):
