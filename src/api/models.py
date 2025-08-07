@@ -172,6 +172,7 @@ class QueryResponse(BaseModel):
     processing_time: float = Field(..., description="Query processing time in seconds")
     confidence_score: float = Field(..., description="Overall confidence score", ge=0.0, le=1.0)
     suggestions: Optional[List[str]] = Field(None, description="Query improvement suggestions")
+    generated_response: str = Field(default="", description="AI-generated response based on retrieved context")
 
 
 class WorkflowProgress(BaseModel):

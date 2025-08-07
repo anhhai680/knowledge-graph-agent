@@ -12,6 +12,7 @@ from typing import Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.api.routes import router
 from src.config.settings import get_settings
@@ -147,6 +148,20 @@ def create_app() -> FastAPI:
     
     # Include API routes
     app.include_router(router, prefix="/api/v1")
+    
+    # Mount static files for web UI
+    import os
+    from pathlib import Path
+    
+    # Get the absolute path to the web directory
+    current_dir = Path(__file__).parent.parent.parent  # Go up to project root
+    web_directory = current_dir / "web"
+    
+    if web_directory.exists():
+        app.mount("/web", StaticFiles(directory=str(web_directory)), name="static")
+        logger.info(f"Mounted static files from {web_directory}")
+    else:
+        logger.warning(f"Web directory not found at {web_directory}")
     
     # Global exception handler
     @app.exception_handler(Exception)

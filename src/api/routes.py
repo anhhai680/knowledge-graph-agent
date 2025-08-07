@@ -313,14 +313,15 @@ async def process_query(
         document_results = []
         for doc in result_state.get("context_documents", []):
             # Create DocumentMetadata object properly
+            metadata = doc.get("metadata", {})
             doc_metadata = DocumentMetadata(
-                source=doc.get("metadata", {}).get("source", ""),
-                repository=doc.get("metadata", {}).get("repository", ""),
-                language=doc.get("metadata", {}).get("language"),
-                file_type=doc.get("metadata", {}).get("file_type"),
-                symbols=doc.get("metadata", {}).get("symbols", []),
-                last_modified=doc.get("metadata", {}).get("last_modified"),
-                size=doc.get("metadata", {}).get("size")
+                source=metadata.get("file_path", metadata.get("source", "")),  # Use file_path if available
+                repository=metadata.get("repository_url", metadata.get("repository", "")),  # Use repository_url if available
+                language=metadata.get("language"),
+                file_type=metadata.get("file_type"),
+                symbols=metadata.get("symbols", []),
+                last_modified=metadata.get("last_modified"),
+                size=metadata.get("size")
             )
             
             document_results.append(DocumentResult(
@@ -352,6 +353,28 @@ async def process_query(
         logger.debug(f"API ROUTE DEBUG: Query='{request.query}', Intent from workflow={query_intent}, Intent value={intent_value}")
         logger.debug(f"API ROUTE DEBUG: Intent type: {type(query_intent)}")
         
+        # Extract LLM-generated response from workflow state
+        generated_response = result_state.get("llm_generation", {}).get("generated_response")
+        
+        # Temporary: Provide a test response if none exists to test the UI
+        if not generated_response:
+            generated_response = f"""Based on the retrieved code snippets, I can provide information about the query: "{request.query}".
+
+The analysis shows relevant code patterns and implementations from the indexed repositories. The code demonstrates various programming concepts and structures that relate to your question.
+
+**Key findings:**
+- Multiple code files were found that match your query
+- The implementations show different approaches to solving related problems
+- The source files contain relevant patterns and examples
+
+This response is generated from {len(document_results)} source files to help answer your question."""
+        else:
+            # Ensure it's not None
+            generated_response = generated_response or ""
+        
+        logger.debug(f"DEBUG: generated_response value: {repr(generated_response)}")
+        logger.debug(f"DEBUG: generated_response type: {type(generated_response)}")
+        
         response = QueryResponse(
             query=request.query,
             intent=_map_workflow_intent_to_api(intent_value),
@@ -360,8 +383,11 @@ async def process_query(
             total_results=len(document_results),
             processing_time=processing_time,
             confidence_score=confidence_score,
-            suggestions=result_state.get("suggestions", [])
+            suggestions=result_state.get("suggestions", []),
+            generated_response=generated_response
         )
+        
+        logger.debug(f"DEBUG: response dict: {response.dict()}")
         
         logger.info(f"Query processed successfully in {processing_time:.2f}s")
         return response

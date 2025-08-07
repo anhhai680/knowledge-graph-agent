@@ -456,6 +456,145 @@
             40% { transform: scale(1); opacity: 1; }
         }
 
+        /* AI Response and Source References Styles */
+        .ai-response {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .ai-response-content p {
+            margin-bottom: 0.75rem;
+        }
+
+        .ai-response-content p:last-child {
+            margin-bottom: 0;
+        }
+
+        .ai-response-content code {
+            background: #e2e8f0;
+            padding: 0.125rem 0.25rem;
+            border-radius: 3px;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.85em;
+        }
+
+        .sources-section {
+            margin: 1rem 0;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .sources-header {
+            background: #f1f5f9;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .sources-header:hover {
+            background: #e2e8f0;
+        }
+
+        .sources-toggle-icon {
+            transition: transform 0.2s ease;
+            color: #64748b;
+        }
+
+        .sources-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+            color: #374151;
+            font-size: 0.9rem;
+        }
+
+        .sources-content {
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .sources-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        .sources-content.expanded {
+            max-height: none;
+            opacity: 1;
+        }
+
+        .source-item {
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .source-item:last-child {
+            border-bottom: none;
+        }
+
+        .source-header {
+            background: #fafbfc;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .source-info {
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+        }
+
+        .source-content {
+            padding: 0;
+        }
+
+        .source-content pre {
+            margin: 0;
+            border-radius: 0;
+        }
+
+        .query-metadata {
+            display: flex;
+            gap: 1rem;
+            margin: 1rem 0;
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .metadata-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .suggestions-section {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #fffbeb;
+            border: 1px solid #fed7aa;
+            border-radius: 6px;
+        }
+
+        .suggestions-list {
+            margin: 0.5rem 0 0 1rem;
+        }
+
+        .suggestions-list li {
+            margin-bottom: 0.25rem;
+            color: #92400e;
+        }
+
         @media (max-width: 768px) {
             .main-container {
                 flex-direction: column;
@@ -788,44 +927,163 @@
             }
 
             formatQueryResponse(data) {
-                let response = `<p><strong>Query:</strong> ${data.query}</p>`;
-                response += `<p><strong>Processing Time:</strong> ${data.processing_time.toFixed(2)}s</p>`;
-                response += `<p><strong>Results Found:</strong> ${data.total_results}</p>`;
+                let response = '';
                 
+                // Display AI-generated response first if available
+                if (data.generated_response) {
+                    response += `
+                        <div class="ai-response">
+                            <div class="ai-response-content">
+                                ${this.formatMarkdown(data.generated_response)}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Display source references section
                 if (data.results && data.results.length > 0) {
-                    response += '<p><strong>Relevant Code Snippets:</strong></p>';
+                    const sourcesId = 'sources-' + Date.now();
+                    response += `
+                        <div class="sources-section">
+                            <div class="sources-header" onclick="toggleSources('${sourcesId}')">
+                                <i class="fas fa-chevron-right sources-toggle-icon"></i>
+                                <span class="sources-title">
+                                    <i class="fas fa-file-alt"></i>
+                                    Sources (${data.total_results})
+                                </span>
+                            </div>
+                            <div class="sources-content collapsed" id="${sourcesId}">
+                    `;
                     
                     data.results.forEach((result, index) => {
                         const metadata = result.metadata;
                         const language = this.detectLanguage(metadata.file_type || metadata.source);
                         
+                        // Extract repository info and construct GitHub URL
+                        let repositoryUrl = metadata.repository || 'Unknown repository';
+                        let displayFilePath = 'Unknown file path';
+                        
+                        // Extract specific file information from code content
+                        if (repositoryUrl && repositoryUrl !== 'Unknown repository') {
+                            if (repositoryUrl.startsWith('http')) {
+                                // Already a full URL
+                                displayFilePath = repositoryUrl;
+                            } else if (repositoryUrl.includes('/')) {
+                                // Repository is in format "owner/repo"
+                                displayFilePath = `https://github.com/${repositoryUrl}`;
+                            }
+                            
+                            // Extract specific class/file names from the code content
+                            const codeContent = result.content || '';
+                            let specificPath = '[Source-File]';
+                            
+                            // C# Controller detection (try multiple patterns)
+                            let controllerMatch = codeContent.match(/public\s+class\s+(\w*Controller)/);
+                            if (!controllerMatch) {
+                                // Try constructor pattern if class declaration not found
+                                controllerMatch = codeContent.match(/(\w*Controller)\s*\(/);
+                            }
+                            if (controllerMatch) {
+                                const controllerName = controllerMatch[1];
+                                specificPath = `Controllers/${controllerName}.cs`;
+                            }
+                            // C# Service detection
+                            else {
+                                let serviceMatch = codeContent.match(/public\s+class\s+(\w*Service)/);
+                                if (!serviceMatch) {
+                                    serviceMatch = codeContent.match(/(\w*Service)\s*\(/);
+                                }
+                                if (serviceMatch) {
+                                    const serviceName = serviceMatch[1];
+                                    specificPath = `Services/${serviceName}.cs`;
+                                }
+                                // C# Model detection
+                                else if (codeContent.match(/public\s+class\s+(\w+)/) && !codeContent.includes('Controller') && !codeContent.includes('Service')) {
+                                    const classMatch = codeContent.match(/public\s+class\s+(\w+)/);
+                                    const className = classMatch[1];
+                                    specificPath = `Models/${className}.cs`;
+                                }
+                                // Generic C# file
+                                else if (metadata.language === 'csharp') {
+                                    const classMatch = codeContent.match(/(?:public\s+)?class\s+(\w+)/);
+                                    if (classMatch) {
+                                        const className = classMatch[1];
+                                        specificPath = `${className}.cs`;
+                                    } else {
+                                        specificPath = `[File].cs`;
+                                    }
+                                }
+                            }
+                            // JavaScript/TypeScript detection (only if not already handled)
+                            if (specificPath === '[Source-File]' && (metadata.language === 'javascript' || metadata.language === 'typescript')) {
+                                const functionMatch = codeContent.match(/(?:export\s+)?(?:function|class)\s+(\w+)/);
+                                if (functionMatch) {
+                                    const name = functionMatch[1];
+                                    specificPath = `src/${name}.${metadata.language === 'typescript' ? 'ts' : 'js'}`;
+                                } else {
+                                    specificPath = `src/[File].${metadata.language === 'typescript' ? 'ts' : 'js'}`;
+                                }
+                            }
+                            // Python detection (only if not already handled)
+                            else if (specificPath === '[Source-File]' && metadata.language === 'python') {
+                                const classMatch = codeContent.match(/class\s+(\w+)/);
+                                if (classMatch) {
+                                    const className = classMatch[1];
+                                    specificPath = `src/${className.toLowerCase()}.py`;
+                                } else {
+                                    specificPath = `src/[File].py`;
+                                }
+                            }
+                            
+                            displayFilePath += `/blob/main/${specificPath}`;
+                        }
+                        
                         response += `
-                            <div class="code-block">
-                                <div class="code-header">
-                                    <div class="file-info">
-                                        <i class="fas fa-file-code"></i>
-                                        ${metadata.source} (${metadata.repository})
+                            <div class="source-item">
+                                <div class="source-header">
+                                    <div class="source-info">
+                                        File: ${displayFilePath} | Repository: ${repositoryUrl}
                                     </div>
-                                    <button class="copy-btn" onclick="copyToClipboard('code-${index}')">
-                                        <i class="fas fa-copy"></i>
-                                    </button>
                                 </div>
-                                <div class="code-content">
+                                <div class="source-content">
                                     <pre><code class="language-${language}" id="code-${index}">${this.escapeHtml(result.content)}</code></pre>
                                 </div>
                             </div>
                         `;
                     });
-                } else {
+                    
+                    response += `
+                            </div>
+                        </div>
+                    `;
+                } else if (!data.generated_response) {
                     response += '<p>No relevant code snippets found for your query.</p>';
                 }
 
+                // Display metadata and suggestions at the bottom
+                response += `
+                    <div class="query-metadata">
+                        <span class="metadata-item">
+                            <i class="fas fa-clock"></i>
+                            ${data.processing_time.toFixed(2)}s
+                        </span>
+                        <span class="metadata-item">
+                            <i class="fas fa-chart-line"></i>
+                            ${Math.round(data.confidence_score * 100)}% confidence
+                        </span>
+                    </div>
+                `;
+
                 if (data.suggestions && data.suggestions.length > 0) {
-                    response += '<p><strong>Suggestions:</strong></p><ul>';
+                    response += `
+                        <div class="suggestions-section">
+                            <p><strong>Suggestions:</strong></p>
+                            <ul class="suggestions-list">
+                    `;
                     data.suggestions.forEach(suggestion => {
                         response += `<li>${suggestion}</li>`;
                     });
-                    response += '</ul>';
+                    response += '</ul></div>';
                 }
 
                 return response;
@@ -851,6 +1109,33 @@
                 const div = document.createElement('div');
                 div.textContent = text;
                 return div.innerHTML;
+            }
+
+            formatMarkdown(text) {
+                // Basic markdown formatting for the AI response
+                let formatted = this.escapeHtml(text);
+                
+                // Convert markdown code blocks to HTML
+                formatted = formatted.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+                    const language = lang || 'text';
+                    return `<pre><code class="language-${language}">${code.trim()}</code></pre>`;
+                });
+                
+                // Convert inline code
+                formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+                
+                // Convert bold text
+                formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                
+                // Convert italic text
+                formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                
+                // Convert line breaks to paragraphs
+                formatted = formatted.split('\n\n').map(paragraph => 
+                    paragraph.trim() ? `<p>${paragraph.replace(/\n/g, '<br>')}</p>` : ''
+                ).join('');
+                
+                return formatted;
             }
 
             addMessage(type, content, isError = false) {
@@ -962,6 +1247,24 @@
                 }).catch(err => {
                     console.error('Failed to copy text: ', err);
                 });
+            }
+        }
+
+        // Global function for toggling sources display
+        function toggleSources(sourcesId) {
+            const sourcesContent = document.getElementById(sourcesId);
+            const toggleIcon = sourcesContent.previousElementSibling.querySelector('.sources-toggle-icon');
+            
+            if (sourcesContent.classList.contains('collapsed')) {
+                sourcesContent.classList.remove('collapsed');
+                sourcesContent.classList.add('expanded');
+                toggleIcon.classList.remove('fa-chevron-right');
+                toggleIcon.classList.add('fa-chevron-down');
+            } else {
+                sourcesContent.classList.remove('expanded');
+                sourcesContent.classList.add('collapsed');
+                toggleIcon.classList.remove('fa-chevron-down');
+                toggleIcon.classList.add('fa-chevron-right');
             }
         }
 
