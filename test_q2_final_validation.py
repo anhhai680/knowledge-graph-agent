@@ -12,7 +12,6 @@ import asyncio
 from unittest.mock import Mock, patch
 
 # Set up path and environment
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 os.environ['OPENAI_API_KEY'] = 'test_key'
 os.environ['GITHUB_TOKEN'] = 'test_token'
 os.environ['DATABASE_TYPE'] = 'chroma'
