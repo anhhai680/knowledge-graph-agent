@@ -273,21 +273,21 @@ graph TB
 Here's how these connections are implemented:
 
 **Frontend to Backend Communication:**
-- **React API calls**: Reference specific files like `car-web-client/src/hooks/useCars.ts` with line numbers for fetching car data
-- **WebSocket connection**: Reference files like `car-web-client/src/hooks/useNotifications.ts` for real-time updates
+- **React API calls**: Reference specific file_path from context documents with line numbers for fetching car data and implementation details
+- **WebSocket connection**: Reference files from context for real-time updates
 
 **Inter-Service HTTP Communication:**
-- **Car verification**: Reference specific service files with methods and line numbers
+- **Car verification**: Reference specific service files with implementation methods and line numbers
 - **Status updates**: Reference integration service files with specific methods
 
 **Event-Driven Communication:**
-- **Event publishing**: Reference event publisher files with specific methods and line numbers
-- **Event consumption**: Reference event handler files with specific methods
+- **Event publishing**: Reference event publisher files with specific method implementations and line numbers  
+- **Event consumption**: Reference event handler files with specific method implementations
 
 Provide a conversational explanation that explains what the user is seeing in terms of a modern microservices architecture, using the exact format and style from the expected Q2 response pattern.
 
 Make sure to:
-1. Include specific file paths and line number references where available from the context
+1. Include specific file_path references and line number references where available from the context
 2. Use conversational language explaining the architecture
 3. Focus on the four main services and their connections
 4. Explain both the obvious and interesting patterns
