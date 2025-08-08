@@ -441,6 +441,46 @@
             font-size: 0.8rem;
         }
 
+        .mermaid-container {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            overflow: hidden;
+        }
+
+        .mermaid-diagram {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            overflow-x: auto;
+        }
+
+        .mermaid-diagram pre {
+            margin: 0;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .mermaid-note {
+            background: #f1f5f9;
+            padding: 0.5rem 1rem;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        .mermaid-note p {
+            margin: 0;
+            font-size: 0.8rem;
+        }
+
+        .mermaid-note i {
+            margin-right: 0.5rem;
+            color: #3b82f6;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -790,34 +830,42 @@
             formatQueryResponse(data) {
                 let response = `<p><strong>Query:</strong> ${data.query}</p>`;
                 response += `<p><strong>Processing Time:</strong> ${data.processing_time.toFixed(2)}s</p>`;
-                response += `<p><strong>Results Found:</strong> ${data.total_results}</p>`;
                 
-                if (data.results && data.results.length > 0) {
-                    response += '<p><strong>Relevant Code Snippets:</strong></p>';
-                    
-                    data.results.forEach((result, index) => {
-                        const metadata = result.metadata;
-                        const language = this.detectLanguage(metadata.file_type || metadata.source);
-                        
-                        response += `
-                            <div class="code-block">
-                                <div class="code-header">
-                                    <div class="file-info">
-                                        <i class="fas fa-file-code"></i>
-                                        ${metadata.source} (${metadata.repository})
-                                    </div>
-                                    <button class="copy-btn" onclick="copyToClipboard('code-${index}')">
-                                        <i class="fas fa-copy"></i>
-                                    </button>
-                                </div>
-                                <div class="code-content">
-                                    <pre><code class="language-${language}" id="code-${index}">${this.escapeHtml(result.content)}</code></pre>
-                                </div>
-                            </div>
-                        `;
-                    });
+                // Check if this is a generated response (like Q2 system visualization)
+                if (data.response_type === 'generated' && data.generated_response) {
+                    response += '<p><strong>Generated Response:</strong></p>';
+                    response += this.formatGeneratedResponse(data.generated_response);
                 } else {
-                    response += '<p>No relevant code snippets found for your query.</p>';
+                    // Standard search results display
+                    response += `<p><strong>Results Found:</strong> ${data.total_results}</p>`;
+                    
+                    if (data.results && data.results.length > 0) {
+                        response += '<p><strong>Relevant Code Snippets:</strong></p>';
+                        
+                        data.results.forEach((result, index) => {
+                            const metadata = result.metadata;
+                            const language = this.detectLanguage(metadata.file_type || metadata.source);
+                            
+                            response += `
+                                <div class="code-block">
+                                    <div class="code-header">
+                                        <div class="file-info">
+                                            <i class="fas fa-file-code"></i>
+                                            ${metadata.source} (${metadata.repository})
+                                        </div>
+                                        <button class="copy-btn" onclick="copyToClipboard('code-${index}')">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </div>
+                                    <div class="code-content">
+                                        <pre><code class="language-${language}" id="code-${index}">${this.escapeHtml(result.content)}</code></pre>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        response += '<p>No relevant code snippets found for your query.</p>';
+                    }
                 }
 
                 if (data.suggestions && data.suggestions.length > 0) {
@@ -831,7 +879,84 @@
                 return response;
             }
 
-            detectLanguage(fileType) {
+            formatGeneratedResponse(generatedContent) {
+                let response = '';
+                
+                // Check if the content contains Mermaid diagrams
+                const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/g;
+                let lastIndex = 0;
+                let match;
+                
+                while ((match = mermaidRegex.exec(generatedContent)) !== null) {
+                    // Add any text before the mermaid diagram
+                    if (match.index > lastIndex) {
+                        const textBefore = generatedContent.substring(lastIndex, match.index);
+                        response += this.formatText(textBefore);
+                    }
+                    
+                    // Add the mermaid diagram
+                    const mermaidCode = match[1];
+                    response += this.formatMermaidDiagram(mermaidCode);
+                    
+                    lastIndex = mermaidRegex.lastIndex;
+                }
+                
+                // Add any remaining text after the last mermaid diagram
+                if (lastIndex < generatedContent.length) {
+                    const remainingText = generatedContent.substring(lastIndex);
+                    response += this.formatText(remainingText);
+                }
+                
+                // If no mermaid diagrams were found, just format as text
+                if (lastIndex === 0) {
+                    response = this.formatText(generatedContent);
+                }
+                
+                return response;
+            }
+
+            formatMermaidDiagram(mermaidCode) {
+                const diagramId = `mermaid-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                
+                return `
+                    <div class="mermaid-container">
+                        <div class="code-header">
+                            <div class="file-info">
+                                <i class="fas fa-project-diagram"></i>
+                                System Architecture Diagram
+                            </div>
+                            <button class="copy-btn" onclick="copyToClipboard('${diagramId}')">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="mermaid-diagram" id="${diagramId}">
+                            <pre><code class="language-mermaid">${this.escapeHtml(mermaidCode)}</code></pre>
+                        </div>
+                        <div class="mermaid-note">
+                            <p><small><i class="fas fa-info-circle"></i> This is a Mermaid diagram showing the system architecture. Copy the code above to render it in a Mermaid-compatible viewer.</small></p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            formatText(text) {
+                if (!text || text.trim() === '') return '';
+                
+                // Convert markdown-style formatting to HTML
+                let formatted = text
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // Bold
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')  // Italic
+                    .replace(/`(.*?)`/g, '<code>$1</code>')  // Inline code
+                    .replace(/\n\n/g, '</p><p>')  // Paragraphs
+                    .replace(/\n/g, '<br>');  // Line breaks
+                
+                // Wrap in paragraph if not already wrapped
+                if (!formatted.startsWith('<p>') && !formatted.startsWith('<div>') && !formatted.startsWith('<h')) {
+                    formatted = '<p>' + formatted + '</p>';
+                }
+                
+                return formatted;
+            }
                 const languageMap = {
                     '.py': 'python', '.js': 'javascript', '.ts': 'typescript',
                     '.jsx': 'javascript', '.tsx': 'typescript', '.cs': 'csharp',
@@ -948,17 +1073,20 @@
             }
         }
 
-        function copyToClipboard(event,elementId) {
+        function copyToClipboard(elementId) {
             const element = document.getElementById(elementId);
             if (element) {
                 const text = element.textContent;
                 navigator.clipboard.writeText(text).then(() => {
-                    const btn = event.target.closest('.copy-btn');
-                    const originalIcon = btn.innerHTML;
-                    btn.innerHTML = '<i class="fas fa-check"></i>';
-                    setTimeout(() => {
-                        btn.innerHTML = originalIcon;
-                    }, 1000);
+                    // Find the copy button that was clicked
+                    const copyBtn = document.querySelector(`button[onclick*="${elementId}"]`);
+                    if (copyBtn) {
+                        const originalIcon = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="fas fa-check"></i>';
+                        setTimeout(() => {
+                            copyBtn.innerHTML = originalIcon;
+                        }, 1000);
+                    }
                 }).catch(err => {
                     console.error('Failed to copy text: ', err);
                 });
