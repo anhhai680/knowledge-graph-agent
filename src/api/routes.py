@@ -351,78 +351,34 @@ async def process_query(
         if is_q2_query_direct and not is_q2_response:
             logger.warning("API Q2 FALLBACK: Q2 query detected but response doesn't contain Q2 content. Creating fallback Q2 response.")
             
-            # Create a basic Q2 response with system architecture
-            fallback_q2_response = """Looking at the system architecture based on the code repositories:
+            # Import here to avoid circular imports
+            from src.utils.prompt_manager import PromptManager
+            
+            # Create a generic Q2 response based on actual repositories
+            prompt_manager = PromptManager()
+            repositories = prompt_manager._get_repository_information()
+            mermaid_diagram = prompt_manager._generate_generic_mermaid_diagram(repositories)
+            architecture_explanation = prompt_manager._generate_architecture_explanation(repositories)
+            
+            fallback_q2_response = f"""Looking at the system architecture based on the available repositories:
 
 ```mermaid
 graph TB
-    subgraph "Frontend Layer"
-        WC[car-web-client<br/>React + TypeScript<br/>User Interface]
-    end
-    
-    subgraph "API Gateway"
-        AGW[Load Balancer<br/>Rate Limiting<br/>Authentication]
-    end
-    
-    subgraph "Microservices"
-        CLS[car-listing-service<br/>.NET 8 Web API<br/>Inventory Management]
-        OS[car-order-service<br/>.NET 8 Web API<br/>Order Processing]
-        NS[car-notification-service<br/>.NET 8 Web API<br/>Event Notifications]
-    end
-    
-    subgraph "Data Layer"
-        CLSDB[(PostgreSQL<br/>Car Catalog)]
-        ODB[(PostgreSQL<br/>Orders & Payments)]
-        NDB[(MongoDB<br/>Notifications)]
-    end
-    
-    subgraph "Message Infrastructure"
-        RMQ[RabbitMQ<br/>Event Broker]
-    end
-    
-    %% Frontend Communication
-    WC -->|HTTPS REST| AGW
-    AGW --> CLS
-    AGW --> OS
-    WC -->|WebSocket Connect| NS
-    NS -->|WebSocket Updates| WC
-    
-    %% Inter-Service Communication
-    OS -->|HTTP| CLS
-    
-    %% Event-Driven Communication
-    CLS -->|Events| RMQ
-    OS -->|Events| RMQ
-    RMQ -->|Events| NS
-    
-    %% Data Persistence
-    CLS --> CLSDB
-    OS --> ODB
-    NS --> NDB
+{mermaid_diagram}
 ```
 
-## How the Services Work Together
+{architecture_explanation}
 
-The system follows a **microservices architecture** with four main components:
+**Communication Patterns:**
+- **API Integration**: Services communicate through well-defined REST APIs
+- **Data Flow**: Information flows between components based on business requirements  
+- **Modular Design**: Each repository handles specific functionality and concerns
 
-**Frontend to Backend Communication:**
-- **React API calls**: The car-web-client uses HTTP REST calls to interact with services through the API gateway
-- **WebSocket connection**: Real-time updates are handled through WebSocket connections to the notification service
-
-**Inter-Service HTTP Communication:**
-- **Car verification**: The order service communicates with the listing service to verify car availability and details
-- **Service discovery**: Services communicate through well-defined REST APIs
-
-**Event-Driven Communication:**
-- **Car events**: When cars are added/updated in the listing service, events are published to RabbitMQ
-- **Order events**: Order status changes trigger events that flow to the notification service
-- **Async processing**: RabbitMQ handles the asynchronous event flow between services
-
-This architecture provides scalability, maintainability, and clear separation of concerns between the different business domains."""
+This architecture provides flexibility and maintainability by organizing functionality into separate, focused components."""
             
             generated_answer = fallback_q2_response
             is_q2_response = True
-            logger.info("API Q2 FALLBACK: Created fallback Q2 response with system architecture")
+            logger.info("API Q2 FALLBACK: Created generic fallback Q2 response based on actual repositories")
         
         logger.debug(f"Generated answer length: {len(generated_answer)}")
         logger.debug(f"Is Q2 response: {is_q2_response}")

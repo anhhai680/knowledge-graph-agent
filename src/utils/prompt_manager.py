@@ -212,85 +212,34 @@ Please provide what insights you can based on the available context, and clearly
         self.q2_system_visualization_template = ChatPromptTemplate.from_messages([
             ("system", "{system_prompt}"),
             ("human", """
-I need to provide a system relationship visualization response that includes both a Mermaid diagram and detailed explanation with code references.
+I need to provide a system relationship visualization response that includes both a Mermaid diagram and detailed explanation with code references based on the actual repositories in the system.
 
 **Question:** {query}
+
+**Available Repositories:**
+{repository_info}
 
 **Context Available:**
 {context_documents}
 
-Please respond in the following format:
+Please respond with the following format:
 
-Let me show you how these services work together:
+Let me show you the system architecture based on the available repositories:
 
 ```mermaid
 graph TB
-    subgraph "Frontend Layer"
-        WC[car-web-client<br/>React + TypeScript<br/>User Interface]
-    end
-    
-    subgraph "API Gateway"
-        AGW[Load Balancer<br/>Rate Limiting<br/>Authentication]
-    end
-    
-    subgraph "Microservices"
-        CLS[car-listing-service<br/>.NET 8 Web API<br/>Inventory Management]
-        OS[car-order-service<br/>.NET 8 Web API<br/>Order Processing]
-        NS[car-notification-service<br/>.NET 8 Web API<br/>Event Notifications]
-    end
-    
-    subgraph "Data Layer"
-        CLSDB[(PostgreSQL<br/>Car Catalog)]
-        ODB[(PostgreSQL<br/>Orders & Payments)]
-        NDB[(MongoDB<br/>Notifications)]
-    end
-    
-    subgraph "Message Infrastructure"
-        RMQ[RabbitMQ<br/>Event Broker]
-    end
-    
-    %% Frontend Communication
-    WC -->|HTTPS REST| AGW
-    AGW --> CLS
-    AGW --> OS
-    WC -->|WebSocket Connect| NS
-    NS -->|WebSocket Updates| WC
-    
-    %% Inter-Service Communication
-    OS -->|HTTP| CLS
-    
-    %% Event-Driven Communication
-    CLS -->|Events| RMQ
-    OS -->|Events| RMQ
-    RMQ -->|Events| NS
-    
-    %% Data Persistence
-    CLS --> CLSDB
-    OS --> ODB
-    NS --> NDB
+{mermaid_diagram_content}
 ```
 
-Here's how these connections are implemented:
-
-**Frontend to Backend Communication:**
-- **React API calls**: Reference specific file_path from context documents with line numbers for fetching car data and implementation details
-- **WebSocket connection**: Reference files from context for real-time updates
-
-**Inter-Service HTTP Communication:**
-- **Car verification**: Reference specific service files with implementation methods and line numbers
-- **Status updates**: Reference integration service files with specific methods
-
-**Event-Driven Communication:**
-- **Event publishing**: Reference event publisher files with specific method implementations and line numbers  
-- **Event consumption**: Reference event handler files with specific method implementations
-
-Provide a conversational explanation that explains what the user is seeing in terms of a modern microservices architecture, using the exact format and style from the expected Q2 response pattern.
+{architecture_explanation}
 
 Make sure to:
-1. Include specific file_path references and line number references where available from the context
-2. Use conversational language explaining the architecture
-3. Focus on the four main services and their connections
-4. Explain both the obvious and interesting patterns
+1. Create a Mermaid diagram that represents the actual repository structure and technologies
+2. Include specific file_path references and line numbers where available from the context
+3. Use conversational language explaining the architecture
+4. Focus on the relationships between the available repositories/services
+5. Explain both obvious and interesting patterns in the codebase
+6. Adapt the architecture style based on what repositories are actually present
 
 {format_instructions}
 """),
@@ -365,12 +314,25 @@ Provide the best guidance possible while acknowledging the processing limitation
                     language_filter=language_filter or ["all"],
                 )
                 
+                # Get repository information for dynamic diagram generation
+                repositories = self._get_repository_information()
+                repository_info = "\n".join([
+                    f"- **{repo['name']}**: {repo.get('description', 'Repository component')} ({repo.get('url', 'No URL')})"
+                    for repo in repositories
+                ])
+                
+                mermaid_diagram_content = self._generate_generic_mermaid_diagram(repositories)
+                architecture_explanation = self._generate_architecture_explanation(repositories)
+                
                 context_text = self._format_context_documents(context_documents)
                 
                 template = self.q2_system_visualization_template
                 prompt_values = {
                     "system_prompt": system_prompt,
                     "query": query,
+                    "repository_info": repository_info,
+                    "mermaid_diagram_content": mermaid_diagram_content,
+                    "architecture_explanation": architecture_explanation,
                     "context_documents": context_text,
                     "format_instructions": self.output_parser.get_format_instructions(),
                 }
@@ -681,3 +643,178 @@ Format the response with:
             "supported_intents": [intent.value for intent in self.get_supported_intents()],
             "output_parser": self.output_parser.__class__.__name__,
         }
+
+    def _get_repository_information(self) -> List[Dict[str, str]]:
+        """Get repository information from appSettings.json."""
+        import json
+        import os
+        
+        try:
+            settings_path = "appSettings.json"
+            if not os.path.exists(settings_path):
+                # Fallback to alternative path
+                settings_path = os.path.join(os.getcwd(), "appSettings.json")
+            
+            with open(settings_path, "r") as f:
+                app_settings = json.load(f)
+            
+            repositories = app_settings.get("repositories", [])
+            repo_info = []
+            
+            for repo in repositories:
+                repo_info.append({
+                    "name": repo.get("name", "Unknown"),
+                    "url": repo.get("url", ""),
+                    "description": repo.get("description", ""),
+                    "branch": repo.get("branch", "main")
+                })
+            
+            return repo_info
+            
+        except Exception as e:
+            self.logger.warning(f"Could not load repository information: {e}")
+            return []
+
+    def _generate_generic_mermaid_diagram(self, repositories: List[Dict[str, str]]) -> str:
+        """Generate a generic Mermaid diagram based on available repositories."""
+        if not repositories:
+            return """    subgraph "System"
+        SYS[System Architecture<br/>No repositories configured]
+    end"""
+        
+        # Categorize repositories by type (heuristic)
+        frontend_repos = []
+        service_repos = []
+        other_repos = []
+        
+        for repo in repositories:
+            name = repo["name"].lower()
+            if any(keyword in name for keyword in ["web", "client", "frontend", "ui", "app"]):
+                frontend_repos.append(repo)
+            elif any(keyword in name for keyword in ["service", "api", "server", "backend"]):
+                service_repos.append(repo)
+            else:
+                other_repos.append(repo)
+        
+        diagram_parts = []
+        used_names = set()
+        repo_name_map = {}  # Store consistent name mappings
+        
+        def get_unique_short_name(repo_name: str) -> str:
+            """Generate a unique short name for the repository."""
+            if repo_name in repo_name_map:
+                return repo_name_map[repo_name]
+                
+            # Try different strategies for unique naming
+            base_name = repo_name.replace("-", "").replace("_", "").upper()
+            
+            # Strategy 1: Use last significant word
+            words = repo_name.lower().split("-")
+            if len(words) > 1:
+                last_word = words[-1][:3].upper()
+                if last_word not in used_names:
+                    used_names.add(last_word)
+                    repo_name_map[repo_name] = last_word
+                    return last_word
+            
+            # Strategy 2: Use first 3 characters
+            short = base_name[:3]
+            if short not in used_names:
+                used_names.add(short)
+                repo_name_map[repo_name] = short
+                return short
+                
+            # Strategy 3: Add numbers
+            for i in range(1, 10):
+                candidate = f"{short}{i}"
+                if candidate not in used_names:
+                    used_names.add(candidate)
+                    repo_name_map[repo_name] = candidate
+                    return candidate
+            
+            # Fallback
+            fallback = base_name[:4]
+            repo_name_map[repo_name] = fallback
+            return fallback
+        
+        # Frontend layer
+        if frontend_repos:
+            diagram_parts.append('    subgraph "Frontend Layer"')
+            for repo in frontend_repos:
+                short_name = get_unique_short_name(repo["name"])
+                diagram_parts.append(f'        {short_name}[{repo["name"]}<br/>Frontend Application]')
+            diagram_parts.append('    end')
+            diagram_parts.append('')
+        
+        # Services layer
+        if service_repos:
+            diagram_parts.append('    subgraph "Services Layer"')
+            for repo in service_repos:
+                short_name = get_unique_short_name(repo["name"])
+                diagram_parts.append(f'        {short_name}[{repo["name"]}<br/>Backend Service]')
+            diagram_parts.append('    end')
+            diagram_parts.append('')
+        
+        # Other components
+        if other_repos:
+            diagram_parts.append('    subgraph "Other Components"')
+            for repo in other_repos:
+                short_name = get_unique_short_name(repo["name"])
+                diagram_parts.append(f'        {short_name}[{repo["name"]}<br/>Component]')
+            diagram_parts.append('    end')
+            diagram_parts.append('')
+        
+        # Add basic connections if we have both frontend and services
+        if frontend_repos and service_repos:
+            diagram_parts.append('    %% Frontend to Services Communication')
+            for frontend in frontend_repos:
+                frontend_short = repo_name_map[frontend["name"]]
+                for service in service_repos:
+                    service_short = repo_name_map[service["name"]]
+                    diagram_parts.append(f'    {frontend_short} -->|HTTP API| {service_short}')
+        
+        return '\n'.join(diagram_parts)
+
+    def _generate_architecture_explanation(self, repositories: List[Dict[str, str]]) -> str:
+        """Generate a generic architecture explanation based on repositories."""
+        if not repositories:
+            return """## System Architecture
+
+No repositories are currently configured in the system. Please add repositories to appSettings.json to see the system architecture.
+
+**To add repositories:**
+1. Edit the appSettings.json file
+2. Add repository entries with name, url, description, and branch
+3. Re-run the indexing process"""
+        
+        explanation_parts = []
+        explanation_parts.append("## How the System Works Together")
+        explanation_parts.append("")
+        explanation_parts.append(f"The system consists of **{len(repositories)} repositories** working together:")
+        explanation_parts.append("")
+        
+        for repo in repositories:
+            explanation_parts.append(f"**{repo['name']}**: {repo.get('description', 'Repository component')}")
+        
+        explanation_parts.append("")
+        explanation_parts.append("**Architecture Patterns:**")
+        
+        # Determine architecture type based on repositories
+        has_frontend = any("web" in repo["name"].lower() or "client" in repo["name"].lower() for repo in repositories)
+        has_services = any("service" in repo["name"].lower() or "api" in repo["name"].lower() for repo in repositories)
+        
+        if has_frontend and has_services:
+            explanation_parts.append("- **Frontend-Backend Separation**: Clear separation between user interface and business logic")
+            explanation_parts.append("- **Service-Oriented Architecture**: Multiple specialized services handling different concerns")
+            explanation_parts.append("- **API Communication**: Services communicate through well-defined APIs")
+        elif has_services:
+            explanation_parts.append("- **Service-Oriented Architecture**: Multiple services handling different business domains")
+            explanation_parts.append("- **Microservices Pattern**: Distributed system with independent, deployable services")
+        else:
+            explanation_parts.append("- **Modular Architecture**: Components organized into separate repositories")
+            explanation_parts.append("- **Separation of Concerns**: Each repository handles specific functionality")
+        
+        explanation_parts.append("")
+        explanation_parts.append("This architecture provides scalability, maintainability, and clear separation of concerns.")
+        
+        return '\n'.join(explanation_parts)
