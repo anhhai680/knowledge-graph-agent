@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test formatGeneratedResponse Function</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-container { border: 1px solid #ccc; padding: 20px; margin: 10px 0; }
+        .test-result { background: #f5f5f5; padding: 10px; border-left: 3px solid #007cba; }
+        .mermaid-container { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 10px 0; }
+        .code-header { background: #334155; padding: 10px; color: #e2e8f0; }
+        .mermaid-diagram { background: #1e293b; color: #e2e8f0; padding: 10px; }
+        .mermaid-note { background: #f1f5f9; padding: 10px; border-top: 1px solid #e2e8f0; color: #64748b; }
+    </style>
+</head>
+<body>
+    <h1>Test formatGeneratedResponse Function</h1>
+    
+    <div class="test-container">
+        <h3>Test 1: Text with Mermaid Diagram</h3>
+        <div id="test1-input">
+            <strong>Input:</strong>
+            <pre>Here is a system architecture:
+
+```mermaid
+graph TD
+    A[User] --> B[Web Interface]
+    B --> C[API Gateway]
+    C --> D[Knowledge Graph Agent]
+```
+
+This shows the basic flow.</pre>
+        </div>
+        <div class="test-result" id="test1-result">
+            <!-- Result will be populated here -->
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h3>Test 2: Plain Text Only</h3>
+        <div id="test2-input">
+            <strong>Input:</strong>
+            <pre>This is just **plain text** with some *formatting* and `code snippets`.</pre>
+        </div>
+        <div class="test-result" id="test2-result">
+            <!-- Result will be populated here -->
+        </div>
+    </div>
+
+    <script>
+        // Copy the relevant functions from the main application
+        function formatGeneratedResponse(generatedContent) {
+            let response = '';
+            
+            // Check if the content contains Mermaid diagrams
+            const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/g;
+            let lastIndex = 0;
+            let match;
+            
+            while ((match = mermaidRegex.exec(generatedContent)) !== null) {
+                // Add any text before the mermaid diagram
+                if (match.index > lastIndex) {
+                    const textBefore = generatedContent.substring(lastIndex, match.index);
+                    response += formatText(textBefore);
+                }
+                
+                // Add the mermaid diagram
+                const mermaidCode = match[1];
+                response += formatMermaidDiagram(mermaidCode);
+                
+                lastIndex = mermaidRegex.lastIndex;
+            }
+            
+            // Add any remaining text after the last mermaid diagram
+            if (lastIndex < generatedContent.length) {
+                const remainingText = generatedContent.substring(lastIndex);
+                response += formatText(remainingText);
+            }
+            
+            // If no mermaid diagrams were found, just format as text
+            if (lastIndex === 0) {
+                response = formatText(generatedContent);
+            }
+            
+            return response;
+        }
+
+        function formatMermaidDiagram(mermaidCode) {
+            const diagramId = `mermaid-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            
+            return `
+                <div class="mermaid-container">
+                    <div class="code-header">
+                        <div class="file-info">
+                            System Architecture Diagram
+                        </div>
+                    </div>
+                    <div class="mermaid-diagram" id="${diagramId}">
+                        <pre><code class="language-mermaid">${escapeHtml(mermaidCode)}</code></pre>
+                    </div>
+                    <div class="mermaid-note">
+                        <p><small>This is a Mermaid diagram showing the system architecture.</small></p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function formatText(text) {
+            if (!text || text.trim() === '') return '';
+            
+            // Convert markdown-style formatting to HTML
+            let formatted = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // Bold
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')  // Italic
+                .replace(/`(.*?)`/g, '<code>$1</code>')  // Inline code
+                .replace(/\n\n/g, '</p><p>')  // Paragraphs
+                .replace(/\n/g, '<br>');  // Line breaks
+            
+            // Wrap in paragraph if not already wrapped
+            if (!formatted.startsWith('<p>') && !formatted.startsWith('<div>') && !formatted.startsWith('<h')) {
+                formatted = '<p>' + formatted + '</p>';
+            }
+            
+            return formatted;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Run tests
+        document.addEventListener('DOMContentLoaded', function() {
+            // Test 1: Text with Mermaid diagram
+            const test1Input = `Here is a system architecture:
+
+\`\`\`mermaid
+graph TD
+    A[User] --> B[Web Interface]
+    B --> C[API Gateway]
+    C --> D[Knowledge Graph Agent]
+\`\`\`
+
+This shows the basic flow.`;
+            
+            document.getElementById('test1-result').innerHTML = formatGeneratedResponse(test1Input);
+            
+            // Test 2: Plain text only
+            const test2Input = "This is just **plain text** with some *formatting* and `code snippets`.";
+            document.getElementById('test2-result').innerHTML = formatGeneratedResponse(test2Input);
+            
+            console.log('✅ Tests completed successfully!');
+        });
+    </script>
+</body>
+</html>
