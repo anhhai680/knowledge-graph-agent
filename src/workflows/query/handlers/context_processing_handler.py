@@ -51,10 +51,17 @@ class ContextProcessingHandler(BaseWorkflow[QueryState]):
             is_sufficient, context_length = self._check_context_sufficiency(documents)
             state["context_size"] = context_length
             
-            if not is_sufficient:
+            # For Q2 system visualization queries, context sufficiency is not critical
+            is_q2_visualization = state.get("is_q2_system_visualization", False)
+            
+            if not is_sufficient and not is_q2_visualization:
                 self.logger.warning(f"Insufficient context: {context_length} chars (min: {self.min_context_length})")
                 # This will be handled by the orchestrator to expand search
                 state["context_sufficient"] = False
+            elif not is_sufficient and is_q2_visualization:
+                self.logger.info(f"Q2 system visualization query - proceeding with {context_length} chars context")
+                # For Q2 queries, we proceed even with insufficient traditional context
+                state["context_sufficient"] = True
             else:
                 state["context_sufficient"] = True
                 
@@ -78,10 +85,18 @@ class ContextProcessingHandler(BaseWorkflow[QueryState]):
         elif step == "validate_context":
             # Validate the prepared context
             context = state["retrieval_config"].get("prepared_context", "")
-            if not context.strip():
+            is_q2_visualization = state.get("is_q2_system_visualization", False)
+            
+            # For Q2 system visualization queries, allow empty context since they can 
+            # generate system architecture diagrams from the specialized template
+            if not context.strip() and not is_q2_visualization:
                 raise ValueError("Prepared context is empty")
-                
-            self.logger.info(f"Prepared context: {len(context)} characters")
+            elif not context.strip() and is_q2_visualization:
+                self.logger.info("Q2 system visualization query - proceeding with minimal context")
+                # Set a minimal context indicator for Q2 queries
+                state["retrieval_config"]["prepared_context"] = "Q2_SYSTEM_VISUALIZATION"
+            else:
+                self.logger.info(f"Prepared context: {len(context)} characters")
             
             # Update progress using existing helper function
             state = update_workflow_progress(state, 70.0, "context_preparation_complete")
@@ -90,6 +105,10 @@ class ContextProcessingHandler(BaseWorkflow[QueryState]):
     
     def validate_state(self, state: QueryState) -> bool:
         """Validate that the state contains required fields for context processing."""
+        # For Q2 system visualization queries, context documents are not strictly required
+        is_q2_visualization = state.get("is_q2_system_visualization", False)
+        if is_q2_visualization:
+            return True
         return bool(state.get("context_documents"))
     
     def _check_context_sufficiency(self, documents: List[Document]) -> Tuple[bool, int]:
