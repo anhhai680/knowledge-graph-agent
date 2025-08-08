@@ -172,6 +172,9 @@ class QueryResponse(BaseModel):
     processing_time: float = Field(..., description="Query processing time in seconds")
     confidence_score: float = Field(..., description="Overall confidence score", ge=0.0, le=1.0)
     suggestions: Optional[List[str]] = Field(None, description="Query improvement suggestions")
+    # New field for Q2 system visualization and other generated responses
+    generated_response: Optional[str] = Field(None, description="Generated response content (e.g., Mermaid diagrams for Q2 queries)")
+    response_type: Optional[str] = Field(None, description="Type of response: 'search' for document results, 'generated' for Q2/chat responses")
 
 
 class WorkflowProgress(BaseModel):

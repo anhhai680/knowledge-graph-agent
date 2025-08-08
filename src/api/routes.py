@@ -309,6 +309,12 @@ async def process_query(
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()
         
+        # Check if this is a Q2 system visualization query that should return generated content
+        is_q2_query = result_state.get("is_q2_system_visualization", False)
+        generated_response = result_state.get("llm_generation", {}).get("generated_response")
+        
+        logger.debug(f"Q2 Query: {is_q2_query}, Generated Response Available: {bool(generated_response)}")
+        
         # Convert workflow results to API response
         document_results = []
         for doc in result_state.get("context_documents", []):
@@ -351,6 +357,18 @@ async def process_query(
         logger.debug(f"API ROUTE DEBUG: Final result_state keys: {list(result_state.keys())}")
         logger.debug(f"API ROUTE DEBUG: Query='{request.query}', Intent from workflow={query_intent}, Intent value={intent_value}")
         logger.debug(f"API ROUTE DEBUG: Intent type: {type(query_intent)}")
+        logger.debug(f"API ROUTE DEBUG: Q2 Query: {is_q2_query}, Generated Response Length: {len(generated_response) if generated_response else 0}")
+        
+        # Determine response type and content based on query type
+        if is_q2_query and generated_response:
+            # For Q2 queries, return the generated Mermaid diagram and explanation
+            response_type = "generated"
+            logger.info(f"Returning generated response for Q2 query: {len(generated_response)} characters")
+        else:
+            # For regular queries, return search results
+            response_type = "search"
+            generated_response = None
+            logger.info(f"Returning search results: {len(document_results)} documents")
         
         response = QueryResponse(
             query=request.query,
@@ -360,7 +378,9 @@ async def process_query(
             total_results=len(document_results),
             processing_time=processing_time,
             confidence_score=confidence_score,
-            suggestions=result_state.get("suggestions", [])
+            suggestions=result_state.get("suggestions", []),
+            generated_response=generated_response,
+            response_type=response_type
         )
         
         logger.info(f"Query processed successfully in {processing_time:.2f}s")
