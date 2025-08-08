@@ -13,7 +13,6 @@ import sys
 import os
 
 # Add src to path for testing
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 class TestQ2SystemVisualization(unittest.TestCase):
     """Test cases for Q2 system relationship visualization feature."""
