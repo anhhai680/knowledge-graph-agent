@@ -290,79 +290,88 @@ async def process_query(
     
     This endpoint processes user queries using the complete LangGraph query
     workflow, including intent analysis, document retrieval, and response generation.
+    For Q2 system visualization queries, it returns generated Mermaid diagrams.
     """
     try:
         start_time = datetime.now()
         
         logger.info(f"Processing query: {request.query[:100]}...")
         
-        # Execute query workflow using the workflow's proper state creation
-        result_state = await query_workflow.run(
-            query=request.query,
-            repositories=request.repositories,
-            languages=request.language_filter,
-            k=request.top_k or 5
+        # Use RAGAgent for Q2 queries and advanced prompt management
+        # Import here to avoid circular imports
+        from src.agents.rag_agent import RAGAgent
+        
+        # Create RAGAgent with the same workflow
+        rag_agent = RAGAgent(
+            workflow=query_workflow,
+            default_top_k=request.top_k or 5,
+            repository_filter=request.repositories,
+            language_filter=request.language_filter
         )
-
-        logger.debug(f"Final workflow state: {result_state}")
+        
+        # Process query through RAGAgent which supports Q2 queries
+        agent_result = await rag_agent._process_input({
+            "query": request.query,
+            "repositories": request.repositories,
+            "language_filter": request.language_filter,
+            "top_k": request.top_k or 5
+        })
+        
+        logger.debug(f"RAGAgent result: {agent_result}")
         
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()
         
-        # Check if this is a Q2 system visualization query that should return generated content
-        is_q2_query = result_state.get("is_q2_system_visualization", False)
-        generated_response = result_state.get("llm_generation", {}).get("generated_response")
+        # Check if this is a Q2 query by looking for generated response content
+        generated_answer = agent_result.get("answer", "")
+        is_q2_response = (
+            "mermaid" in generated_answer.lower() or
+            "graph TB" in generated_answer or
+            agent_result.get("prompt_metadata", {}).get("template_type") == "Q2SystemVisualizationTemplate"
+        )
         
-        logger.debug(f"Q2 Query: {is_q2_query}, Generated Response Available: {bool(generated_response)}")
+        logger.debug(f"Generated answer length: {len(generated_answer)}")
+        logger.debug(f"Is Q2 response: {is_q2_response}")
+        logger.debug(f"Template type: {agent_result.get('prompt_metadata', {}).get('template_type')}")
         
-        # Convert workflow results to API response
+        # Convert RAGAgent sources to API document results
         document_results = []
-        for doc in result_state.get("context_documents", []):
-            # Create DocumentMetadata object properly
+        for source in agent_result.get("sources", []):
+            metadata = source.get("metadata", {})
             doc_metadata = DocumentMetadata(
-                source=doc.get("metadata", {}).get("source", ""),
-                repository=doc.get("metadata", {}).get("repository", ""),
-                language=doc.get("metadata", {}).get("language"),
-                file_type=doc.get("metadata", {}).get("file_type"),
-                symbols=doc.get("metadata", {}).get("symbols", []),
-                last_modified=doc.get("metadata", {}).get("last_modified"),
-                size=doc.get("metadata", {}).get("size")
+                source=metadata.get("file_path", metadata.get("source", "")),
+                repository=metadata.get("repository", ""),
+                language=metadata.get("language"),
+                file_type=metadata.get("file_type"),
+                symbols=metadata.get("symbols", []),
+                last_modified=metadata.get("last_modified"),
+                size=metadata.get("size")
             )
             
             document_results.append(DocumentResult(
-                content=doc.get("content", ""),  # Fixed: changed from "page_content" to "content"
+                content=source.get("content", ""),
                 metadata=doc_metadata,
-                score=0.0,  # Fixed: Set to 0.0 since similarity scores aren't computed in current workflow
-                chunk_index=doc.get("metadata", {}).get("chunk_index")
+                score=0.0,  # RAGAgent doesn't provide similarity scores
+                chunk_index=metadata.get("chunk_index")
             ))
         
-        # Calculate confidence score with proper fallback
-        confidence_score = result_state.get("response_confidence")
-        if confidence_score is None:  
-            # Calculate a basic confidence score based on retrieved documents  
-            doc_count = len(document_results)  
-            if doc_count == 0:  
-                confidence_score = 0.0  
-            else:  
-                # Simple confidence calculation based on document count and content  
-                base_confidence = min(doc_count / 5.0, 1.0)  # More docs = higher confidence  
-                total_content_length = sum(len(doc.content) for doc in document_results)  
-                content_confidence = min(total_content_length / 2000.0, 1.0)  # More content = higher confidence  
-                confidence_score = (base_confidence * 0.6 + content_confidence * 0.4) # Weighted average
+        # Extract confidence score
+        confidence_score = agent_result.get("confidence", 0.0)
         
-        # Extract and properly format the query intent
-        query_intent = result_state.get("query_intent")
+        # Extract and map query intent
+        query_intent = agent_result.get("query_intent")
         intent_value = query_intent.value if query_intent else "general"
         
-        logger.debug(f"API ROUTE DEBUG: Final result_state keys: {list(result_state.keys())}")
-        logger.debug(f"API ROUTE DEBUG: Query='{request.query}', Intent from workflow={query_intent}, Intent value={intent_value}")
+        logger.debug(f"API ROUTE DEBUG: RAGAgent result keys: {list(agent_result.keys())}")
+        logger.debug(f"API ROUTE DEBUG: Query='{request.query}', Intent from agent={query_intent}, Intent value={intent_value}")
         logger.debug(f"API ROUTE DEBUG: Intent type: {type(query_intent)}")
-        logger.debug(f"API ROUTE DEBUG: Q2 Query: {is_q2_query}, Generated Response Length: {len(generated_response) if generated_response else 0}")
+        logger.debug(f"API ROUTE DEBUG: Generated answer length: {len(generated_answer)}")
         
         # Determine response type and content based on query type
-        if is_q2_query and generated_response:
+        if is_q2_response and generated_answer:
             # For Q2 queries, return the generated Mermaid diagram and explanation
             response_type = "generated"
+            generated_response = generated_answer
             logger.info(f"Returning generated response for Q2 query: {len(generated_response)} characters")
         else:
             # For regular queries, return search results
@@ -373,12 +382,12 @@ async def process_query(
         response = QueryResponse(
             query=request.query,
             intent=_map_workflow_intent_to_api(intent_value),
-            strategy=_map_workflow_strategy_to_api(result_state.get("search_strategy", "hybrid")),  # Fixed: use mapping function
+            strategy=_map_workflow_strategy_to_api("semantic"),  # RAGAgent uses semantic search
             results=document_results,
             total_results=len(document_results),
             processing_time=processing_time,
             confidence_score=confidence_score,
-            suggestions=result_state.get("suggestions", []),
+            suggestions=[],  # RAGAgent doesn't provide suggestions currently
             generated_response=generated_response,
             response_type=response_type
         )
