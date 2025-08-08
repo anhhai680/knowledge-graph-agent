@@ -957,6 +957,8 @@
                 
                 return formatted;
             }
+
+            detectLanguage(fileType) {
                 const languageMap = {
                     '.py': 'python', '.js': 'javascript', '.ts': 'typescript',
                     '.jsx': 'javascript', '.tsx': 'typescript', '.cs': 'csharp',
