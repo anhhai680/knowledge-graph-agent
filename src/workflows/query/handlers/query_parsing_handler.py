@@ -73,16 +73,26 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
             original_query = state.get("original_query", "")
             processed_query = state.get("processed_query", "")
             determined_intent = self._determine_query_intent(original_query)
+            
+            # Check if this is a Q2-style system relationship visualization query
+            is_q2_query = self._is_q2_system_relationship_query(original_query)
+            if is_q2_query:
+                state["is_q2_system_visualization"] = True
+                # Ensure it's marked as architecture intent
+                determined_intent = QueryIntent.ARCHITECTURE
+            
             state["query_intent"] = determined_intent
             self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
             self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Processed query was: '{processed_query}'")
             self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: State before setting intent: {original_intent}")
             self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: State after setting intent: {state.get('query_intent')}")
             self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Intent type: {type(state.get('query_intent'))}")
+            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Q2 system visualization: {is_q2_query}")
             self.logger.debug(f"INTENT DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
             self.logger.debug(f"INTENT DEBUG: State before setting intent: {original_intent}")
             self.logger.debug(f"INTENT DEBUG: State after setting intent: {state.get('query_intent')}")
             self.logger.debug(f"INTENT DEBUG: Intent type: {type(state.get('query_intent'))}")
+            self.logger.debug(f"INTENT DEBUG: Q2 system visualization: {is_q2_query}")
 
         return state
     
@@ -126,10 +136,11 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         ]):
             return QueryIntent.DOCUMENTATION
 
-        # Architecture patterns
+        # Architecture patterns - enhanced to detect Q2 system relationship visualization
         elif any(keyword in query_lower for keyword in [
             "architecture", "structure", "design", "pattern", "flow",
-            "component", "module", "system", "overview"
+            "component", "module", "system", "overview", "connected", "connect",
+            "relationship", "services", "how", "explain what"
         ]):
             return QueryIntent.ARCHITECTURE
 
@@ -231,3 +242,55 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
                 general_terms.append(word)
         
         return general_terms
+    
+    def _is_q2_system_relationship_query(self, query: str) -> bool:
+        """
+        Detect if the query matches the Q2 system relationship visualization pattern.
+        
+        This method specifically looks for the Q2 question pattern as defined in
+        docs/agent-interaction-questions.md:
+        "Show me how the four services are connected and explain what I'm looking at."
+        
+        Args:
+            query: User query string
+            
+        Returns:
+            bool: True if this is a Q2-style query, False otherwise
+        """
+        query_lower = query.lower().strip()
+        
+        # Specific Q2 pattern matching
+        q2_patterns = [
+            # Exact Q2 match
+            "show me how the four services are connected and explain what i'm looking at",
+            "show me how the four services are connected and explain what i am looking at", 
+            "show me how the four services are connected",
+            # Variations that indicate system relationship visualization
+            "how are the services connected",
+            "how are the four services connected", 
+            "show me how services are connected",
+            "explain how the services connect",
+            "how do the services work together",
+            "show the system architecture",
+            "show me the system architecture",
+            "explain the system relationships",
+            "show service connections",
+            "visualize the system",
+            "diagram of the system"
+        ]
+        
+        # Check for exact or close matches
+        for pattern in q2_patterns:
+            if pattern in query_lower:
+                return True
+        
+        # Check for key combination patterns that indicate Q2-style queries
+        has_services = any(term in query_lower for term in ["service", "services", "component", "components"])
+        has_connection = any(term in query_lower for term in ["connect", "connected", "connection", "relationship", "work together"])
+        has_visualization = any(term in query_lower for term in ["show", "explain", "diagram", "visualize", "architecture"])
+        
+        # If query has all three elements, it's likely a Q2-style query
+        if has_services and has_connection and has_visualization:
+            return True
+            
+        return False

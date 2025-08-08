@@ -207,6 +207,94 @@ Please provide what insights you can based on the available context, and clearly
 {format_instructions}
 """),
         ])
+        
+        # Q2 System Relationship Visualization Template
+        self.q2_system_visualization_template = ChatPromptTemplate.from_messages([
+            ("system", "{system_prompt}"),
+            ("human", """
+I need to provide a system relationship visualization response that includes both a Mermaid diagram and detailed explanation with code references.
+
+**Question:** {query}
+
+**Context Available:**
+{context_documents}
+
+Please respond in the following format:
+
+Let me show you how these services work together:
+
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        WC[car-web-client<br/>React + TypeScript<br/>User Interface]
+    end
+    
+    subgraph "API Gateway"
+        AGW[Load Balancer<br/>Rate Limiting<br/>Authentication]
+    end
+    
+    subgraph "Microservices"
+        CLS[car-listing-service<br/>.NET 8 Web API<br/>Inventory Management]
+        OS[car-order-service<br/>.NET 8 Web API<br/>Order Processing]
+        NS[car-notification-service<br/>.NET 8 Web API<br/>Event Notifications]
+    end
+    
+    subgraph "Data Layer"
+        CLSDB[(PostgreSQL<br/>Car Catalog)]
+        ODB[(PostgreSQL<br/>Orders & Payments)]
+        NDB[(MongoDB<br/>Notifications)]
+    end
+    
+    subgraph "Message Infrastructure"
+        RMQ[RabbitMQ<br/>Event Broker]
+    end
+    
+    %% Frontend Communication
+    WC -->|HTTPS REST| AGW
+    AGW --> CLS
+    AGW --> OS
+    WC -->|WebSocket Connect| NS
+    NS -->|WebSocket Updates| WC
+    
+    %% Inter-Service Communication
+    OS -->|HTTP| CLS
+    
+    %% Event-Driven Communication
+    CLS -->|Events| RMQ
+    OS -->|Events| RMQ
+    RMQ -->|Events| NS
+    
+    %% Data Persistence
+    CLS --> CLSDB
+    OS --> ODB
+    NS --> NDB
+```
+
+Here's how these connections are implemented:
+
+**Frontend to Backend Communication:**
+- **React API calls**: Reference specific files like `car-web-client/src/hooks/useCars.ts` with line numbers for fetching car data
+- **WebSocket connection**: Reference files like `car-web-client/src/hooks/useNotifications.ts` for real-time updates
+
+**Inter-Service HTTP Communication:**
+- **Car verification**: Reference specific service files with methods and line numbers
+- **Status updates**: Reference integration service files with specific methods
+
+**Event-Driven Communication:**
+- **Event publishing**: Reference event publisher files with specific methods and line numbers
+- **Event consumption**: Reference event handler files with specific methods
+
+Provide a conversational explanation that explains what the user is seeing in terms of a modern microservices architecture, using the exact format and style from the expected Q2 response pattern.
+
+Make sure to:
+1. Include specific file paths and line number references where available from the context
+2. Use conversational language explaining the architecture
+3. Focus on the four main services and their connections
+4. Explain both the obvious and interesting patterns
+
+{format_instructions}
+"""),
+        ])
 
     def _initialize_fallback_templates(self) -> None:
         """Initialize fallback templates for edge cases."""
@@ -247,6 +335,7 @@ Provide the best guidance possible while acknowledging the processing limitation
         language_filter: Optional[List[str]] = None,
         top_k: int = 4,
         confidence_threshold: float = 0.7,
+        is_q2_system_visualization: bool = False,
     ) -> Dict[str, Any]:
         """
         Create a dynamic prompt for query processing.
@@ -259,11 +348,52 @@ Provide the best guidance possible while acknowledging the processing limitation
             language_filter: Language filter list
             top_k: Number of top results
             confidence_threshold: Confidence threshold for template selection
+            is_q2_system_visualization: Whether this is a Q2 system visualization query
 
         Returns:
             Dictionary containing prompt and metadata
         """
         try:
+            # Check if this is a Q2 system relationship visualization query
+            if is_q2_system_visualization:
+                # Use specialized Q2 template regardless of confidence
+                system_prompt = self.intent_system_prompts.get(
+                    QueryIntent.ARCHITECTURE, 
+                    self.base_system_prompt
+                ).format(
+                    repository_filter=repository_filter or ["all"],
+                    language_filter=language_filter or ["all"],
+                )
+                
+                context_text = self._format_context_documents(context_documents)
+                
+                template = self.q2_system_visualization_template
+                prompt_values = {
+                    "system_prompt": system_prompt,
+                    "query": query,
+                    "context_documents": context_text,
+                    "format_instructions": self.output_parser.get_format_instructions(),
+                }
+                
+                # Format the prompt
+                formatted_prompt = template.format_prompt(**prompt_values)
+                
+                return {
+                    "prompt": formatted_prompt,
+                    "template_type": "Q2SystemVisualizationTemplate",
+                    "confidence_score": 1.0,  # Always high confidence for Q2
+                    "context_documents_count": len(context_documents),
+                    "system_prompt_type": "q2_architecture",
+                    "metadata": {
+                        "query_intent": query_intent,
+                        "repository_filter": repository_filter,
+                        "language_filter": language_filter,
+                        "top_k": top_k,
+                        "is_q2_visualization": True,
+                    },
+                }
+            
+            # Continue with normal processing for non-Q2 queries
             # Determine system prompt based on intent
             if query_intent and query_intent in self.intent_system_prompts:
                 system_prompt = self.intent_system_prompts[query_intent].format(

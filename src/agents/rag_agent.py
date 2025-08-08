@@ -171,6 +171,9 @@ class RAGAgent(BaseAgent):
             # Get the actual query intent determined by the workflow
             actual_query_intent = result.get("query_intent")
             
+            # Get Q2 system visualization detection state
+            is_q2_system_visualization = result.get("is_q2_system_visualization", False)
+            
             # Convert dict documents to Document objects for PromptManager compatibility
             document_objects = []
             for doc_dict in retrieved_docs:
@@ -188,6 +191,7 @@ class RAGAgent(BaseAgent):
                 language_filter=lang_filter,
                 top_k=top_k,
                 confidence_threshold=self.confidence_threshold,
+                is_q2_system_visualization=is_q2_system_visualization,
             )
 
             # Check confidence threshold
