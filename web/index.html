@@ -831,7 +831,6 @@
                 let response = `<p><strong>Query:</strong> ${data.query}</p>`;
                 response += `<p><strong>Processing Time:</strong> ${data.processing_time.toFixed(2)}s</p>`;
                 
-                console.log(`Generated Response: ${data.generated_response} and ${data.response_type}`);
                 // Check if this is a generated response (like Q2 system visualization)
                 if (data.response_type === 'generated' && data.generated_response) {
                     response += '<p><strong>Generated Response:</strong></p>';

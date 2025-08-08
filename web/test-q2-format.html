@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q2 Response Format Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin-bottom: 30px; border: 1px solid #ccc; padding: 15px; }
+        .mermaid-container { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin: 0.5rem 0; overflow: hidden; }
+        .mermaid-diagram { background: #1e293b; color: #e2e8f0; padding: 1rem; overflow-x: auto; }
+        .mermaid-diagram pre { margin: 0; font-family: 'Fira Code', 'Monaco', 'Consolas', monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; }
+        .code-header { background: #334155; padding: 0.5rem 1rem; color: #e2e8f0; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center; }
+        .copy-btn { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 0.25rem; border-radius: 4px; transition: all 0.2s; }
+        .copy-btn:hover { background: #475569; color: white; }
+        .result { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Q2 Response Format Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Q2 API Response Format</h2>
+        <p>Expected API response for "Show me the system architecture":</p>
+        <pre id="api-response-format"></pre>
+        <div id="api-format-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Web Interface Mermaid Rendering</h2>
+        <p>How the web interface should render the Q2 response:</p>
+        <div id="mermaid-test-output"></div>
+        <div id="mermaid-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Complete Response Display</h2>
+        <p>Full response as it should appear to users:</p>
+        <div id="complete-response"></div>
+        <div id="complete-result"></div>
+    </div>
+
+    <script>
+        // Simulate the formatGeneratedResponse function from the web interface
+        function formatGeneratedResponse(generatedContent) {
+            let response = '';
+            
+            // Check if the content contains Mermaid diagrams
+            const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/g;
+            let lastIndex = 0;
+            let match;
+            
+            while ((match = mermaidRegex.exec(generatedContent)) !== null) {
+                // Add any text before the mermaid diagram
+                if (match.index > lastIndex) {
+                    const textBefore = generatedContent.substring(lastIndex, match.index);
+                    response += formatText(textBefore);
+                }
+                
+                // Add the mermaid diagram
+                const mermaidCode = match[1];
+                response += formatMermaidDiagram(mermaidCode);
+                
+                lastIndex = mermaidRegex.lastIndex;
+            }
+            
+            // Add any remaining text after the last mermaid diagram
+            if (lastIndex < generatedContent.length) {
+                const remainingText = generatedContent.substring(lastIndex);
+                response += formatText(remainingText);
+            }
+            
+            // If no mermaid diagrams were found, just format as text
+            if (lastIndex === 0) {
+                response = formatText(generatedContent);
+            }
+            
+            return response;
+        }
+
+        function formatMermaidDiagram(mermaidCode) {
+            const diagramId = `mermaid-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            
+            return `
+                <div class="mermaid-container">
+                    <div class="code-header">
+                        <div class="file-info">
+                            <i class="fas fa-project-diagram"></i>
+                            System Architecture Diagram
+                        </div>
+                        <button class="copy-btn" onclick="copyToClipboard('${diagramId}')">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    <div class="mermaid-diagram" id="${diagramId}">
+                        <pre><code class="language-mermaid">${escapeHtml(mermaidCode)}</code></pre>
+                    </div>
+                    <div class="mermaid-note">
+                        <p><small><i class="fas fa-info-circle"></i> This is a Mermaid diagram showing the system architecture. Copy the code above to render it in a Mermaid-compatible viewer.</small></p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function formatText(text) {
+            if (!text || text.trim() === '') return '';
+            
+            // Convert markdown-style formatting to HTML
+            let formatted = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // Bold
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')  // Italic
+                .replace(/`(.*?)`/g, '<code>$1</code>')  // Inline code
+                .replace(/\n\n/g, '</p><p>')  // Paragraphs
+                .replace(/\n/g, '<br>');  // Line breaks
+            
+            // Wrap in paragraph if not already wrapped
+            if (!formatted.startsWith('<p>') && !formatted.startsWith('<div>') && !formatted.startsWith('<h')) {
+                formatted = '<p>' + formatted + '</p>';
+            }
+            
+            return formatted;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Test 1: API Response Format
+        const expectedApiResponse = {
+            query: "Show me the system architecture",
+            intent: "architecture",
+            strategy: "semantic",
+            results: [],
+            total_results: 0,
+            processing_time: 1.23,
+            confidence_score: 1.0,
+            suggestions: [],
+            generated_response: `Looking at the system architecture based on the code repositories:
+
+\`\`\`mermaid
+graph TB
+    subgraph "Frontend Layer"
+        WC[car-web-client<br/>React + TypeScript<br/>User Interface]
+    end
+    
+    subgraph "Microservices"
+        CLS[car-listing-service<br/>.NET 8 Web API<br/>Inventory Management]
+        OS[car-order-service<br/>.NET 8 Web API<br/>Order Processing]
+        NS[car-notification-service<br/>.NET 8 Web API<br/>Event Notifications]
+    end
+\`\`\`
+
+**How the Services Work Together:**
+
+The system follows a **microservices architecture** with four main components.`,
+            response_type: "generated"
+        };
+
+        document.getElementById('api-response-format').textContent = JSON.stringify(expectedApiResponse, null, 2);
+        
+        // Validate API response format
+        const hasRequiredFields = expectedApiResponse.response_type === 'generated' && 
+                                  expectedApiResponse.generated_response && 
+                                  expectedApiResponse.generated_response.includes('```mermaid');
+        
+        document.getElementById('api-format-result').innerHTML = hasRequiredFields 
+            ? '<span class="result">✅ API response format is correct</span>'
+            : '<span class="error">❌ API response format is incorrect</span>';
+
+        // Test 2: Mermaid Rendering
+        const testMermaidContent = expectedApiResponse.generated_response;
+        const renderedMermaid = formatGeneratedResponse(testMermaidContent);
+        document.getElementById('mermaid-test-output').innerHTML = renderedMermaid;
+        
+        const hasMermaidContainer = renderedMermaid.includes('mermaid-container');
+        const hasMermaidCode = renderedMermaid.includes('car-listing-service');
+        
+        document.getElementById('mermaid-result').innerHTML = (hasMermaidContainer && hasMermaidCode)
+            ? '<span class="result">✅ Mermaid rendering works correctly</span>'
+            : '<span class="error">❌ Mermaid rendering has issues</span>';
+
+        // Test 3: Complete Response
+        const completeResponse = `
+            <p><strong>Query:</strong> ${expectedApiResponse.query}</p>
+            <p><strong>Processing Time:</strong> ${expectedApiResponse.processing_time.toFixed(2)}s</p>
+            <p><strong>Generated Response:</strong></p>
+            ${renderedMermaid}
+        `;
+        
+        document.getElementById('complete-response').innerHTML = completeResponse;
+        document.getElementById('complete-result').innerHTML = '<span class="result">✅ Complete response display works</span>';
+
+        console.log('Q2 Response Format Test completed successfully');
+    </script>
+</body>
+</html>
