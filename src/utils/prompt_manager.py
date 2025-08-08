@@ -268,7 +268,7 @@ graph TB
     CLS --> CLSDB
     OS --> ODB
     NS --> NDB
-{mermaid_diagram}
+```
 
 Here's how these connections are implemented:
 
