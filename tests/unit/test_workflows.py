@@ -148,8 +148,8 @@ class TestWorkflowMetadata:
         assert result["current_step"] == "step1"
 
 
-class TestWorkflow(BaseWorkflow):
-    """Test implementation of BaseWorkflow for testing."""
+class MockWorkflow(BaseWorkflow):
+    """Mock implementation of BaseWorkflow for testing."""
 
     def __init__(self, fail_step: str = None, **kwargs):
         super().__init__(**kwargs)
@@ -178,7 +178,7 @@ class TestBaseWorkflow:
 
     def test_workflow_initialization(self):
         """Test workflow initialization."""
-        workflow = TestWorkflow()
+        workflow = MockWorkflow()
 
         assert isinstance(workflow.workflow_id, str)
         assert workflow.status == WorkflowStatus.PENDING
@@ -189,7 +189,7 @@ class TestBaseWorkflow:
 
     def test_workflow_execution_success(self):
         """Test successful workflow execution."""
-        workflow = TestWorkflow()
+        workflow = MockWorkflow()
         initial_state = {"test": True}
 
         result = workflow.invoke(initial_state)
@@ -203,7 +203,7 @@ class TestBaseWorkflow:
 
     def test_workflow_execution_failure(self):
         """Test workflow execution with failure."""
-        workflow = TestWorkflow(fail_step="process")
+        workflow = MockWorkflow(fail_step="process")
         initial_state = {"test": True}
 
         with pytest.raises(ValueError):
@@ -214,7 +214,7 @@ class TestBaseWorkflow:
 
     def test_workflow_pause_resume_cancel(self):
         """Test workflow pause, resume, and cancel operations."""
-        workflow = TestWorkflow()
+        workflow = MockWorkflow()
 
         # Test pause
         workflow.pause()
@@ -235,7 +235,7 @@ class TestBaseWorkflow:
         mock_store = Mock()
         mock_factory.return_value.create.return_value = mock_store
 
-        workflow = TestWorkflow()
+        workflow = MockWorkflow()
         result = workflow.get_vector_store("test_collection")
 
         mock_factory.return_value.create.assert_called_with(

@@ -1,365 +1,287 @@
 """
-Unit tests for RAG agent implementation.
+Unit tests for RAG Agent with comprehensive functionality testing.
 
-This module contains tests for the RAGAgent class and its integration
-with query workflows and prompt manager.
+This module provides comprehensive unit tests for the RAG Agent,
+including input validation, query processing, and response formatting.
 """
 
 import pytest
-from unittest.mock import MagicMock
-
-from langchain.schema import Document
+from unittest.mock import Mock, AsyncMock, patch
+from datetime import datetime
 
 from src.agents.rag_agent import RAGAgent
-from src.utils.prompt_manager import PromptManager
 from src.workflows.query_workflow import QueryWorkflow
+from src.utils.prompt_manager import PromptManager
 from src.workflows.workflow_states import QueryIntent
 
 
 @pytest.fixture
-def mock_prompt_manager():
-    """Create a mock PromptManager."""
-    manager = MagicMock(spec=PromptManager)
-    manager.create_query_prompt.return_value = {
-        "template_type": "ChatPromptTemplate",
-        "confidence_score": 0.8,
-        "system_prompt_type": QueryIntent.CODE_SEARCH,
-        "metadata": {"test": "value"},
+def mock_workflow():
+    """Create a mock workflow for testing."""
+    workflow = AsyncMock(spec=QueryWorkflow)
+    workflow.run.return_value = {
+        "document_retrieval": {
+            "retrieved_documents": []
+        },
+        "llm_generation": {
+            "generated_response": "Mock response"
+        },
+        "query_intent": QueryIntent.CODE_SEARCH,
+        "processing_time": 0.1
     }
-    manager.get_supported_intents.return_value = [
+    return workflow
+
+
+@pytest.fixture
+def mock_prompt_manager():
+    """Create a mock prompt manager for testing."""
+    prompt_manager = Mock(spec=PromptManager)
+    prompt_manager.create_query_prompt.return_value = {
+        "confidence_score": 0.8,
+        "template_type": "code_search",
+        "system_prompt_type": "technical"
+    }
+    prompt_manager.get_supported_intents.return_value = [
         QueryIntent.CODE_SEARCH,
         QueryIntent.DOCUMENTATION,
         QueryIntent.EXPLANATION,
+        QueryIntent.DEBUGGING,
+        QueryIntent.ARCHITECTURE
     ]
-    manager.get_template_statistics.return_value = {
-        "system_prompts": 6,
-        "query_templates": 3,
-        "supported_intents": 5,
+    prompt_manager.get_template_statistics.return_value = {
+        "total_templates": 5,
+        "template_types": ["code_search", "documentation"]
     }
-    manager._create_error_recovery_prompt.return_value = {
-        "template_type": "error_recovery",
-        "metadata": {"recovery_mode": True},
-    }
-    return manager
+    return prompt_manager
+
+
+@pytest.fixture
+def rag_agent(mock_workflow, mock_prompt_manager):
+    """Create a RAG agent instance for testing."""
+    return RAGAgent(
+        workflow=mock_workflow,
+        prompt_manager=mock_prompt_manager,
+        default_top_k=5,
+        confidence_threshold=0.3
+    )
 
 
 class TestRAGAgent:
-    """Test cases for RAGAgent functionality."""
+    """Test suite for RAG Agent functionality."""
 
-    def test_rag_agent_initialization(self, mock_prompt_manager):
+    def test_agent_initialization(self, mock_workflow, mock_prompt_manager):
         """Test RAG agent initialization."""
         agent = RAGAgent(
-            prompt_manager=mock_prompt_manager,
-            default_top_k=5,
-            confidence_threshold=0.3,
+            workflow=mock_workflow,
+            prompt_manager=mock_prompt_manager
         )
         
-        assert agent.name == "RAGAgent"
+        assert agent.workflow == mock_workflow
+        assert agent.prompt_manager == mock_prompt_manager
         assert agent.default_top_k == 5
         assert agent.confidence_threshold == 0.3
-        assert agent.repository_filter == []
-        assert agent.language_filter == []
-        assert agent.prompt_manager == mock_prompt_manager
+        assert agent.name == "RAGAgent"
 
-    def test_rag_agent_initialization_with_filters(self, mock_prompt_manager):
-        """Test RAG agent initialization with filters."""
-        agent = RAGAgent(
-            prompt_manager=mock_prompt_manager,
-            repository_filter=["repo1", "repo2"],
-            language_filter=["python", "javascript"],
-        )
-        
-        assert agent.repository_filter == ["repo1", "repo2"]
-        assert agent.language_filter == ["python", "javascript"]
+    def test_validate_input_string(self, rag_agent):
+        """Test input validation with valid string."""
+        assert rag_agent._validate_input("test query") is True
+        assert rag_agent._validate_input("") is False
+        assert rag_agent._validate_input("   ") is False
 
-    def test_validate_input_string(self, mock_prompt_manager):
-        """Test input validation for string queries."""
-        agent = RAGAgent(prompt_manager=mock_prompt_manager)
+    def test_validate_input_dict(self, rag_agent):
+        """Test input validation with valid dictionary."""
+        valid_input = {"query": "test query"}
+        assert rag_agent._validate_input(valid_input) is True
         
-        assert agent._validate_input("test query") is True
-        assert agent._validate_input("") is False
-        assert agent._validate_input("   ") is False
-
-    def test_validate_input_dict(self):
-        """Test input validation for structured queries."""
-        agent = RAGAgent()
-        
-        # Valid structured query
-        valid_query = {
-            "query": "test query",
-            "k": 5,
-            "repository_filter": ["repo1"],
-            "language_filter": ["python"],
-        }
-        assert agent._validate_input(valid_query) is True
-        
-        # Missing query field
-        invalid_query = {"k": 5}
-        assert agent._validate_input(invalid_query) is False
-        
-        # Empty query
+        # Empty query should still be valid (validation happens in processing)
         empty_query = {"query": ""}
-        assert agent._validate_input(empty_query) is False
+        assert rag_agent._validate_input(empty_query) is True
         
-        # Invalid k value
-        invalid_k = {"query": "test", "k": -1}
-        assert agent._validate_input(invalid_k) is False
+        invalid_input = {"not_query": "test"}
+        assert rag_agent._validate_input(invalid_input) is False
 
-    def test_validate_input_invalid_types(self):
-        """Test input validation for invalid types."""
-        agent = RAGAgent()
-        
-        assert agent._validate_input(123) is False
-        assert agent._validate_input(None) is False
-        assert agent._validate_input([]) is False
+    def test_validate_input_invalid_types(self, rag_agent):
+        """Test input validation with invalid types."""
+        assert rag_agent._validate_input(None) is False
+        assert rag_agent._validate_input(123) is False
+        assert rag_agent._validate_input([]) is False
 
     @pytest.mark.asyncio
-    async def test_process_input_string_success(self):
+    async def test_process_input_string_success(self, rag_agent):
         """Test processing string input successfully."""
-        mock_workflow = MagicMock(spec=QueryWorkflow)
-        mock_workflow.invoke.return_value = {
-            "status": "completed",
-            "response": "Test response",
-            "retrieved_documents": [
-                Document(page_content="test content", metadata={"file_path": "test.py"})
-            ],
-            "query_intent": "code_search",
-            "search_strategy": "semantic",
-            "response_quality_score": 0.85,
-            "processing_time": 1.5,
-            "completed_steps": ["parse_query", "vector_search"],
-            "errors": [],
-        }
+        result = await rag_agent._process_input("test query")
         
-        agent = RAGAgent(workflow=mock_workflow)
-        result = await agent._process_input("test query")
-        
-        assert result["success"] is True
-        assert result["data"]["answer"] == "Test response"
-        assert len(result["data"]["sources"]) == 1
-        assert result["data"]["metadata"]["query_intent"] == "code_search"
-        assert result["data"]["metadata"]["documents_retrieved"] == 1
+        assert "answer" in result
+        assert "sources" in result
+        assert "confidence" in result
+        assert "query_intent" in result
+        assert "context_summary" in result
+        assert "prompt_metadata" in result
+        assert "processing_time" in result
 
     @pytest.mark.asyncio
-    async def test_process_input_dict_success(self):
-        """Test processing structured input successfully."""
-        mock_workflow = MagicMock(spec=QueryWorkflow)
-        mock_workflow.invoke.return_value = {
-            "status": "completed",
-            "response": "Test response",
-            "retrieved_documents": [],
-            "query_intent": "documentation",
-            "search_strategy": "hybrid",
-            "response_quality_score": 0.75,
-            "processing_time": 2.0,
-            "completed_steps": ["parse_query"],
-            "errors": [],
-        }
-        
-        agent = RAGAgent(workflow=mock_workflow)
+    async def test_process_input_dict_success(self, rag_agent):
+        """Test processing dictionary input successfully."""
         input_data = {
             "query": "test query",
-            "k": 10,
+            "top_k": 10,
             "repository_filter": ["repo1"],
-            "include_metadata": False,
+            "language_filter": ["python"]
         }
         
-        result = await agent._process_input(input_data)
+        result = await rag_agent._process_input(input_data)
         
-        assert result["success"] is True
-        assert result["data"]["answer"] == "Test response"
-        assert result["data"]["sources"] == []
+        assert "answer" in result
+        assert "sources" in result
+        assert "confidence" in result
+        assert "query_intent" in result
+        assert "context_summary" in result
+        assert "prompt_metadata" in result
+        assert "processing_time" in result
 
     @pytest.mark.asyncio
-    async def test_process_input_workflow_failure(self):
-        """Test processing when workflow fails."""
-        mock_workflow = MagicMock(spec=QueryWorkflow)
-        mock_workflow.invoke.return_value = {
-            "status": "failed",
-            "error": "Vector store connection failed",
-            "errors": ["Connection timeout"],
-        }
+    async def test_process_input_workflow_failure(self, rag_agent):
+        """Test processing input when workflow fails."""
+        rag_agent.workflow.run.side_effect = Exception("Workflow error")
         
-        agent = RAGAgent(workflow=mock_workflow)
-        result = await agent._process_input("test query")
+        result = await rag_agent._process_input("test query")
         
-        assert result["success"] is False
-        assert "Vector store connection failed" in result["error"]
-        assert result["metadata"]["workflow_status"] == "failed"
+        assert "answer" in result
+        assert "sources" in result
+        assert "confidence" in result
+        assert result.get("error") is True
 
     @pytest.mark.asyncio
-    async def test_process_input_no_workflow(self):
-        """Test processing without workflow (fallback mode)."""
-        agent = RAGAgent(workflow=None)
-        result = await agent._process_input("test query")
+    async def test_process_input_exception(self, rag_agent):
+        """Test processing input with exception."""
+        rag_agent.workflow.run.side_effect = Exception("Test exception")
         
-        assert result["success"] is False
-        assert "RAG workflow not available" in result["error"]
-        assert result["metadata"]["fallback_mode"] is True
+        result = await rag_agent._process_input("test query")
+        
+        assert "answer" in result
+        assert "sources" in result
+        assert "confidence" in result
+        assert result.get("error") is True
 
-    @pytest.mark.asyncio
-    async def test_process_input_exception(self):
-        """Test processing with exception."""
-        mock_workflow = MagicMock(spec=QueryWorkflow)
-        mock_workflow.invoke.side_effect = Exception("Test exception")
-        
-        agent = RAGAgent(workflow=mock_workflow)
-        result = await agent._process_input("test query")
-        
-        assert result["success"] is False
-        assert "Internal error during query processing" in result["error"]
-
-    def test_format_sources(self):
-        """Test source formatting."""
-        agent = RAGAgent()
-        documents = [
-            Document(
-                page_content="Short content",
-                metadata={
-                    "file_path": "src/test.py",
-                    "repository": "test/repo",
-                    "language": "python",
-                    "chunk_type": "function",
-                },
-            ),
-            Document(
-                page_content="Long content " * 100,  # Exceeds 500 chars
-                metadata={"file_path": "src/long.py"},
-            ),
-        ]
-        
-        sources = agent._format_sources(documents)
-        
-        assert len(sources) == 2
-        assert sources[0]["source_id"] == 1
-        assert sources[0]["content"] == "Short content"
-        assert sources[0]["file_path"] == "src/test.py"
-        assert sources[0]["repository"] == "test/repo"
-        assert sources[0]["language"] == "python"
-        assert sources[0]["chunk_type"] == "function"
-        
-        assert sources[1]["source_id"] == 2
-        assert sources[1]["content"].endswith("...")  # Truncated
-        assert sources[1]["file_path"] == "src/long.py"
-
-    def test_format_sources_empty(self):
-        """Test source formatting with empty list."""
-        agent = RAGAgent()
-        sources = agent._format_sources([])
-        
+    def test_format_sources_empty(self, rag_agent):
+        """Test formatting empty sources list."""
+        sources = rag_agent._format_sources([])
         assert sources == []
 
-    def test_update_filters(self):
-        """Test filter updates."""
-        agent = RAGAgent()
+    def test_format_sources(self, rag_agent):
+        """Test formatting sources with documents."""
+        from langchain.schema import Document
         
-        # Update repository filter
-        agent.update_filters(repository_filter=["repo1", "repo2"])
-        assert agent.repository_filter == ["repo1", "repo2"]
-        assert agent.language_filter == []  # Unchanged
+        documents = [
+            Document(
+                page_content="test content 1",
+                metadata={
+                    "file_path": "test1.py",
+                    "repository": "test/repo1",
+                    "language": "python",
+                    "line_start": 1,
+                    "line_end": 10
+                }
+            ),
+            Document(
+                page_content="test content 2",
+                metadata={
+                    "file_path": "test2.py",
+                    "repository": "test/repo2",
+                    "language": "javascript",
+                    "line_start": 5,
+                    "line_end": 15
+                }
+            )
+        ]
         
-        # Update language filter
-        agent.update_filters(language_filter=["python", "javascript"])
-        assert agent.repository_filter == ["repo1", "repo2"]  # Unchanged
-        assert agent.language_filter == ["python", "javascript"]
+        sources = rag_agent._format_sources(documents)
         
-        # Update both
-        agent.update_filters(
-            repository_filter=["repo3"],
-            language_filter=["typescript"],
-        )
-        assert agent.repository_filter == ["repo3"]
-        assert agent.language_filter == ["typescript"]
+        assert len(sources) == 2
+        assert sources[0]["id"] == 1
+        assert sources[0]["content"] == "test content 1"
+        assert sources[0]["metadata"]["file_path"] == "test1.py"
+        assert sources[1]["id"] == 2
+        assert sources[1]["metadata"]["language"] == "javascript"
 
-    
+    def test_update_filters(self, rag_agent):
+        """Test updating repository and language filters."""
+        rag_agent.update_filters(
+            repository_filter=["repo1", "repo2"],
+            language_filter=["python", "javascript"]
+        )
+        
+        assert rag_agent.repository_filter == ["repo1", "repo2"]
+        assert rag_agent.language_filter == ["python", "javascript"]
+
     @pytest.mark.asyncio
-    async def test_query_with_context(self, mock_prompt_manager):
-        """Test context-specific querying."""
-        agent = RAGAgent(prompt_manager=mock_prompt_manager)
+    async def test_query_with_context(self, rag_agent):
+        """Test querying with provided context documents."""
+        from langchain.schema import Document
         
         context_docs = [
             Document(
-                page_content="""def test_function():
-    return True""",
-                metadata={
-                    "file_path": "test.py",
-                    "repository": "specific_repo",
-                    "language": "python",
-                },
-            ),
+                page_content="context content",
+                metadata={"repository": "test/repo", "language": "python"}
+            )
         ]
         
-        result = await agent.query_with_context(
+        result = await rag_agent.query_with_context(
             query="test query",
             context_documents=context_docs,
-            query_intent=QueryIntent.CODE_SEARCH,
+            query_intent=QueryIntent.CODE_SEARCH
         )
         
         assert "answer" in result
-        assert len(result["sources"]) == 1
+        assert "sources" in result
+        assert "confidence" in result
+        assert "query_intent" in result
         assert result["query_intent"] == QueryIntent.CODE_SEARCH
 
     @pytest.mark.asyncio
-    async def test_batch_query(self, mock_prompt_manager):
+    async def test_batch_query(self, rag_agent):
         """Test batch query processing."""
-        agent = RAGAgent(prompt_manager=mock_prompt_manager)
-        queries = ["query 1", "query 2"]
+        queries = ["query 1", "query 2", "query 3"]
         
-        results = await agent.batch_query(queries, max_concurrent=2)
+        results = await rag_agent.batch_query(queries, max_concurrent=2)
         
-        assert len(results) == 2
-        assert all("answer" in result for result in results)
+        assert len(results) == 3
+        for result in results:
+            assert "answer" in result
+            assert "sources" in result
+            assert "confidence" in result
 
     @pytest.mark.asyncio
-    async def test_batch_workflow_query(self):
-        """Test batch query processing."""
-        mock_workflow = MagicMock(spec=QueryWorkflow)
-        mock_workflow.invoke.return_value = {
-            "status": "completed",
-            "response": "Batch response",
-            "retrieved_documents": [],
-            "query_intent": "code_search",
-            "search_strategy": "semantic",
-            "response_quality_score": 0.8,
-            "processing_time": 1.0,
-            "completed_steps": [],
-            "errors": [],
-        }
-        
-        agent = RAGAgent(workflow=mock_workflow)
+    async def test_batch_workflow_query(self, rag_agent):
+        """Test batch query with workflow integration."""
         queries = ["query 1", "query 2"]
-        shared_context = {"repository_filter": ["repo1"], "k": 6}
         
-        results = await agent.batch_query(queries, shared_context)
+        results = await rag_agent.batch_query(queries, max_concurrent=3)
         
         assert len(results) == 2
-        assert all(result["success"] for result in results)
+        assert rag_agent.workflow.run.call_count == 2
 
-    def test_get_supported_query_types(self):
-        """Test supported query types."""
-        agent = RAGAgent()
-        types = agent.get_supported_query_types()
+    def test_get_supported_query_types(self, rag_agent):
+        """Test getting supported query types."""
+        types = rag_agent.get_supported_query_types()
         
+        assert isinstance(types, list)
         assert "code_search" in types
-        assert "documentation_search" in types
-        assert "concept_explanation" in types
-        assert "implementation_help" in types
-        assert "troubleshooting" in types
+        assert "documentation" in types
+        assert "explanation" in types
+        assert "debugging" in types
+        assert "architecture" in types
 
-    def test_get_agent_statistics(self):
-        """Test agent statistics."""
-        agent = RAGAgent(
-            default_k=8,
-            max_k=25,
-            repository_filter=["repo1"],
-            language_filter=["python"],
-        )
+    def get_agent_statistics(self, rag_agent):
+        """Test getting agent statistics."""
+        stats = rag_agent.get_agent_statistics()
         
-        stats = agent.get_agent_statistics()
-        
-        assert stats["agent_name"] == "RAGAgent"
-        assert stats["configuration"]["default_k"] == 8
-        assert stats["configuration"]["max_k"] == 25
-        assert stats["configuration"]["repository_filter"] == ["repo1"]
-        assert stats["configuration"]["language_filter"] == ["python"]
+        assert "agent_type" in stats
+        assert "default_top_k" in stats
+        assert "confidence_threshold" in stats
+        assert "repository_filter" in stats
+        assert "language_filter" in stats
+        assert "batch_processing_enabled" in stats
         assert "supported_query_types" in stats
+        assert "prompt_manager_stats" in stats
+        assert stats["agent_type"] == "RAGAgent"

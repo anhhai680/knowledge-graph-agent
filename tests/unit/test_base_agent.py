@@ -11,8 +11,8 @@ from src.agents.base_agent import BaseAgent, AgentResponse
 from src.workflows.base_workflow import BaseWorkflow
 
 
-class TestAgent(BaseAgent):
-    """Test implementation of BaseAgent for testing."""
+class MockAgent(BaseAgent):
+    """Mock implementation of BaseAgent for testing."""
 
     def _validate_input(self, input_data):
         """Test validation - accepts strings only."""
@@ -35,7 +35,7 @@ class TestBaseAgent:
 
     def test_agent_initialization(self):
         """Test agent initialization."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         
         assert agent.agent_name == "TestAgent"
         assert agent.workflow is None
@@ -44,14 +44,14 @@ class TestBaseAgent:
     def test_agent_initialization_with_workflow(self):
         """Test agent initialization with workflow."""
         mock_workflow = MagicMock(spec=BaseWorkflow)
-        agent = TestAgent(workflow=mock_workflow, agent_name="TestAgent")
+        agent = MockAgent(workflow=mock_workflow, agent_name="TestAgent")
         
         assert agent.workflow == mock_workflow
         assert agent.agent_name == "TestAgent"
 
     def test_invoke_success(self):
         """Test successful synchronous invocation."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         result = agent.invoke("test input")
         
         assert result["success"] is True
@@ -60,7 +60,7 @@ class TestBaseAgent:
 
     def test_invoke_invalid_input(self):
         """Test invocation with invalid input."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         result = agent.invoke("")  # Empty string should be invalid
         
         assert result["success"] is False
@@ -69,7 +69,7 @@ class TestBaseAgent:
 
     def test_invoke_processing_error(self):
         """Test invocation with processing error."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         result = agent.invoke("error")  # Triggers ValueError
         
         assert result["success"] is False
@@ -79,7 +79,7 @@ class TestBaseAgent:
     @pytest.mark.asyncio
     async def test_ainvoke_success(self):
         """Test successful asynchronous invocation."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         result = await agent.ainvoke("test input")
         
         assert result["success"] is True
@@ -89,7 +89,7 @@ class TestBaseAgent:
     @pytest.mark.asyncio
     async def test_ainvoke_invalid_input(self):
         """Test asynchronous invocation with invalid input."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         result = await agent.ainvoke("")
         
         assert result["success"] is False
@@ -98,7 +98,7 @@ class TestBaseAgent:
     @pytest.mark.asyncio
     async def test_ainvoke_processing_error(self):
         """Test asynchronous invocation with processing error."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         result = await agent.ainvoke("error")
         
         assert result["success"] is False
@@ -106,7 +106,7 @@ class TestBaseAgent:
 
     def test_batch_processing(self):
         """Test batch processing."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         inputs = ["input1", "input2", ""]  # Last one is invalid
         
         results = agent.batch(inputs)
@@ -121,7 +121,7 @@ class TestBaseAgent:
     @pytest.mark.asyncio
     async def test_abatch_processing(self):
         """Test asynchronous batch processing."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         inputs = ["input1", "input2", "error"]  # Last one triggers error
         
         results = await agent.abatch(inputs)
@@ -136,17 +136,17 @@ class TestBaseAgent:
         mock_workflow = MagicMock(spec=BaseWorkflow)
         mock_workflow.__class__.__name__ = "TestWorkflow"
         
-        agent = TestAgent(workflow=mock_workflow, agent_name="TestAgent")
+        agent = MockAgent(workflow=mock_workflow, agent_name="TestAgent")
         info = agent.get_agent_info()
         
         assert info["agent_name"] == "TestAgent"
-        assert info["agent_type"] == "TestAgent"
+        assert info["agent_type"] == "MockAgent"
         assert info["has_workflow"] is True
         assert info["workflow_type"] == "TestWorkflow"
 
     def test_get_agent_info_no_workflow(self):
         """Test agent information without workflow."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         info = agent.get_agent_info()
         
         assert info["has_workflow"] is False
@@ -154,7 +154,7 @@ class TestBaseAgent:
 
     def test_set_workflow(self):
         """Test workflow setting."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         mock_workflow = MagicMock(spec=BaseWorkflow)
         
         agent.set_workflow(mock_workflow)
@@ -168,7 +168,7 @@ class TestBaseAgent:
         mock_workflow.__class__.__name__ = "TestWorkflow"
         mock_workflow.workflow_id = "test_id"
         
-        agent = TestAgent(workflow=mock_workflow, agent_name="TestAgent")
+        agent = MockAgent(workflow=mock_workflow, agent_name="TestAgent")
         status = await agent.get_workflow_status()
         
         assert status is not None
@@ -178,7 +178,7 @@ class TestBaseAgent:
     @pytest.mark.asyncio
     async def test_get_workflow_status_no_workflow(self):
         """Test workflow status without workflow."""
-        agent = TestAgent(agent_name="TestAgent")
+        agent = MockAgent(agent_name="TestAgent")
         status = await agent.get_workflow_status()
         
         assert status is None

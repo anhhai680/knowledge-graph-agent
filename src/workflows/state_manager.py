@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from src.config.settings import settings
 from src.utils.logging import get_logger
@@ -59,10 +59,7 @@ class WorkflowStateMetadata(BaseModel):
         default=StateSerializationFormat.JSON, description="Serialization format used"
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class StateManager(ABC):
@@ -433,7 +430,7 @@ class FileStateManager(StateManager):
 
             metadata_file = self._get_metadata_file_path(workflow_id)
             with open(metadata_file, "w") as f:
-                json.dump(metadata.dict(), f, indent=2)
+                json.dump(metadata.model_dump(), f, indent=2)
 
             self.logger.debug(f"Saved state for workflow {workflow_id} to {state_file}")
             return True
