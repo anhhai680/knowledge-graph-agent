@@ -606,29 +606,32 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 if files_to_remove is None:
                     files_to_remove = set()
                 
-                # Store change information
+                # Store change information with additional safety checks
                 change_info = {
                     "change_type": "incremental",
-                    "total_changes": diff_result.total_changes,
-                    "changes_by_type": {k.value: v for k, v in diff_result.changes_by_type.items()},
-                    "files_to_process": list(files_to_process),
-                    "files_to_remove": list(files_to_remove),
+                    "total_changes": diff_result.total_changes if diff_result else 0,
+                    "changes_by_type": {k.value: v for k, v in diff_result.changes_by_type.items()} if diff_result and diff_result.changes_by_type else {},
+                    "files_to_process": list(files_to_process) if files_to_process is not None else [],
+                    "files_to_remove": list(files_to_remove) if files_to_remove is not None else [],
                     "last_commit": last_commit,
                     "current_commit": current_commit,
                     "diff_summary": {
-                        "added": len(diff_result.added_files or []),
-                        "modified": len(diff_result.modified_files or []),
-                        "deleted": len(diff_result.deleted_files or []),
-                        "renamed": len(diff_result.renamed_files or [])
+                        "added": len(diff_result.added_files) if diff_result and diff_result.added_files is not None else 0,
+                        "modified": len(diff_result.modified_files) if diff_result and diff_result.modified_files is not None else 0,
+                        "deleted": len(diff_result.deleted_files) if diff_result and diff_result.deleted_files is not None else 0,
+                        "renamed": len(diff_result.renamed_files) if diff_result and diff_result.renamed_files is not None else 0
                     }
                 }
                 
                 state["metadata"]["incremental_changes"][repo_name] = change_info
                 total_changes += diff_result.total_changes
                 
-                self.logger.info(f"Changes detected for {repo_name}: {diff_result.total_changes} files changed")
-                self.logger.info(f"  - {len(files_to_process) if files_to_process is not None else 0} files to process")
-                self.logger.info(f"  - {len(files_to_remove) if files_to_remove is not None else 0} files to remove from vector store")
+                self.logger.info(f"Changes detected for {repo_name}: {diff_result.total_changes if diff_result else 0} files changed")
+                # Safe logging with explicit null checks
+                files_to_process_count = len(files_to_process) if files_to_process is not None else 0
+                files_to_remove_count = len(files_to_remove) if files_to_remove is not None else 0
+                self.logger.info(f"  - {files_to_process_count} files to process")
+                self.logger.info(f"  - {files_to_remove_count} files to remove from vector store")
                 
                 # Debug: Log the types and values for troubleshooting
                 self.logger.debug(f"Debug - files_to_process type: {type(files_to_process)}, value: {files_to_process}")

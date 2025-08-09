@@ -40,13 +40,28 @@ class GitDiffResult:
     """Result of git diff analysis between two commits."""
     from_commit: str
     to_commit: str
-    total_changes: int
-    changes_by_type: Dict[FileChangeType, int]
-    file_changes: List[FileChange]
-    added_files: List[str]
-    modified_files: List[str]
-    deleted_files: List[str]
-    renamed_files: List[Tuple[str, str]]  # (old_path, new_path)
+    total_changes: int = 0
+    changes_by_type: Dict[FileChangeType, int] = None
+    file_changes: List[FileChange] = None
+    added_files: List[str] = None
+    modified_files: List[str] = None
+    deleted_files: List[str] = None
+    renamed_files: List[Tuple[str, str]] = None  # (old_path, new_path)
+    
+    def __post_init__(self):
+        """Ensure all list fields are properly initialized."""
+        if self.changes_by_type is None:
+            self.changes_by_type = {}
+        if self.file_changes is None:
+            self.file_changes = []
+        if self.added_files is None:
+            self.added_files = []
+        if self.modified_files is None:
+            self.modified_files = []
+        if self.deleted_files is None:
+            self.deleted_files = []
+        if self.renamed_files is None:
+            self.renamed_files = []
 
 
 class GitDiffService:
