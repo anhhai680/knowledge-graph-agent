@@ -72,6 +72,14 @@ class IndexRepositoryRequest(BaseModel):
         default=False,
         description="Force reindexing even if repository is already indexed"
     )
+    incremental: bool = Field(
+        default=False,
+        description="Enable incremental re-indexing based on git commit history"
+    )
+    dry_run: bool = Field(
+        default=False,
+        description="Analyze changes without performing actual indexing (incremental mode only)"
+    )
     
     @field_validator('repository_url')
     @classmethod
@@ -79,6 +87,14 @@ class IndexRepositoryRequest(BaseModel):
         """Validate GitHub repository URL format."""
         if not v.startswith(('https://github.com/', 'git@github.com:')):
             raise ValueError('Repository URL must be a valid GitHub URL')
+        return v
+    
+    @field_validator('dry_run')
+    @classmethod
+    def validate_dry_run(cls, v, info):
+        """Validate that dry_run is only used with incremental mode."""
+        if v and not info.data.get('incremental', False):
+            raise ValueError('dry_run can only be used with incremental=True')
         return v
 
 
@@ -208,6 +224,9 @@ class IndexingResponse(BaseModel):
     status: WorkflowStatus = Field(..., description="Initial workflow status")
     estimated_duration: Optional[str] = Field(None, description="Estimated completion time")
     message: str = Field(..., description="Response message")
+    incremental: bool = Field(default=False, description="Whether incremental mode was used")
+    dry_run: bool = Field(default=False, description="Whether this was a dry-run")
+    change_summary: Optional[Dict[str, Any]] = Field(None, description="Summary of changes (incremental mode only)")
 
 
 class BatchIndexingResponse(BaseModel):

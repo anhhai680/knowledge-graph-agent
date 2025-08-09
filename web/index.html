@@ -1001,7 +1001,7 @@
 
             async loadWorkflows() {
                 try {
-                    const response = await fetch(`${this.apiBase}/workflows`);
+                    const response = await fetch(`${this.apiBase}/workflows?status=running`);
                     const workflows = await response.json();
                     
                     this.currentWorkflows.clear();
