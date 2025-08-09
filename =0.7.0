@@ -1,8 +1,0 @@
-Defaulting to user installation because normal site-packages is not writeable
-Collecting loguru
-  Downloading loguru-0.7.3-py3-none-any.whl.metadata
-     - 22.6 kB 198.6 MB/s 0:00:00
-Downloading loguru-0.7.3-py3-none-any.whl
-   - 61.6 kB 24.9 MB/s 0:00:00
-Installing collected packages: loguru
-Successfully installed loguru-0.7.3
