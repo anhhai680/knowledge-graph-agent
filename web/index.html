@@ -237,6 +237,107 @@
             color: #4b5563;
         }
 
+        /* Section headers styling */
+        .section-header {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #2563eb;
+            margin: 1.5rem 0 0.75rem 0;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+            border-left: 4px solid #2563eb;
+            border-radius: 0 8px 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .section-header:first-child {
+            margin-top: 0.5rem;
+        }
+
+        .section-header .section-icon {
+            font-size: 1.2em;
+            color: #1d4ed8;
+        }
+
+        /* Architecture patterns specific styling */
+        .architecture-pattern {
+            background: #fefefe;
+            border: 1px solid #e5e7eb;
+            padding: 1.25rem;
+            margin: 0.5rem 0 1.5rem 0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .architecture-pattern .pattern-title {
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            background: #eff6ff;
+            border-radius: 6px;
+            border-left: 3px solid #3b82f6;
+            display: flex;
+            align-items: center;
+        }
+
+        .architecture-pattern .pattern-content {
+            color: #374151;
+            line-height: 1.6;
+            margin-left: 1rem;
+        }
+
+        /* Code references styling */
+        .code-reference {
+            background: #fefefe;
+            border: 1px solid #d1d5db;
+            padding: 1.25rem;
+            margin: 0.5rem 0 1.5rem 0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .code-reference .reference-title {
+            font-weight: 600;
+            color: #065f46;
+            margin-bottom: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            background: #f0fdf4;
+            border-radius: 6px;
+            border-left: 3px solid #059669;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.95em;
+            display: flex;
+            align-items: center;
+        }
+
+        .code-reference .reference-content {
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+            color: #374151;
+            line-height: 1.6;
+            margin-left: 1rem;
+        }
+
+        /* Improve confidence and source styling */
+        .response-meta {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .confidence-score {
+            background: #f3f4f6;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.9em;
+            color: #6b7280;
+            margin-bottom: 1rem;
+        }
+
         .code-block {
             background: #1e293b;
             border-radius: 8px;
@@ -1056,16 +1157,33 @@
                     
                     // Add confidence score if available
                     if (parsedContent.confidence) {
-                        response += `<p><small><strong>Confidence:</strong> ${(parsedContent.confidence * 100).toFixed(1)}%</small></p>`;
+                        response += `<div class="response-meta">
+                            <div class="confidence-score">
+                                <i class="fas fa-chart-line" style="margin-right: 0.5rem;"></i>
+                                <strong>Confidence:</strong> ${(parsedContent.confidence * 100).toFixed(1)}%
+                            </div>
+                        </div>`;
                     }
                     
                     // Add sources if available
                     if (parsedContent.sources_used && parsedContent.sources_used.length > 0) {
-                        response += '<p><strong>Sources:</strong></p><ul>';
+                        if (!parsedContent.confidence) {
+                            response += '<div class="response-meta">';
+                        }
+                        response += `<div class="section-header">
+                            <i class="fas fa-link section-icon"></i>
+                            Sources
+                        </div>
+                        <ul style="margin-left: 1rem; line-height: 1.6;">`;
                         parsedContent.sources_used.forEach(source => {
-                            response += `<li><a href="${source}" target="_blank">${source}</a></li>`;
+                            response += `<li><a href="${source}" target="_blank" style="color: #2563eb; text-decoration: none;">${source}</a></li>`;
                         });
                         response += '</ul>';
+                        if (!parsedContent.confidence) {
+                            response += '</div>';
+                        }
+                    } else if (parsedContent.confidence) {
+                        response += '</div>';
                     }
                     
                     return response;
@@ -1285,10 +1403,117 @@
             }
 
             applyInlineFormatting(text) {
+                // First handle special section headers
+                text = this.formatSectionHeaders(text);
+                
                 return text
                     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // Bold
                     .replace(/\*(.*?)\*/g, '<em>$1</em>')  // Italic
                     .replace(/`(.*?)`/g, '<code>$1</code>');  // Inline code
+            }
+
+            formatSectionHeaders(text) {
+                // Handle Architecture Patterns section
+                text = text.replace(
+                    /(\*\*Architecture Patterns\*\*:?\s*-?\s*)(.*?)(?=\n\n|\n(?=\*\*[A-Z])|$)/gs,
+                    (match, header, content) => {
+                        return `<div class="section-header">
+                            <i class="fas fa-sitemap section-icon"></i>
+                            Architecture Patterns
+                        </div>
+                        <div class="architecture-pattern">
+                            ${this.formatArchitectureContent(content)}
+                        </div>`;
+                    }
+                );
+
+                // Handle Code References section
+                text = text.replace(
+                    /(\*\*Code References\*\*:?\s*-?\s*)(.*?)(?=\n\n|\n(?=\*\*[A-Z])|$)/gs,
+                    (match, header, content) => {
+                        return `<div class="section-header">
+                            <i class="fas fa-code section-icon"></i>
+                            Code References
+                        </div>
+                        <div class="code-reference">
+                            ${this.formatCodeReferences(content)}
+                        </div>`;
+                    }
+                );
+
+                return text;
+            }
+
+            formatArchitectureContent(content) {
+                // Split by pattern indicators and format each one
+                const patterns = content.split(/\s*-\s*\*\*([^*]+)\*\*:/);
+                let formatted = '';
+                
+                for (let i = 1; i < patterns.length; i += 2) {
+                    const patternName = patterns[i];
+                    const patternDescription = patterns[i + 1] || '';
+                    
+                    formatted += `<div class="pattern-title">
+                        <i class="fas fa-cube" style="margin-right: 0.5rem; color: #3b82f6;"></i>
+                        ${patternName}
+                    </div>
+                    <div class="pattern-content">${patternDescription.trim()}</div>`;
+                    
+                    if (i + 2 < patterns.length) {
+                        formatted += '<div style="margin: 1rem 0;"></div>';
+                    }
+                }
+                
+                // If no patterns found, try alternative formatting
+                if (formatted === '') {
+                    // Handle inline patterns like **Frontend-Backend Separation**: description
+                    const inlinePatterns = content.match(/\*\*([^*]+)\*\*:\s*([^-]+)(?=-\s*\*\*|$)/g);
+                    if (inlinePatterns) {
+                        inlinePatterns.forEach((pattern, index) => {
+                            const match = pattern.match(/\*\*([^*]+)\*\*:\s*(.+)/);
+                            if (match) {
+                                formatted += `<div class="pattern-title">
+                                    <i class="fas fa-cube" style="margin-right: 0.5rem; color: #3b82f6;"></i>
+                                    ${match[1]}
+                                </div>
+                                <div class="pattern-content">${match[2].trim()}</div>`;
+                                
+                                if (index < inlinePatterns.length - 1) {
+                                    formatted += '<div style="margin: 1rem 0;"></div>';
+                                }
+                            }
+                        });
+                    } else {
+                        // Fallback: just clean up bold formatting
+                        formatted = content.replace(/\*\*([^*]+)\*\*/g, '<span class="pattern-title">$1</span>');
+                    }
+                }
+                
+                return formatted;
+            }
+
+            formatCodeReferences(content) {
+                // Format code references with file names and descriptions
+                let formatted = content;
+                
+                // Handle file references like **Order.cs** in the **car-order-service**
+                formatted = formatted.replace(
+                    /\*\*([^*]+\.[a-zA-Z]+)\*\*\s+in\s+the\s+\*\*([^*]+)\*\*/g,
+                    `<div class="reference-title">
+                        <i class="fas fa-file-code" style="margin-right: 0.5rem;"></i>
+                        $1 <span style="color: #6b7280; font-weight: normal;">in $2</span>
+                    </div>`
+                );
+                
+                // Handle other bold references
+                formatted = formatted.replace(/\*\*([^*]+)\*\*/g, 
+                    '<span style="font-weight: 600; color: #065f46;">$1</span>');
+                
+                // Handle inline code
+                formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+                
+                // Wrap in content div
+                return `<div class="reference-content">${formatted}</div>`;
             }
 
             detectLanguage(fileType) {
