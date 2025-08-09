@@ -300,6 +300,16 @@
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
+        /* Interesting patterns styling */
+        .interesting-pattern {
+            background: #fefefe;
+            border: 1px solid #d1d5db;
+            padding: 1.25rem;
+            margin: 0.5rem 0 1.5rem 0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
         .code-reference .reference-title {
             font-weight: 600;
             color: #065f46;
@@ -320,6 +330,23 @@
             color: #374151;
             line-height: 1.6;
             margin-left: 1rem;
+        }
+
+        .code-reference .reference-item {
+            background: #f8fafc;
+            border-radius: 6px;
+            padding: 0.75rem;
+            border-left: 3px solid #10b981;
+            position: relative;
+        }
+
+        .code-reference .reference-item:before {
+            content: "•";
+            color: #10b981;
+            font-weight: bold;
+            position: absolute;
+            left: -0.5rem;
+            top: 0.75rem;
         }
 
         /* Improve confidence and source styling */
@@ -1356,6 +1383,10 @@
             formatText(text) {
                 if (!text || text.trim() === '') return '';
                 
+                // CRITICAL FIX: Handle special sections BEFORE any markdown processing
+                // This prevents headers like "### Code References" from becoming h3 tags
+                text = this.formatSectionHeaders(text);
+                
                 // Split text into paragraphs first
                 const paragraphs = text.split(/\n\s*\n/);
                 let formatted = '';
@@ -1364,7 +1395,16 @@
                     const trimmed = paragraph.trim();
                     if (!trimmed) return;
                     
-                    // Handle headers
+                    // Skip paragraphs that already contain our section formatting
+                    if (trimmed.includes('class="section-header"') || 
+                        trimmed.includes('class="code-reference"') || 
+                        trimmed.includes('class="interesting-pattern"') ||
+                        trimmed.includes('class="architecture-pattern"')) {
+                        formatted += trimmed;
+                        return;
+                    }
+                    
+                    // Handle headers (but only for headers that aren't our special sections)
                     if (trimmed.startsWith('### ')) {
                         formatted += `<h3>${trimmed.substring(4)}</h3>`;
                     } else if (trimmed.startsWith('## ')) {
@@ -1403,7 +1443,9 @@
             }
 
             applyInlineFormatting(text) {
-                // First handle special section headers
+                // CRITICAL PERMANENT FIX: Handle special section headers BEFORE any bold processing
+                // This prevents the sections from being converted to regular bold text
+                console.log('🚀 PERMANENT FIX: Starting text formatting with section-first processing');
                 text = this.formatSectionHeaders(text);
                 
                 return text
@@ -1413,30 +1455,49 @@
             }
 
             formatSectionHeaders(text) {
-                // Handle Architecture Patterns section
+                console.log('🔍 ROOT CAUSE FIX: Processing text for section headers...');
+                
+                // ROOT CAUSE FIX: Handle "### Code References" pattern specifically
                 text = text.replace(
-                    /(\*\*Architecture Patterns\*\*:?\s*-?\s*)(.*?)(?=\n\n|\n(?=\*\*[A-Z])|$)/gs,
-                    (match, header, content) => {
-                        return `<div class="section-header">
-                            <i class="fas fa-sitemap section-icon"></i>
-                            Architecture Patterns
-                        </div>
-                        <div class="architecture-pattern">
-                            ${this.formatArchitectureContent(content)}
-                        </div>`;
-                    }
-                );
-
-                // Handle Code References section
-                text = text.replace(
-                    /(\*\*Code References\*\*:?\s*-?\s*)(.*?)(?=\n\n|\n(?=\*\*[A-Z])|$)/gs,
-                    (match, header, content) => {
+                    /(###\s+)?(Code\s+References?)\s*[-:]?\s*([\s\S]*?)(?=###\s+|Interesting\s+Patterns|Architecture\s+Patterns|Overall,|This\s+structure\s+allows|This\s+architecture\s+provides|Confidence:|$)/gi,
+                    (match, hashPrefix, header, content) => {
+                        console.log('✅ ROOT CAUSE FIX: Code References section found and being processed');
                         return `<div class="section-header">
                             <i class="fas fa-code section-icon"></i>
                             Code References
                         </div>
                         <div class="code-reference">
-                            ${this.formatCodeReferences(content)}
+                            ${this.formatCodeReferences(content.trim())}
+                        </div>`;
+                    }
+                );
+
+                // ROOT CAUSE FIX: Handle "### Interesting Patterns" pattern specifically
+                text = text.replace(
+                    /(###\s+)?(Interesting\s+Patterns?)\s*[-:]?\s*([\s\S]*?)(?=###\s+|Code\s+References|Architecture\s+Patterns|Overall,|This\s+structure\s+allows|This\s+architecture\s+provides|Confidence:|$)/gi,
+                    (match, hashPrefix, header, content) => {
+                        console.log('✅ ROOT CAUSE FIX: Interesting Patterns section found and being processed');
+                        return `<div class="section-header">
+                            <i class="fas fa-lightbulb section-icon"></i>
+                            Interesting Patterns
+                        </div>
+                        <div class="interesting-pattern">
+                            ${this.formatInterestingPatterns(content.trim())}
+                        </div>`;
+                    }
+                );
+
+                // ROOT CAUSE FIX: Handle Architecture Patterns section with ### prefix
+                text = text.replace(
+                    /(###\s+)?(Architecture\s+Patterns?)\s*[-:]?\s*([\s\S]*?)(?=###\s+|Code\s+References|Interesting\s+Patterns|This\s+architecture\s+provides|This\s+structure\s+allows|Overall,|$)/gi,
+                    (match, hashPrefix, header, content) => {
+                        console.log('✅ ROOT CAUSE FIX: Architecture Patterns section found and being processed');
+                        return `<div class="section-header">
+                            <i class="fas fa-sitemap section-icon"></i>
+                            Architecture Patterns
+                        </div>
+                        <div class="architecture-pattern">
+                            ${this.formatArchitectureContent(content.trim())}
                         </div>`;
                     }
                 );
@@ -1445,75 +1506,178 @@
             }
 
             formatArchitectureContent(content) {
-                // Split by pattern indicators and format each one
-                const patterns = content.split(/\s*-\s*\*\*([^*]+)\*\*:/);
+                console.log('Formatting Architecture content:', content);
+                
+                // Handle the format: - **Pattern Name**: Description - **Another Pattern**: Description
                 let formatted = '';
                 
-                for (let i = 1; i < patterns.length; i += 2) {
-                    const patternName = patterns[i];
-                    const patternDescription = patterns[i + 1] || '';
-                    
-                    formatted += `<div class="pattern-title">
-                        <i class="fas fa-cube" style="margin-right: 0.5rem; color: #3b82f6;"></i>
-                        ${patternName}
-                    </div>
-                    <div class="pattern-content">${patternDescription.trim()}</div>`;
-                    
-                    if (i + 2 < patterns.length) {
-                        formatted += '<div style="margin: 1rem 0;"></div>';
+                // Split by patterns like "- **PatternName**:"
+                const patterns = content.split(/\s*-\s*\*\*([^*]+)\*\*:\s*/);
+                console.log('Split patterns:', patterns);
+                
+                if (patterns.length > 2) {
+                    // Skip the first empty element, then process pairs of (name, description)
+                    for (let i = 1; i < patterns.length; i += 2) {
+                        const patternName = patterns[i];
+                        const patternDescription = patterns[i + 1] || '';
+                        
+                        formatted += `<div class="pattern-title">
+                            <i class="fas fa-cube" style="margin-right: 0.5rem; color: #3b82f6;"></i>
+                            ${patternName}
+                        </div>
+                        <div class="pattern-content">${patternDescription.trim()}</div>`;
+                        
+                        if (i + 2 < patterns.length) {
+                            formatted += '<div style="margin: 1rem 0;"></div>';
+                        }
                     }
+                } else {
+                    // Fallback: handle inline patterns within the content
+                    let processedContent = content;
+                    
+                    // Handle patterns like **PatternName**: description
+                    processedContent = processedContent.replace(
+                        /\*\*([^*]+)\*\*:\s*([^.*]+?)(?=\s*\*\*[^*]+\*\*:|$)/g,
+                        (match, name, desc) => {
+                            return `<div class="pattern-title">
+                                <i class="fas fa-cube" style="margin-right: 0.5rem; color: #3b82f6;"></i>
+                                ${name}
+                            </div>
+                            <div class="pattern-content">${desc.trim()}</div>
+                            <div style="margin: 1rem 0;"></div>`;
+                        }
+                    );
+                    
+                    // If no patterns were replaced, just clean up bold formatting
+                    if (processedContent === content) {
+                        processedContent = content.replace(/\*\*([^*]+)\*\*/g, '<span class="pattern-title">$1</span>');
+                    }
+                    
+                    formatted = processedContent;
                 }
                 
-                // If no patterns found, try alternative formatting
-                if (formatted === '') {
-                    // Handle inline patterns like **Frontend-Backend Separation**: description
-                    const inlinePatterns = content.match(/\*\*([^*]+)\*\*:\s*([^-]+)(?=-\s*\*\*|$)/g);
-                    if (inlinePatterns) {
-                        inlinePatterns.forEach((pattern, index) => {
-                            const match = pattern.match(/\*\*([^*]+)\*\*:\s*(.+)/);
-                            if (match) {
-                                formatted += `<div class="pattern-title">
-                                    <i class="fas fa-cube" style="margin-right: 0.5rem; color: #3b82f6;"></i>
-                                    ${match[1]}
-                                </div>
-                                <div class="pattern-content">${match[2].trim()}</div>`;
-                                
-                                if (index < inlinePatterns.length - 1) {
-                                    formatted += '<div style="margin: 1rem 0;"></div>';
-                                }
-                            }
-                        });
-                    } else {
-                        // Fallback: just clean up bold formatting
-                        formatted = content.replace(/\*\*([^*]+)\*\*/g, '<span class="pattern-title">$1</span>');
-                    }
-                }
-                
+                console.log('Formatted architecture content:', formatted);
                 return formatted;
             }
 
             formatCodeReferences(content) {
-                // Format code references with file names and descriptions
-                let formatted = content;
+                console.log('💻 ULTIMATE FIX: Formatting Code References with content:', content);
                 
-                // Handle file references like **Order.cs** in the **car-order-service**
-                formatted = formatted.replace(
-                    /\*\*([^*]+\.[a-zA-Z]+)\*\*\s+in\s+the\s+\*\*([^*]+)\*\*/g,
-                    `<div class="reference-title">
-                        <i class="fas fa-file-code" style="margin-right: 0.5rem;"></i>
-                        $1 <span style="color: #6b7280; font-weight: normal;">in $2</span>
-                    </div>`
+                let formatted = content.trim();
+                
+                // Handle single reference without bullet points (like from the new screenshot)
+                if (!formatted.includes(' - ')) {
+                    return `<div class="reference-item" style="background: #f8fafc; border-radius: 6px; padding: 0.75rem; border-left: 3px solid #10b981; margin-bottom: 1rem;">
+                        ${this.formatSingleCodeReference(formatted)}
+                    </div>`;
+                }
+                
+                // Handle multiple references with bullet points
+                const statements = formatted.split(/\s*-\s*(?=The|[A-Z])/).filter(stmt => stmt.trim().length > 0);
+                
+                if (statements.length > 1) {
+                    let result = '';
+                    statements.forEach((statement, index) => {
+                        if (statement.trim()) {
+                            let formattedStatement = this.formatSingleCodeReference(statement.trim());
+                            result += `<div class="reference-item" style="background: #f8fafc; border-radius: 6px; padding: 0.75rem; border-left: 3px solid #10b981; margin-bottom: 1rem;">
+                                ${formattedStatement}
+                            </div>`;
+                        }
+                    });
+                    return result;
+                } else {
+                    // If no clear bullet points, try to split by periods for long sentences
+                    const sentences = formatted.split(/\.\s+(?=[A-Z])/).filter(s => s.trim().length > 0);
+                    if (sentences.length > 1) {
+                        let result = '';
+                        sentences.forEach((sentence, index) => {
+                            if (sentence.trim()) {
+                                let cleanSentence = sentence.trim();
+                                if (!cleanSentence.endsWith('.')) cleanSentence += '.';
+                                let formattedSentence = this.formatSingleCodeReference(cleanSentence);
+                                result += `<div class="reference-item" style="margin-bottom: 1rem;">
+                                    ${formattedSentence}
+                                </div>`;
+                            }
+                        });
+                        return result;
+                    } else {
+                        // Single block fallback
+                        return `<div class="reference-item">
+                            ${this.formatSingleCodeReference(formatted)}
+                        </div>`;
+                    }
+                }
+            }
+
+            formatSingleCodeReference(text) {
+                // Handle backtick code references like `car-web-client` - make them stand out more
+                text = text.replace(/`([^`]+)`/g, '<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 3px; font-family: monospace; color: #1f2937; font-weight: 600;">$1</code>');
+                
+                // Handle **bold** repository names (ULTIMATE FIX for screenshot content)
+                text = text.replace(/\*\*([^*]+)\*\*/g, '<span style="font-weight: 700; color: #1e40af;">$1</span>');
+                
+                // Handle repository links if any
+                text = text.replace(
+                    /\[([^\]]+)\]\s*\(([^)]+)\)/g,
+                    '<a href="$2" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 600;">$1</a>'
                 );
                 
-                // Handle other bold references
-                formatted = formatted.replace(/\*\*([^*]+)\*\*/g, 
-                    '<span style="font-weight: 600; color: #065f46;">$1</span>');
+                // Handle common technical terms and service names
+                text = text.replace(
+                    /(HTTP APIs|API endpoints|backend services|business logic|Mermaid diagrams?|frontend diagram|specific business logic|respective implementations)/gi,
+                    '<span style="font-weight: 600; color: #065f46;">$1</span>'
+                );
                 
-                // Handle inline code
-                formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+                // Handle directory references like `src/api` or `src`
+                text = text.replace(
+                    /(src\/api|src|directory|directories|repository|repositories)/gi,
+                    '<span style="font-style: italic; color: #6b7280;">$1</span>'
+                );
                 
-                // Wrap in content div
-                return `<div class="reference-content">${formatted}</div>`;
+                return text;
+            }
+
+            formatInterestingPatterns(content) {
+                console.log('🔍 ULTIMATE FIX: Formatting Interesting Patterns', content);
+                
+                // Handle single pattern without bullet points
+                if (!content.includes(' - ')) {
+                    return `<div class="pattern-item" style="background: #f8fafc; border-radius: 6px; padding: 0.75rem; border-left: 3px solid #10b981; margin-bottom: 1rem;">
+                        <i class="fas fa-puzzle-piece" style="margin-right: 0.5rem; color: #10b981;"></i>
+                        ${this.formatSinglePattern(content)}
+                    </div>`;
+                }
+                
+                // Handle multiple patterns
+                const patterns = content.split(/\s*-\s*(?=The|[A-Z])/).filter(pattern => pattern.trim().length > 0);
+                let result = '';
+                
+                patterns.forEach((pattern, index) => {
+                    if (pattern.trim()) {
+                        let formattedPattern = this.formatSinglePattern(pattern.trim());
+                        result += `<div class="pattern-item" style="background: #f8fafc; border-radius: 6px; padding: 0.75rem; border-left: 3px solid #10b981; margin-bottom: 1rem;">
+                            <i class="fas fa-puzzle-piece" style="margin-right: 0.5rem; color: #10b981;"></i>
+                            ${formattedPattern}
+                        </div>`;
+                    }
+                });
+                
+                return result;
+            }
+
+            formatSinglePattern(text) {
+                // Handle backtick code references
+                text = text.replace(/`([^`]+)`/g, '<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 3px; font-family: monospace; color: #1f2937; font-weight: 600;">$1</code>');
+                
+                // Handle **bold** terms for emphasis
+                text = text.replace(/\*\*([^*]+)\*\*/g, '<span style="font-weight: 700; color: #059669;">$1</span>');
+                
+                // Handle parenthetical examples like (e.g., `pending`, `paid`, `cancelled`)
+                text = text.replace(/\(e\.g\.,\s*([^)]+)\)/gi, '<span style="font-style: italic; color: #6b7280;">(e.g., $1)</span>');
+                
+                return text;
             }
 
             detectLanguage(fileType) {
