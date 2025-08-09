@@ -46,6 +46,32 @@ logger = get_logger(__name__)
 # Global workflow tracking
 active_workflows: Dict[str, Dict] = {}
 
+def cleanup_completed_workflows(max_age_hours: int = 24):
+    """
+    Remove completed, failed, or cancelled workflows older than max_age_hours.
+    This prevents the active_workflows dictionary from growing indefinitely.
+    """
+    import time
+    current_time = datetime.now()
+    workflows_to_remove = []
+    
+    for workflow_id, workflow_data in active_workflows.items():
+        # Only clean up completed, failed, or cancelled workflows
+        if workflow_data["status"] in [WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED]:
+            completed_at = workflow_data.get("completed_at")
+            if completed_at:
+                age_hours = (current_time - completed_at).total_seconds() / 3600
+                if age_hours > max_age_hours:
+                    workflows_to_remove.append(workflow_id)
+    
+    # Remove old workflows
+    for workflow_id in workflows_to_remove:
+        logger.info(f"Cleaning up old workflow: {workflow_id}")
+        del active_workflows[workflow_id]
+    
+    if workflows_to_remove:
+        logger.info(f"Cleaned up {len(workflows_to_remove)} old workflows")
+
 
 def _map_workflow_intent_to_api(workflow_intent: str) -> QueryIntent:
     """Map workflow QueryIntent to API QueryIntent."""
@@ -183,12 +209,15 @@ async def index_all_repositories(
                 "batch_id": batch_id
             }
             
+            logger.info(f"Created workflow {workflow_id} with status {WorkflowStatus.PENDING}. Total workflows: {len(active_workflows)}")
+            
             workflows.append(IndexingResponse(
                 workflow_id=workflow_id,
                 repository=repo_config["url"],  # Keep URL for display
                 status=WorkflowStatus.PENDING,
                 estimated_duration="10-30 minutes",
-                message=f"Indexing workflow queued for {repo_config['url']}"
+                message=f"Indexing workflow queued for {repo_config['url']}",
+                change_summary=None  # No change summary for batch operations
             ))
         
         logger.info(f"Started batch indexing for {len(workflows)} repositories")
@@ -278,6 +307,8 @@ async def index_repository(
             "dry_run": request.dry_run
         }
         
+        logger.info(f"Created workflow {workflow_id} with status {WorkflowStatus.PENDING}. Total workflows: {len(active_workflows)}")
+        
         # Prepare response message
         if request.dry_run:
             message = f"Dry-run analysis started for {request.repository_url} - no actual indexing will be performed"
@@ -296,7 +327,8 @@ async def index_repository(
             estimated_duration=estimated_duration,
             message=message,
             incremental=request.incremental,
-            dry_run=request.dry_run
+            dry_run=request.dry_run,
+            change_summary=None  # Will be populated when workflow completes
         )
         
     except Exception as e:
@@ -701,9 +733,9 @@ async def get_statistics(
                 if language:
                     language_counts[language] = language_counts.get(language, 0) + repo.get("document_count", 0)
         
-        # Get active workflows count
+        # Get active workflows count (RUNNING or PENDING status)
         active_workflow_count = len([w for w in active_workflows.values() 
-                                   if w["status"] == WorkflowStatus.RUNNING])
+                                   if w["status"] in [WorkflowStatus.RUNNING, WorkflowStatus.PENDING]])
         
         # Determine system health based on vector store availability
         try:
@@ -775,6 +807,7 @@ async def get_workflow_status(workflow_id: str):
 async def list_workflows(
     status: Optional[WorkflowStatus] = Query(None, description="Filter by workflow status"),
     workflow_type: Optional[str] = Query(None, description="Filter by workflow type"),
+    include_completed: bool = Query(True, description="Include completed/failed workflows"),
     limit: int = Query(100, description="Maximum number of workflows to return")
 ):
     """
@@ -782,14 +815,26 @@ async def list_workflows(
     
     Returns a list of workflow states with optional filtering by status
     and type, useful for monitoring and management.
+    By default, shows all workflows including completed ones.
     """
     try:
+        logger.info(f"Listing workflows. Total in dictionary: {len(active_workflows)}")
         workflows = []
         
         for workflow_id, workflow_data in active_workflows.items():
-            # Apply filters
+            logger.info(f"Processing workflow {workflow_id} with status {workflow_data.get('status')}")
+            
+            # Apply status filter
             if status and workflow_data["status"] != status:
+                logger.info(f"Skipping workflow {workflow_id} due to status filter")
                 continue
+                
+            # Filter out completed/failed workflows unless explicitly requested
+            if not include_completed and workflow_data["status"] in [WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED]:
+                logger.info(f"Skipping completed workflow {workflow_id}")
+                continue
+                
+            # Apply workflow type filter
             if workflow_type and workflow_data["type"] != workflow_type:
                 continue
             
@@ -815,6 +860,16 @@ async def list_workflows(
             status_code=500,
             detail=f"Failed to list workflows: {str(e)}"
         )
+
+
+@router.get("/workflows/debug")
+async def debug_workflows():
+    """Debug endpoint to see the raw active_workflows dictionary."""
+    return {
+        "active_workflows": active_workflows,
+        "count": len(active_workflows),
+        "statuses": [w.get("status") for w in active_workflows.values()]
+    }
 
 
 async def _run_indexing_workflow(
