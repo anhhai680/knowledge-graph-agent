@@ -1,9 +1,0 @@
-{
-  "test/repo#main": {
-    "repository": "test/repo",
-    "branch": "main",
-    "last_commit": "abc123",
-    "last_indexed_at": "2025-08-09T06:34:26.988561",
-    "metadata": {}
-  }
-}
