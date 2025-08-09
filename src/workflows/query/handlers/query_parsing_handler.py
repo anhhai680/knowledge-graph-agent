@@ -82,17 +82,12 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
                 determined_intent = QueryIntent.ARCHITECTURE
             
             state["query_intent"] = determined_intent
-            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
-            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Processed query was: '{processed_query}'")
-            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: State before setting intent: {original_intent}")
-            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: State after setting intent: {state.get('query_intent')}")
-            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Intent type: {type(state.get('query_intent'))}")
-            self.logger.debug(f"🔥🔥🔥 FORCE DEBUG: Q2 system visualization: {is_q2_query}")
-            self.logger.debug(f"INTENT DEBUG: Intent Analysis on ORIGINAL: '{original_query}' -> {determined_intent}")
-            self.logger.debug(f"INTENT DEBUG: State before setting intent: {original_intent}")
-            self.logger.debug(f"INTENT DEBUG: State after setting intent: {state.get('query_intent')}")
-            self.logger.debug(f"INTENT DEBUG: Intent type: {type(state.get('query_intent'))}")
-            self.logger.debug(f"INTENT DEBUG: Q2 system visualization: {is_q2_query}")
+            self.logger.debug(f"Intent analysis on original query: '{original_query}' -> {determined_intent}")  
+            self.logger.debug(f"Processed query: '{processed_query}'")  
+            self.logger.debug(f"State before setting intent: {original_intent}")  
+            self.logger.debug(f"State after setting intent: {state.get('query_intent')}")  
+            self.logger.debug(f"Intent type: {type(state.get('query_intent'))}")  
+            self.logger.debug(f"Q2 system visualization: {is_q2_query}")  
 
         return state
     
