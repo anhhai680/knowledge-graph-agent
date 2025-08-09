@@ -8,6 +8,7 @@ workflow management, and system monitoring with full LangGraph workflow integrat
 import json
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
@@ -224,12 +225,16 @@ async def index_repository(
     Trigger LangGraph indexing workflow for a specific repository.
     
     This endpoint initiates the indexing workflow for a single repository,
-    processing all files and generating vector embeddings for storage.
+    supporting both full and incremental re-indexing modes based on git history.
     """
     try:
         workflow_id = str(uuid.uuid4())
         
-        logger.info(f"Starting indexing workflow for repository: {request.repository_url}")
+        mode_desc = "incremental" if request.incremental else "full"
+        if request.dry_run:
+            mode_desc += " (dry-run)"
+            
+        logger.info(f"Starting {mode_desc} indexing workflow for repository: {request.repository_url}")
         
         # Extract repository name from URL (e.g., "anhhai680/car-web-client" from URL)
         if request.repository_url.startswith("https://github.com/"):
@@ -248,12 +253,14 @@ async def index_repository(
             # Fallback: use the URL as-is (this will likely fail but allows debugging)
             repo_name = request.repository_url
         
-        # Start background indexing workflow
+        # Start background indexing workflow with incremental parameters
         background_tasks.add_task(
             _run_indexing_workflow,
             workflow_id,
             repo_name,
-            indexing_workflow
+            indexing_workflow,
+            request.incremental,
+            request.dry_run
         )
         
         # Track workflow
@@ -262,15 +269,30 @@ async def index_repository(
             "type": "indexing",
             "status": WorkflowStatus.PENDING,
             "repository": request.repository_url,
-            "started_at": datetime.now()
+            "started_at": datetime.now(),
+            "incremental": request.incremental,
+            "dry_run": request.dry_run
         }
+        
+        # Prepare response message
+        if request.dry_run:
+            message = f"Dry-run analysis started for {request.repository_url} - no actual indexing will be performed"
+            estimated_duration = "1-5 minutes"
+        elif request.incremental:
+            message = f"Incremental re-indexing started for {request.repository_url}"
+            estimated_duration = "2-15 minutes"
+        else:
+            message = f"Full indexing workflow started for {request.repository_url}"
+            estimated_duration = "10-30 minutes"
         
         return IndexingResponse(
             workflow_id=workflow_id,
             repository=request.repository_url,
             status=WorkflowStatus.PENDING,
-            estimated_duration="10-30 minutes",
-            message=f"Indexing workflow started for {request.repository_url}"
+            estimated_duration=estimated_duration,
+            message=message,
+            incremental=request.incremental,
+            dry_run=request.dry_run
         )
         
     except Exception as e:
@@ -794,7 +816,9 @@ async def list_workflows(
 async def _run_indexing_workflow(
     workflow_id: str,
     repo_name: str,
-    indexing_workflow: IndexingWorkflow
+    indexing_workflow: IndexingWorkflow,
+    incremental: bool = False,
+    dry_run: bool = False
 ):
     """
     Background task to run indexing workflow.
@@ -803,17 +827,33 @@ async def _run_indexing_workflow(
         workflow_id: Unique workflow identifier
         repo_name: Repository name (e.g., "car-web-client")
         indexing_workflow: Indexing workflow instance
+        incremental: Enable incremental re-indexing
+        dry_run: Only analyze changes without indexing
     """
     try:
-        logger.info(f"Starting indexing workflow {workflow_id} for repository: {repo_name}")
+        mode_desc = "incremental" if incremental else "full"
+        if dry_run:
+            mode_desc += " (dry-run)"
+            
+        logger.info(f"Starting {mode_desc} indexing workflow {workflow_id} for repository: {repo_name}")
         
         # Update workflow status to running
         if workflow_id in active_workflows:
             active_workflows[workflow_id]["status"] = WorkflowStatus.RUNNING
             active_workflows[workflow_id]["current_step"] = "initializing"
         
-        # Create proper indexing state using the workflow state factory
+        # Create indexing workflow with incremental parameters
+        incremental_workflow = IndexingWorkflow(
+            repositories=[repo_name],
+            vector_store_type="chroma",
+            collection_name="knowledge-base-graph",
+            batch_size=100,
+            incremental=incremental,
+            dry_run=dry_run,
+            workflow_id=workflow_id
+        )
         
+        # Create proper indexing state using the workflow state factory
         indexing_state = create_indexing_state(
             workflow_id=workflow_id,
             repositories=[repo_name],
@@ -827,15 +867,31 @@ async def _run_indexing_workflow(
         indexing_state["current_step"] = "initializing"
         
         # Execute indexing workflow with proper state management
-        logger.info(f"Executing indexing workflow for {repo_name}")
-        result_state = indexing_workflow.invoke(indexing_state)
+        logger.info(f"Executing {mode_desc} indexing workflow for {repo_name}")
+        result_state = incremental_workflow.invoke(indexing_state)
         
         # Check workflow completion status
         workflow_status = result_state.get("status")
-        workflow_metadata = indexing_workflow.get_metadata()
+        workflow_metadata = incremental_workflow.get_metadata()
         
         logger.info(f"Workflow completed with status: {workflow_status}")
         logger.info(f"Workflow metadata status: {workflow_metadata.get('status')}")
+        
+        # Extract change summary for incremental workflows
+        change_summary = None
+        if incremental and "incremental_changes" in result_state.get("metadata", {}):
+            incremental_changes = result_state["metadata"]["incremental_changes"]
+            if repo_name in incremental_changes:
+                change_info = incremental_changes[repo_name]
+                change_summary = {
+                    "change_type": change_info.get("change_type"),
+                    "total_changes": change_info.get("total_changes", 0),
+                    "files_to_process": len(change_info.get("files_to_process", [])),
+                    "files_to_remove": len(change_info.get("files_to_remove", [])),
+                    "diff_summary": change_info.get("diff_summary", {}),
+                    "last_commit": change_info.get("last_commit"),
+                    "current_commit": change_info.get("current_commit")
+                }
         
         # Update API workflow status based on workflow completion
         if workflow_id in active_workflows:
@@ -850,7 +906,10 @@ async def _run_indexing_workflow(
                         "total_chunks": result_state.get("total_chunks", 0),
                         "errors": result_state.get("errors", []),
                         "repository": repo_name,
-                        "workflow_metadata": workflow_metadata
+                        "workflow_metadata": workflow_metadata,
+                        "incremental": incremental,
+                        "dry_run": dry_run,
+                        "change_summary": change_summary
                     }
                 })
                 logger.info(f"Indexing workflow {workflow_id} completed successfully")
@@ -1079,5 +1138,198 @@ async def get_graph_health():
             "configuration": graph_config if 'graph_config' in locals() else None,
             "error": error_msg
         }
+
+
+@router.get("/commits/tracking")
+async def get_commit_tracking_info():
+    """
+    Get commit tracking information for all repositories.
+    
+    Returns information about the last indexed commit for each repository,
+    useful for understanding incremental indexing status.
+    """
+    try:
+        from src.utils.commit_tracker import get_commit_tracker
+        
+        commit_tracker = get_commit_tracker()
+        
+        # Get all tracked repositories
+        tracked_repos = commit_tracker.list_tracked_repositories()
+        
+        # Get statistics
+        stats = commit_tracker.get_indexing_statistics()
+        
+        return {
+            "tracked_repositories": tracked_repos,
+            "statistics": stats,
+            "total_repositories": len(tracked_repos)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get commit tracking info: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get commit tracking info: {str(e)}"
+        )
+
+
+@router.delete("/commits/tracking/{owner}/{repo}")
+async def remove_commit_tracking(
+    owner: str,
+    repo: str,
+    branch: str = "main"
+):
+    """
+    Remove commit tracking for a specific repository.
+    
+    This will force a full re-index the next time the repository is processed
+    in incremental mode.
+    """
+    try:
+        from src.utils.commit_tracker import get_commit_tracker
+        
+        commit_tracker = get_commit_tracker()
+        repository = f"{owner}/{repo}"
+        
+        removed = commit_tracker.remove_repository(repository, branch)
+        
+        if removed:
+            return {
+                "success": True,
+                "message": f"Removed commit tracking for {repository}#{branch}",
+                "repository": repository,
+                "branch": branch
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"No commit tracking found for {repository}#{branch}",
+                "repository": repository,
+                "branch": branch
+            }
+        
+    except Exception as e:
+        logger.error(f"Failed to remove commit tracking: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to remove commit tracking: {str(e)}"
+        )
+
+
+@router.get("/commits/diff/{owner}/{repo}")
+async def preview_incremental_changes(
+    owner: str,
+    repo: str,
+    branch: str = "main"
+):
+    """
+    Preview what changes would be processed in an incremental re-index.
+    
+    This endpoint performs a dry-run analysis of changes since the last
+    indexed commit without performing actual indexing.
+    """
+    try:
+        from src.utils.commit_tracker import get_commit_tracker
+        from src.loaders.git_diff_service import GitDiffService
+        from src.loaders.git_repository_manager import GitRepositoryManager
+        from src.config.settings import settings
+        
+        commit_tracker = get_commit_tracker()
+        git_diff_service = GitDiffService()
+        repo_manager = GitRepositoryManager()
+        
+        repository = f"{owner}/{repo}"
+        
+        # Get last indexed commit
+        last_commit = commit_tracker.get_last_indexed_commit(repository, branch)
+        
+        if not last_commit:
+            return {
+                "repository": repository,
+                "branch": branch,
+                "change_type": "full_index",
+                "reason": "no_previous_index",
+                "message": "No previous index found - full indexing required"
+            }
+        
+        # Prepare local repository
+        repo_url = f"https://github.com/{owner}/{repo}.git"
+        local_repo_path = repo_manager.get_local_repo_path(owner, repo)
+        
+        # Clone or update repository if needed
+        if not Path(local_repo_path).exists():
+            clone_result = repo_manager.clone_repository(
+                repo_url=repo_url,
+                owner=owner,
+                repo_name=repo,
+                branch=branch,
+                github_token=settings.github.token
+            )
+            if not clone_result:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to clone repository {repository}"
+                )
+        else:
+            repo_manager.update_repository(owner=owner, repo_name=repo, branch=branch)
+        
+        # Get current commit
+        current_commit = git_diff_service.get_current_commit(local_repo_path, branch)
+        if not current_commit:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get current commit for {repository}"
+            )
+        
+        # Check if there are changes
+        if last_commit == current_commit:
+            return {
+                "repository": repository,
+                "branch": branch,
+                "change_type": "no_changes",
+                "last_commit": last_commit,
+                "current_commit": current_commit,
+                "message": "No changes detected since last index"
+            }
+        
+        # Compute diff
+        diff_result = git_diff_service.get_changes_between_commits(
+            local_repo_path,
+            last_commit,
+            current_commit,
+            file_extensions=settings.github.file_extensions
+        )
+        
+        # Get files to process and remove
+        files_to_process = list(git_diff_service.get_files_to_process(diff_result))
+        files_to_remove = list(git_diff_service.get_files_to_remove(diff_result))
+        
+        return {
+            "repository": repository,
+            "branch": branch,
+            "change_type": "incremental",
+            "last_commit": last_commit,
+            "current_commit": current_commit,
+            "total_changes": diff_result.total_changes,
+            "changes_by_type": {k.value: v for k, v in diff_result.changes_by_type.items()},
+            "files_to_process": files_to_process,
+            "files_to_remove": files_to_remove,
+            "diff_summary": {
+                "added": len(diff_result.added_files),
+                "modified": len(diff_result.modified_files),
+                "deleted": len(diff_result.deleted_files),
+                "renamed": len(diff_result.renamed_files)
+            },
+            "message": f"Found {diff_result.total_changes} file changes to process"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to preview incremental changes: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to preview incremental changes: {str(e)}"
+        )
 
 

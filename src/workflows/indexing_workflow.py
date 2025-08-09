@@ -39,11 +39,13 @@ class IndexingWorkflowSteps(str):
     INITIALIZE_STATE = "initialize_state"
     LOAD_REPOSITORIES = "load_repositories"
     VALIDATE_REPOS = "validate_repos"
+    DETERMINE_CHANGED_FILES = "determine_changed_files"
     LOAD_FILES_FROM_GITHUB = "load_files_from_github"
     PROCESS_DOCUMENTS = "process_documents"
     LANGUAGE_AWARE_CHUNKING = "language_aware_chunking"
     EXTRACT_METADATA = "extract_metadata"
     GENERATE_EMBEDDINGS = "generate_embeddings"
+    CLEANUP_STALE_VECTORS = "cleanup_stale_vectors"
     STORE_IN_VECTOR_DB = "store_in_vector_db"
     STORE_IN_GRAPH_DB = "store_in_graph_db"
     UPDATE_WORKFLOW_STATE = "update_workflow_state"
@@ -82,6 +84,8 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         collection_name: Optional[str] = None,
         batch_size: int = 50,
         max_workers: int = 2,
+        incremental: bool = False,
+        dry_run: bool = False,
         **kwargs,
     ):
         """
@@ -94,6 +98,8 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             collection_name: Collection name (overrides env setting)
             batch_size: Batch size for embedding generation
             max_workers: Maximum number of worker threads for parallel processing
+            incremental: Enable incremental re-indexing based on git commits
+            dry_run: Only analyze changes without performing actual indexing
             **kwargs: Additional arguments passed to BaseWorkflow
         """
         super().__init__(**kwargs)
@@ -108,18 +114,34 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         )
         self.batch_size = batch_size
         self.max_workers = max_workers
+        self.incremental = incremental
+        self.dry_run = dry_run
 
         # Initialize components
         self.document_processor = DocumentProcessor()
         self.embedding_factory = EmbeddingFactory()
         self.vector_store_factory = VectorStoreFactory()
 
+        # Initialize incremental indexing components
+        if self.incremental:
+            from src.utils.commit_tracker import get_commit_tracker
+            from src.loaders.git_diff_service import GitDiffService
+            self.commit_tracker = get_commit_tracker()
+            self.git_diff_service = GitDiffService()
+        else:
+            self.commit_tracker = None
+            self.git_diff_service = None
+
         # Repository configuration cache
         self._repo_configs: Dict[str, Dict[str, Any]] = {}
         self._app_settings: Optional[Dict[str, Any]] = None
 
+        mode_msg = "incremental" if self.incremental else "full"
+        if self.dry_run:
+            mode_msg += " (dry-run)"
+        
         self.logger.info(
-            f"Initialized indexing workflow with vector store: {self.vector_store_type}"
+            f"Initialized {mode_msg} indexing workflow with vector store: {self.vector_store_type}"
         )
 
     def define_steps(self) -> List[str]:
@@ -129,19 +151,40 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         Returns:
             List of step names in execution order
         """
-        return [
+        steps = [
             IndexingWorkflowSteps.INITIALIZE_STATE,
             IndexingWorkflowSteps.LOAD_REPOSITORIES,
             IndexingWorkflowSteps.VALIDATE_REPOS,
+        ]
+        
+        # Add incremental-specific step if enabled
+        if self.incremental:
+            steps.append(IndexingWorkflowSteps.DETERMINE_CHANGED_FILES)
+        
+        steps.extend([
             IndexingWorkflowSteps.LOAD_FILES_FROM_GITHUB,
             IndexingWorkflowSteps.PROCESS_DOCUMENTS,
             IndexingWorkflowSteps.EXTRACT_METADATA,
-            IndexingWorkflowSteps.STORE_IN_VECTOR_DB,  # Vector store now handles embedding generation
-            IndexingWorkflowSteps.STORE_IN_GRAPH_DB,   # Graph database storage (conditional)
+        ])
+        
+        # Add cleanup step for incremental mode (before storing new vectors)
+        if self.incremental and not self.dry_run:
+            steps.append(IndexingWorkflowSteps.CLEANUP_STALE_VECTORS)
+        
+        # Skip storage steps in dry-run mode
+        if not self.dry_run:
+            steps.extend([
+                IndexingWorkflowSteps.STORE_IN_VECTOR_DB,  # Vector store now handles embedding generation
+                IndexingWorkflowSteps.STORE_IN_GRAPH_DB,   # Graph database storage (conditional)
+            ])
+        
+        steps.extend([
             IndexingWorkflowSteps.UPDATE_WORKFLOW_STATE,
             IndexingWorkflowSteps.CHECK_COMPLETE,
             IndexingWorkflowSteps.FINALIZE_INDEX,
-        ]
+        ])
+        
+        return steps
 
     def validate_state(self, state: IndexingState) -> bool:
         """
@@ -203,12 +246,16 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 state = self._load_repositories(state)
             elif step == IndexingWorkflowSteps.VALIDATE_REPOS:
                 state = self._validate_repositories(state)
+            elif step == IndexingWorkflowSteps.DETERMINE_CHANGED_FILES:
+                state = self._determine_changed_files(state)
             elif step == IndexingWorkflowSteps.LOAD_FILES_FROM_GITHUB:
                 state = self._load_files_from_github(state)
             elif step == IndexingWorkflowSteps.PROCESS_DOCUMENTS:
                 state = self._process_documents(state)
             elif step == IndexingWorkflowSteps.EXTRACT_METADATA:
                 state = self._extract_metadata(state)
+            elif step == IndexingWorkflowSteps.CLEANUP_STALE_VECTORS:
+                state = self._cleanup_stale_vectors(state)
             elif step == IndexingWorkflowSteps.STORE_IN_VECTOR_DB:
                 state = self._store_in_vector_db(state)
             elif step == IndexingWorkflowSteps.STORE_IN_GRAPH_DB:
@@ -431,12 +478,226 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             state, 15.0, IndexingWorkflowSteps.VALIDATE_REPOS
         ))
 
+    def _determine_changed_files(self, state: IndexingState) -> IndexingState:
+        """Determine which files have changed since last indexing (incremental mode only)."""
+        if not self.incremental:
+            self.logger.info("Skipping change detection - not in incremental mode")
+            return cast(IndexingState, update_workflow_progress(
+                state, 20.0, IndexingWorkflowSteps.DETERMINE_CHANGED_FILES
+            ))
+
+        self.logger.info("Determining changed files for incremental re-indexing")
+        
+        # Initialize change tracking in state metadata
+        state["metadata"]["incremental_changes"] = {}
+        total_changes = 0
+        
+        for repo_name in state["repositories"]:
+            if state["repository_states"][repo_name]["status"] == ProcessingStatus.FAILED:
+                continue
+                
+            try:
+                repo_config = self._get_repo_config(repo_name)
+                owner, name = self._parse_repo_url(repo_config["url"])
+                branch = repo_config.get("branch", "main")
+                full_repo_name = f"{owner}/{name}"
+                
+                # Get last indexed commit for this repository
+                last_commit = self.commit_tracker.get_last_indexed_commit(full_repo_name, branch)
+                
+                if not last_commit:
+                    self.logger.info(f"No previous index found for {full_repo_name}#{branch} - will do full indexing")
+                    # Mark for full indexing
+                    state["metadata"]["incremental_changes"][repo_name] = {
+                        "change_type": "full_index",
+                        "reason": "no_previous_index",
+                        "files_to_process": None,  # All files
+                        "files_to_remove": [],
+                        "last_commit": None,
+                        "current_commit": None
+                    }
+                    continue
+                
+                # Prepare local repository for git diff
+                repo_path = self._prepare_repository_for_diff(repo_name, owner, name, branch)
+                if not repo_path:
+                    self.logger.error(f"Failed to prepare repository {repo_name} for diff analysis")
+                    state["repository_states"][repo_name]["status"] = ProcessingStatus.FAILED
+                    continue
+                
+                # Get current commit
+                current_commit = self.git_diff_service.get_current_commit(repo_path, branch)
+                if not current_commit:
+                    self.logger.error(f"Failed to get current commit for {repo_name}")
+                    state["repository_states"][repo_name]["status"] = ProcessingStatus.FAILED
+                    continue
+                
+                # Check if there are any changes
+                if last_commit == current_commit:
+                    self.logger.info(f"No changes detected for {repo_name} (commit: {current_commit})")
+                    state["metadata"]["incremental_changes"][repo_name] = {
+                        "change_type": "no_changes",
+                        "reason": "same_commit",
+                        "files_to_process": [],
+                        "files_to_remove": [],
+                        "last_commit": last_commit,
+                        "current_commit": current_commit
+                    }
+                    # Mark repository as skipped
+                    state["repository_states"][repo_name]["status"] = ProcessingStatus.SKIPPED
+                    continue
+                
+                # Validate commits exist
+                if not self.git_diff_service.validate_commits(repo_path, last_commit, current_commit):
+                    self.logger.warning(f"Invalid commits for {repo_name} - falling back to full indexing")
+                    state["metadata"]["incremental_changes"][repo_name] = {
+                        "change_type": "full_index",
+                        "reason": "invalid_commits",
+                        "files_to_process": None,  # All files
+                        "files_to_remove": [],
+                        "last_commit": last_commit,
+                        "current_commit": current_commit
+                    }
+                    continue
+                
+                # Compute diff between commits
+                diff_result = self.git_diff_service.get_changes_between_commits(
+                    repo_path, 
+                    last_commit, 
+                    current_commit,
+                    file_extensions=settings.github.file_extensions
+                )
+                
+                # Get files to process and remove
+                files_to_process = self.git_diff_service.get_files_to_process(diff_result)
+                files_to_remove = self.git_diff_service.get_files_to_remove(diff_result)
+                
+                # Store change information
+                change_info = {
+                    "change_type": "incremental",
+                    "total_changes": diff_result.total_changes,
+                    "changes_by_type": {k.value: v for k, v in diff_result.changes_by_type.items()},
+                    "files_to_process": list(files_to_process),
+                    "files_to_remove": list(files_to_remove),
+                    "last_commit": last_commit,
+                    "current_commit": current_commit,
+                    "diff_summary": {
+                        "added": len(diff_result.added_files),
+                        "modified": len(diff_result.modified_files),
+                        "deleted": len(diff_result.deleted_files),
+                        "renamed": len(diff_result.renamed_files)
+                    }
+                }
+                
+                state["metadata"]["incremental_changes"][repo_name] = change_info
+                total_changes += diff_result.total_changes
+                
+                self.logger.info(f"Changes detected for {repo_name}: {diff_result.total_changes} files changed")
+                self.logger.info(f"  - {len(files_to_process)} files to process")
+                self.logger.info(f"  - {len(files_to_remove)} files to remove from vector store")
+                
+            except Exception as e:
+                self.logger.error(f"Failed to determine changes for {repo_name}: {e}")
+                state["repository_states"][repo_name]["status"] = ProcessingStatus.FAILED
+                # Add to errors for tracking
+                state["repository_states"][repo_name]["errors"].append(str(e))
+        
+        # Log summary
+        repos_with_changes = sum(1 for changes in state["metadata"]["incremental_changes"].values() 
+                               if changes["change_type"] in ["incremental", "full_index"])
+        repos_no_changes = sum(1 for changes in state["metadata"]["incremental_changes"].values() 
+                             if changes["change_type"] == "no_changes")
+        
+        self.logger.info(f"Change detection summary:")
+        self.logger.info(f"  - {repos_with_changes} repositories with changes")
+        self.logger.info(f"  - {repos_no_changes} repositories with no changes")
+        self.logger.info(f"  - {total_changes} total file changes detected")
+        
+        return cast(IndexingState, update_workflow_progress(
+            state, 20.0, IndexingWorkflowSteps.DETERMINE_CHANGED_FILES
+        ))
+
+    def _cleanup_stale_vectors(self, state: IndexingState) -> IndexingState:
+        """Remove stale vectors for deleted, modified, and renamed files."""
+        if not self.incremental:
+            self.logger.info("Skipping vector cleanup - not in incremental mode")
+            return cast(IndexingState, update_workflow_progress(
+                state, 88.0, IndexingWorkflowSteps.CLEANUP_STALE_VECTORS
+            ))
+
+        self.logger.info("Cleaning up stale vectors for incremental re-indexing")
+        
+        # Initialize vector store
+        vector_store = self.vector_store_factory.create(collection_name=self.collection_name)
+        
+        total_removed = 0
+        cleanup_stats = {}
+        
+        # Process each repository's changes
+        incremental_changes = state["metadata"].get("incremental_changes", {})
+        
+        for repo_name, change_info in incremental_changes.items():
+            if change_info["change_type"] == "no_changes":
+                continue
+                
+            files_to_remove = change_info.get("files_to_remove", [])
+            if not files_to_remove:
+                continue
+            
+            try:
+                repo_config = self._get_repo_config(repo_name)
+                owner, name = self._parse_repo_url(repo_config["url"])
+                full_repo_name = f"{owner}/{name}"
+                
+                self.logger.info(f"Removing {len(files_to_remove)} stale vectors for {repo_name}")
+                
+                # Remove vectors by file path metadata
+                removed_count = 0
+                for file_path in files_to_remove:
+                    try:
+                        # Remove documents matching this file path and repository
+                        deleted = vector_store.delete_by_metadata({
+                            "file_path": file_path,
+                            "repository": full_repo_name
+                        })
+                        removed_count += deleted
+                        
+                    except Exception as e:
+                        self.logger.error(f"Failed to remove vectors for {file_path}: {e}")
+                
+                cleanup_stats[repo_name] = {
+                    "files_to_remove": len(files_to_remove),
+                    "vectors_removed": removed_count
+                }
+                total_removed += removed_count
+                
+                self.logger.info(f"Removed {removed_count} vectors for {repo_name}")
+                
+            except Exception as e:
+                self.logger.error(f"Failed to cleanup vectors for {repo_name}: {e}")
+                cleanup_stats[repo_name] = {
+                    "files_to_remove": len(files_to_remove),
+                    "vectors_removed": 0,
+                    "error": str(e)
+                }
+        
+        # Store cleanup statistics
+        state["metadata"]["vector_cleanup_stats"] = cleanup_stats
+        state["metadata"]["total_vectors_removed"] = total_removed
+        
+        self.logger.info(f"Vector cleanup completed: {total_removed} vectors removed")
+        
+        return cast(IndexingState, update_workflow_progress(
+            state, 88.0, IndexingWorkflowSteps.CLEANUP_STALE_VECTORS
+        ))
+
     def _load_files_from_github(self, state: IndexingState) -> IndexingState:
         """Load files from GitHub repositories with parallel processing."""
         self.logger.info("Loading files from GitHub repositories")
 
         all_documents = []
         total_files = 0
+        incremental_changes = state["metadata"].get("incremental_changes", {})
 
         # Process repositories in parallel with controlled concurrency
         with ThreadPoolExecutor(
@@ -445,14 +706,24 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             # Submit repository loading tasks
             future_to_repo = {}
             for repo_name in state["repositories"]:
-                if (
-                    state["repository_states"][repo_name]["status"]
-                    != ProcessingStatus.FAILED
-                ):
-                    future = executor.submit(
-                        self._load_repository_files, repo_name, state
-                    )
-                    future_to_repo[future] = repo_name
+                repo_state = state["repository_states"][repo_name]
+                
+                # Skip failed repositories
+                if repo_state["status"] == ProcessingStatus.FAILED:
+                    continue
+                
+                # Skip repositories with no changes in incremental mode
+                if self.incremental and repo_name in incremental_changes:
+                    change_info = incremental_changes[repo_name]
+                    if change_info["change_type"] == "no_changes":
+                        self.logger.info(f"Skipping {repo_name} - no changes detected")
+                        repo_state["status"] = ProcessingStatus.SKIPPED
+                        continue
+
+                future = executor.submit(
+                    self._load_repository_files, repo_name, state
+                )
+                future_to_repo[future] = repo_name
 
             # Collect results as they complete
             for future in as_completed(future_to_repo):
@@ -961,11 +1232,36 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         """Finalize indexing workflow."""
         self.logger.info("Finalizing indexing workflow")
 
+        # Update commit tracking for successful repositories (incremental mode only)
+        if self.incremental and self.commit_tracker and not self.dry_run:
+            self._update_commit_tracking(state)
+
         # Mark workflow as completed
         state["status"] = ProcessingStatus.COMPLETED
 
         # Log final statistics
         self.logger.info("=== Indexing Workflow Summary ===")
+        
+        # Log mode-specific information
+        if self.incremental:
+            incremental_changes = state["metadata"].get("incremental_changes", {})
+            repos_with_changes = sum(1 for change in incremental_changes.values() 
+                                   if change["change_type"] in ["incremental", "full_index"])
+            repos_skipped = sum(1 for change in incremental_changes.values() 
+                              if change["change_type"] == "no_changes")
+            total_file_changes = sum(change.get("total_changes", 0) for change in incremental_changes.values())
+            
+            self.logger.info(f"Mode: Incremental re-indexing {'(dry-run)' if self.dry_run else ''}")
+            self.logger.info(f"Repositories with changes: {repos_with_changes}")
+            self.logger.info(f"Repositories skipped (no changes): {repos_skipped}")
+            self.logger.info(f"Total file changes detected: {total_file_changes}")
+            
+            if "vector_cleanup_stats" in state["metadata"]:
+                total_removed = state["metadata"].get("total_vectors_removed", 0)
+                self.logger.info(f"Stale vectors removed: {total_removed}")
+        else:
+            self.logger.info("Mode: Full indexing")
+        
         self.logger.info(f"Repositories processed: {len(state['repositories'])}")
         self.logger.info(f"Files processed: {state['processed_files']}")
         self.logger.info(f"Total chunks created: {state['total_chunks']}")
@@ -994,6 +1290,112 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         return cast(IndexingState, update_workflow_progress(
             state, 100.0, IndexingWorkflowSteps.FINALIZE_INDEX
         ))
+
+    def _prepare_repository_for_diff(self, repo_name: str, owner: str, name: str, branch: str) -> Optional[str]:
+        """
+        Prepare local repository for git diff operations.
+        
+        Args:
+            repo_name: Repository name from config
+            owner: Repository owner
+            name: Repository name
+            branch: Branch name
+            
+        Returns:
+            Path to local repository or None if failed
+        """
+        try:
+            # Use git repository manager to clone/update repository
+            from src.loaders.git_repository_manager import GitRepositoryManager
+            
+            repo_manager = GitRepositoryManager()
+            repo_url = f"https://github.com/{owner}/{name}.git"
+            
+            # Get local repo path
+            local_repo_path = repo_manager.get_local_repo_path(owner, name)
+            
+            # Clone or update repository
+            if not Path(local_repo_path).exists():
+                # Clone repository
+                clone_result = repo_manager.clone_repository(
+                    repo_url=repo_url,
+                    owner=owner,
+                    repo_name=name,
+                    branch=branch,
+                    github_token=settings.github.token
+                )
+                if not clone_result:
+                    self.logger.error(f"Failed to clone repository {owner}/{name}")
+                    return None
+            else:
+                # Update existing repository
+                update_result = repo_manager.update_repository(
+                    owner=owner,
+                    repo_name=name,
+                    branch=branch
+                )
+                if not update_result:
+                    self.logger.warning(f"Failed to update repository {owner}/{name}, using existing version")
+            
+            return local_repo_path
+            
+        except Exception as e:
+            self.logger.error(f"Failed to prepare repository {repo_name} for diff: {e}")
+            return None
+
+    def _update_commit_tracking(self, state: IndexingState) -> None:
+        """
+        Update commit tracking for successfully processed repositories.
+        
+        Args:
+            state: Current workflow state
+        """
+        if not self.commit_tracker:
+            return
+            
+        incremental_changes = state["metadata"].get("incremental_changes", {})
+        
+        for repo_name in state["repositories"]:
+            repo_state = state["repository_states"][repo_name]
+            
+            # Only update tracking for successfully completed repositories
+            if repo_state["status"] != ProcessingStatus.COMPLETED:
+                continue
+            
+            # Get repository information
+            try:
+                repo_config = self._get_repo_config(repo_name)
+                owner, name = self._parse_repo_url(repo_config["url"])
+                branch = repo_config.get("branch", "main")
+                full_repo_name = f"{owner}/{name}"
+                
+                # Get current commit from change info
+                change_info = incremental_changes.get(repo_name, {})
+                current_commit = change_info.get("current_commit")
+                
+                if current_commit:
+                    # Update commit tracking
+                    metadata = {
+                        "workflow_id": state["workflow_id"],
+                        "files_processed": repo_state.get("processed_files", 0),
+                        "total_files": repo_state.get("total_files", 0),
+                        "processing_mode": "incremental" if change_info.get("change_type") == "incremental" else "full",
+                        "change_summary": change_info.get("diff_summary", {})
+                    }
+                    
+                    self.commit_tracker.update_last_indexed_commit(
+                        repository=full_repo_name,
+                        commit_hash=current_commit,
+                        branch=branch,
+                        metadata=metadata
+                    )
+                    
+                    self.logger.info(f"Updated commit tracking for {full_repo_name}#{branch}: {current_commit}")
+                else:
+                    self.logger.warning(f"No current commit found for {repo_name}, skipping commit tracking update")
+                    
+            except Exception as e:
+                self.logger.error(f"Failed to update commit tracking for {repo_name}: {e}")
 
     # Error handling methods
 
@@ -1120,8 +1522,21 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         try:
             repo_config = self._get_repo_config(repo_name)
             owner, name = self._parse_repo_url(repo_config["url"])
+            full_repo_name = f"{owner}/{name}"
 
-            # Create GitHub loader
+            # Check for incremental changes
+            incremental_changes = state["metadata"].get("incremental_changes", {})
+            files_to_process = None  # None means all files
+            
+            if self.incremental and repo_name in incremental_changes:
+                change_info = incremental_changes[repo_name]
+                if change_info["change_type"] == "incremental":
+                    files_to_process = change_info.get("files_to_process", [])
+                    self.logger.info(f"Incremental mode: processing {len(files_to_process)} changed files for {repo_name}")
+                elif change_info["change_type"] == "full_index":
+                    self.logger.info(f"Incremental mode: doing full index for {repo_name} ({change_info.get('reason', 'unknown reason')})")
+
+            # Create GitHub loader with incremental support
             loader = EnhancedGitHubLoader(
                 repo_owner=owner,
                 repo_name=name,
@@ -1130,11 +1545,30 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 github_token=settings.github.token,
             )
 
-            # Load documents from repository
-            documents = loader.load()
+            # Load documents from repository (with file filtering if incremental)
+            if files_to_process is not None and len(files_to_process) > 0:
+                # For incremental mode, use include_only parameter if supported
+                try:
+                    # Check if the loader supports include_only parameter
+                    documents = loader.load(include_only=files_to_process)
+                except TypeError:
+                    # Fallback: load all and filter manually
+                    self.logger.warning(f"Loader doesn't support include_only, filtering manually for {repo_name}")
+                    all_docs = loader.load()
+                    documents = []
+                    for doc in all_docs:
+                        file_path = doc.metadata.get("file_path", doc.metadata.get("source", ""))
+                        if file_path in files_to_process:
+                            documents.append(doc)
+            elif files_to_process is not None and len(files_to_process) == 0:
+                # No files to process
+                self.logger.info(f"No files to process for {repo_name} in incremental mode")
+                documents = []
+            else:
+                # Full mode or full index in incremental mode
+                documents = loader.load()
 
             # Add repository name to document metadata (use full owner/repo name)
-            full_repo_name = f"{owner}/{name}"
             for doc in documents:
                 doc.metadata["repository"] = full_repo_name
 
