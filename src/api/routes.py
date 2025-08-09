@@ -1323,10 +1323,10 @@ async def preview_incremental_changes(
             "files_to_process": files_to_process,
             "files_to_remove": files_to_remove,
             "diff_summary": {
-                "added": len(diff_result.added_files),
-                "modified": len(diff_result.modified_files),
-                "deleted": len(diff_result.deleted_files),
-                "renamed": len(diff_result.renamed_files)
+                "added": len(diff_result.added_files) if diff_result.added_files is not None else 0,
+                "modified": len(diff_result.modified_files) if diff_result.modified_files is not None else 0,
+                "deleted": len(diff_result.deleted_files) if diff_result.deleted_files is not None else 0,
+                "renamed": len(diff_result.renamed_files) if diff_result.renamed_files is not None else 0
             },
             "message": f"Found {diff_result.total_changes} file changes to process"
         }

@@ -690,24 +690,27 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 owner, name = self._parse_repo_url(repo_config["url"])
                 full_repo_name = f"{owner}/{name}"
                 
-                self.logger.info(f"Removing {len(files_to_remove)} stale vectors for {repo_name}")
+                # Defensive programming: ensure files_to_remove is not None before calling len()
+                files_count = len(files_to_remove) if files_to_remove is not None else 0
+                self.logger.info(f"Removing {files_count} stale vectors for {repo_name}")
                 
                 # Remove vectors by file path metadata
                 removed_count = 0
-                for file_path in files_to_remove:
-                    try:
-                        # Remove documents matching this file path and repository
-                        deleted = vector_store.delete_by_metadata({
-                            "file_path": file_path,
-                            "repository": full_repo_name
-                        })
-                        removed_count += deleted
-                        
-                    except Exception as e:
-                        self.logger.error(f"Failed to remove vectors for {file_path}: {e}")
+                if files_to_remove:  # Additional null check
+                    for file_path in files_to_remove:
+                        try:
+                            # Remove documents matching this file path and repository
+                            deleted = vector_store.delete_by_metadata({
+                                "file_path": file_path,
+                                "repository": full_repo_name
+                            })
+                            removed_count += deleted
+                            
+                        except Exception as e:
+                            self.logger.error(f"Failed to remove vectors for {file_path}: {e}")
                 
                 cleanup_stats[repo_name] = {
-                    "files_to_remove": len(files_to_remove),
+                    "files_to_remove": len(files_to_remove) if files_to_remove is not None else 0,
                     "vectors_removed": removed_count
                 }
                 total_removed += removed_count
@@ -717,7 +720,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             except Exception as e:
                 self.logger.error(f"Failed to cleanup vectors for {repo_name}: {e}")
                 cleanup_stats[repo_name] = {
-                    "files_to_remove": len(files_to_remove),
+                    "files_to_remove": len(files_to_remove) if files_to_remove is not None else 0,
                     "vectors_removed": 0,
                     "error": str(e)
                 }
