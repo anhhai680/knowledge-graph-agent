@@ -36,6 +36,7 @@ from src.api.models import (
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.utils.feature_flags import is_graph_enabled
+from src.utils.defensive_programming import safe_len, ensure_list
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
 from src.workflows.workflow_states import create_indexing_state
@@ -948,19 +949,14 @@ async def _run_indexing_workflow(
                 change_info = incremental_changes[repo_name]
                 
                 # Defensive programming: ensure lists are not None before using len()
-                files_to_process = change_info.get("files_to_process", [])
-                if files_to_process is None:
-                    files_to_process = []
-                    
-                files_to_remove = change_info.get("files_to_remove", [])
-                if files_to_remove is None:
-                    files_to_remove = []
+                files_to_process = ensure_list(change_info.get("files_to_process", []))
+                files_to_remove = ensure_list(change_info.get("files_to_remove", []))
                 
                 change_summary = {
                     "change_type": change_info.get("change_type"),
                     "total_changes": change_info.get("total_changes", 0),
-                    "files_to_process": len(files_to_process),
-                    "files_to_remove": len(files_to_remove),
+                    "files_to_process": safe_len(files_to_process),
+                    "files_to_remove": safe_len(files_to_remove),
                     "diff_summary": change_info.get("diff_summary", {}),
                     "last_commit": change_info.get("last_commit"),
                     "current_commit": change_info.get("current_commit")
@@ -1388,10 +1384,10 @@ async def preview_incremental_changes(
             "files_to_process": files_to_process,
             "files_to_remove": files_to_remove,
             "diff_summary": {
-                "added": len(diff_result.added_files) if diff_result.added_files is not None else 0,
-                "modified": len(diff_result.modified_files) if diff_result.modified_files is not None else 0,
-                "deleted": len(diff_result.deleted_files) if diff_result.deleted_files is not None else 0,
-                "renamed": len(diff_result.renamed_files) if diff_result.renamed_files is not None else 0
+                "added": safe_len(diff_result.added_files) if diff_result else 0,
+                "modified": safe_len(diff_result.modified_files) if diff_result else 0,
+                "deleted": safe_len(diff_result.deleted_files) if diff_result else 0,
+                "renamed": safe_len(diff_result.renamed_files) if diff_result else 0
             },
             "message": f"Found {diff_result.total_changes} file changes to process"
         }

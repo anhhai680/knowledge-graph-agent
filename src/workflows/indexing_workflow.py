@@ -20,6 +20,7 @@ from src.llm.embedding_factory import EmbeddingFactory
 from src.vectorstores.store_factory import VectorStoreFactory
 from src.graphstores.memgraph_store import MemGraphStore
 from src.utils.feature_flags import is_graph_enabled
+from src.utils.defensive_programming import safe_len, ensure_list
 from src.workflows.base_workflow import BaseWorkflow
 from src.workflows.workflow_states import (
     IndexingState,
@@ -188,6 +189,19 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         ])
         
         return steps
+
+    def _ensure_list(self, repositories: Any, default: Optional[List] = None) -> List:
+        """
+        Ensure that repositories is a valid list, handling None and invalid types.
+        
+        Args:
+            repositories: The repositories value to validate and convert
+            default: Default list to return if repositories is None
+            
+        Returns:
+            List: A valid list of repositories
+        """
+        return ensure_list(repositories, default or [])
 
     def validate_state(self, state: IndexingState) -> bool:
         """
@@ -395,10 +409,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         state["status"] = ProcessingStatus.IN_PROGRESS
 
         # Defensive programming: ensure repositories is not None and is a list
-        if repositories is None:
-            repositories = []
-        if not isinstance(repositories, list):
-            repositories = []
+        repositories = self._ensure_list(repositories)
 
         # Initialize repository states
         for repo_name in repositories:
@@ -431,9 +442,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.logger.info("Loading repository configurations")
 
         # Defensive programming: ensure repositories list exists and is not None
-        repositories = state.get("repositories", [])
-        if repositories is None:
-            repositories = []
+        repositories = self._ensure_list(state.get("repositories", []))
         state["repositories"] = repositories
 
         # Repository configurations are loaded in _initialize_state
@@ -458,9 +467,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.logger.info("Validating repository access")
 
         # Defensive programming: ensure repositories list exists and is not None
-        repositories = state.get("repositories", [])
-        if repositories is None:
-            repositories = []
+        repositories = self._ensure_list(state.get("repositories", []))
         state["repositories"] = repositories
 
         validation_errors = []
@@ -619,10 +626,8 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 files_to_remove = self.git_diff_service.get_files_to_remove(diff_result)
                 
                 # Defensive programming: ensure we have valid collections
-                if files_to_process is None:
-                    files_to_process = set()
-                if files_to_remove is None:
-                    files_to_remove = set()
+                files_to_process = self._ensure_list(files_to_process, default=[])
+                files_to_remove = self._ensure_list(files_to_remove, default=[])
                 
                 # Store change information with additional safety checks
                 change_info = {
@@ -634,10 +639,10 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                     "last_commit": last_commit,
                     "current_commit": current_commit,
                     "diff_summary": {
-                        "added": len(diff_result.added_files) if diff_result and diff_result.added_files is not None else 0,
-                        "modified": len(diff_result.modified_files) if diff_result and diff_result.modified_files is not None else 0,
-                        "deleted": len(diff_result.deleted_files) if diff_result and diff_result.deleted_files is not None else 0,
-                        "renamed": len(diff_result.renamed_files) if diff_result and diff_result.renamed_files is not None else 0
+                        "added": safe_len(diff_result.added_files) if diff_result else 0,
+                        "modified": safe_len(diff_result.modified_files) if diff_result else 0,
+                        "deleted": safe_len(diff_result.deleted_files) if diff_result else 0,
+                        "renamed": safe_len(diff_result.renamed_files) if diff_result else 0
                     }
                 }
                 
@@ -646,8 +651,8 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 
                 self.logger.info(f"Changes detected for {repo_name}: {diff_result.total_changes if diff_result else 0} files changed")
                 # Safe logging with explicit null checks
-                files_to_process_count = len(files_to_process) if files_to_process is not None else 0
-                files_to_remove_count = len(files_to_remove) if files_to_remove is not None else 0
+                files_to_process_count = safe_len(files_to_process)
+                files_to_remove_count = safe_len(files_to_remove)
                 self.logger.info(f"  - {files_to_process_count} files to process")
                 self.logger.info(f"  - {files_to_remove_count} files to remove from vector store")
                 
@@ -701,8 +706,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 
             files_to_remove = change_info.get("files_to_remove", [])
             # Defensive programming: ensure files_to_remove is always a list
-            if files_to_remove is None:
-                files_to_remove = []
+            files_to_remove = self._ensure_list(files_to_remove)
             if not files_to_remove:
                 continue
             
@@ -711,8 +715,8 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 owner, name = self._parse_repo_url(repo_config["url"])
                 full_repo_name = f"{owner}/{name}"
                 
-                # Defensive programming: ensure files_to_remove is not None before calling len()
-                files_count = len(files_to_remove) if files_to_remove is not None else 0
+                # Use safe_len for defensive programming
+                files_count = safe_len(files_to_remove)
                 self.logger.info(f"Removing {files_count} stale vectors for {repo_name}")
                 
                 # Remove vectors by file path metadata
@@ -731,7 +735,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                             self.logger.error(f"Failed to remove vectors for {file_path}: {e}")
                 
                 cleanup_stats[repo_name] = {
-                    "files_to_remove": len(files_to_remove) if files_to_remove is not None else 0,
+                    "files_to_remove": safe_len(files_to_remove),
                     "vectors_removed": removed_count
                 }
                 total_removed += removed_count
@@ -741,7 +745,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             except Exception as e:
                 self.logger.error(f"Failed to cleanup vectors for {repo_name}: {e}")
                 cleanup_stats[repo_name] = {
-                    "files_to_remove": len(files_to_remove) if files_to_remove is not None else 0,
+                    "files_to_remove": safe_len(files_to_remove),
                     "vectors_removed": 0,
                     "error": str(e)
                 }
@@ -1626,9 +1630,8 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 if change_info["change_type"] == "incremental":
                     files_to_process = change_info.get("files_to_process", [])
                     # Defensive programming: ensure files_to_process is a list
-                    if files_to_process is None:
-                        files_to_process = []
-                    self.logger.info(f"Incremental mode: processing {len(files_to_process)} changed files for {repo_name}")
+                    files_to_process = self._ensure_list(files_to_process)
+                    self.logger.info(f"Incremental mode: processing {safe_len(files_to_process)} changed files for {repo_name}")
                 elif change_info["change_type"] == "full_index":
                     self.logger.info(f"Incremental mode: doing full index for {repo_name} ({change_info.get('reason', 'unknown reason')})")
 

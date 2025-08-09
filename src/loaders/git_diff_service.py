@@ -14,6 +14,7 @@ from typing import Dict, List, Set, Optional, Tuple
 from loguru import logger
 
 from src.loaders.git_command_executor import GitCommandExecutor, GitCommandResult
+from src.utils.defensive_programming import validate_initialization
 
 
 class FileChangeType(str, Enum):
@@ -49,7 +50,10 @@ class GitDiffResult:
     renamed_files: List[Tuple[str, str]] = None  # (old_path, new_path)
     
     def __post_init__(self):
-        """Ensure all list fields are properly initialized."""
+        """Ensure all list fields are properly initialized with validation."""
+        logger.debug(f"Initializing GitDiffResult for commits {self.from_commit} -> {self.to_commit}")
+        
+        # Initialize all None fields to proper defaults
         if self.changes_by_type is None:
             self.changes_by_type = {}
         if self.file_changes is None:
@@ -62,6 +66,21 @@ class GitDiffResult:
             self.deleted_files = []
         if self.renamed_files is None:
             self.renamed_files = []
+            
+        # Validate that all fields are properly initialized
+        validation_results = [
+            validate_initialization(self, 'changes_by_type', dict),
+            validate_initialization(self, 'file_changes', list),
+            validate_initialization(self, 'added_files', list),
+            validate_initialization(self, 'modified_files', list),
+            validate_initialization(self, 'deleted_files', list),
+            validate_initialization(self, 'renamed_files', list),
+        ]
+        
+        if all(validation_results):
+            logger.debug("GitDiffResult successfully initialized with all fields properly set")
+        else:
+            logger.warning("GitDiffResult initialization completed with some validation warnings")
 
 
 class GitDiffService:
