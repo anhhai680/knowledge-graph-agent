@@ -290,15 +290,22 @@ class GitDiffService:
         Returns:
             Set of file paths to process
         """
+        if not diff_result:
+            logger.warning("diff_result is None, returning empty set")
+            return set()
+            
         files_to_process = set()
         
-        # Add all added and modified files
-        files_to_process.update(diff_result.added_files)
-        files_to_process.update(diff_result.modified_files)
+        # Add all added and modified files - with null checks
+        if diff_result.added_files:
+            files_to_process.update(diff_result.added_files)
+        if diff_result.modified_files:
+            files_to_process.update(diff_result.modified_files)
         
-        # Add new paths from renamed files
-        for old_path, new_path in diff_result.renamed_files:
-            files_to_process.add(new_path)
+        # Add new paths from renamed files - with null check
+        if diff_result.renamed_files:
+            for old_path, new_path in diff_result.renamed_files:
+                files_to_process.add(new_path)
         
         return files_to_process
 
@@ -317,17 +324,24 @@ class GitDiffService:
         Returns:
             Set of file paths to remove from vector store
         """
+        if not diff_result:
+            logger.warning("diff_result is None, returning empty set")
+            return set()
+            
         files_to_remove = set()
         
-        # Add deleted files
-        files_to_remove.update(diff_result.deleted_files)
+        # Add deleted files - with null check
+        if diff_result.deleted_files:
+            files_to_remove.update(diff_result.deleted_files)
         
-        # Add old paths from renamed files
-        for old_path, new_path in diff_result.renamed_files:
-            files_to_remove.add(old_path)
+        # Add old paths from renamed files - with null check
+        if diff_result.renamed_files:
+            for old_path, new_path in diff_result.renamed_files:
+                files_to_remove.add(old_path)
         
-        # Add modified files (they'll be re-added with new content)
-        files_to_remove.update(diff_result.modified_files)
+        # Add modified files (they'll be re-added with new content) - with null check
+        if diff_result.modified_files:
+            files_to_remove.update(diff_result.modified_files)
         
         return files_to_remove
 

@@ -572,6 +572,12 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 files_to_process = self.git_diff_service.get_files_to_process(diff_result)
                 files_to_remove = self.git_diff_service.get_files_to_remove(diff_result)
                 
+                # Defensive programming: ensure we have valid collections
+                if files_to_process is None:
+                    files_to_process = set()
+                if files_to_remove is None:
+                    files_to_remove = set()
+                
                 # Store change information
                 change_info = {
                     "change_type": "incremental",
@@ -582,10 +588,10 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                     "last_commit": last_commit,
                     "current_commit": current_commit,
                     "diff_summary": {
-                        "added": len(diff_result.added_files),
-                        "modified": len(diff_result.modified_files),
-                        "deleted": len(diff_result.deleted_files),
-                        "renamed": len(diff_result.renamed_files)
+                        "added": len(diff_result.added_files or []),
+                        "modified": len(diff_result.modified_files or []),
+                        "deleted": len(diff_result.deleted_files or []),
+                        "renamed": len(diff_result.renamed_files or [])
                     }
                 }
                 
@@ -595,6 +601,10 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 self.logger.info(f"Changes detected for {repo_name}: {diff_result.total_changes} files changed")
                 self.logger.info(f"  - {len(files_to_process)} files to process")
                 self.logger.info(f"  - {len(files_to_remove)} files to remove from vector store")
+                
+                # Debug: Log the types and values for troubleshooting
+                self.logger.debug(f"Debug - files_to_process type: {type(files_to_process)}, value: {files_to_process}")
+                self.logger.debug(f"Debug - files_to_remove type: {type(files_to_remove)}, value: {files_to_remove}")
                 
             except Exception as e:
                 self.logger.error(f"Failed to determine changes for {repo_name}: {e}")
@@ -641,6 +651,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 continue
                 
             files_to_remove = change_info.get("files_to_remove", [])
+            # Defensive programming: ensure files_to_remove is always a list
+            if files_to_remove is None:
+                files_to_remove = []
             if not files_to_remove:
                 continue
             
@@ -1532,6 +1545,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 change_info = incremental_changes[repo_name]
                 if change_info["change_type"] == "incremental":
                     files_to_process = change_info.get("files_to_process", [])
+                    # Defensive programming: ensure files_to_process is a list
+                    if files_to_process is None:
+                        files_to_process = []
                     self.logger.info(f"Incremental mode: processing {len(files_to_process)} changed files for {repo_name}")
                 elif change_info["change_type"] == "full_index":
                     self.logger.info(f"Incremental mode: doing full index for {repo_name} ({change_info.get('reason', 'unknown reason')})")
