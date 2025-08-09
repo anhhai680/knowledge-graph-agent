@@ -86,6 +86,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         max_workers: int = 2,
         incremental: bool = False,
         dry_run: bool = False,
+        repository_urls: Optional[Dict[str, str]] = None,
         **kwargs,
     ):
         """
@@ -100,12 +101,14 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             max_workers: Maximum number of worker threads for parallel processing
             incremental: Enable incremental re-indexing based on git commits
             dry_run: Only analyze changes without performing actual indexing
+            repository_urls: Optional mapping of repository names to URLs (for API usage)
             **kwargs: Additional arguments passed to BaseWorkflow
         """
         super().__init__(**kwargs)
 
         self.app_settings_path = app_settings_path
         self.target_repositories = repositories
+        self.repository_urls = repository_urls or {}
         self.vector_store_type = vector_store_type or settings.database_type.value
         self.collection_name = collection_name or (
             settings.pinecone.collection_name
@@ -347,23 +350,36 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         """Initialize indexing workflow state."""
         self.logger.info("Initializing indexing workflow state")
 
-        # Load app settings if not already loaded
+        # Load app settings if available
         if not self._app_settings:
-            self._load_app_settings()
+            try:
+                self._load_app_settings()
+            except (FileNotFoundError, ValueError) as e:
+                self.logger.warning(f"Failed to load app settings: {e}")
+                # Continue without app settings if repository URLs are provided
+                if not self.repository_urls:
+                    raise ValueError(f"No app settings available and no repository URLs provided: {e}")
 
         # Determine repositories to process
         if self.target_repositories:
-            # Filter to only requested repositories
+            # Use target repositories (can be from appSettings or direct URLs)
+            repositories = self.target_repositories
+            
+            # Validate repositories exist in either appSettings or repository_urls
             if self._has_repositories():
                 available_repos = [
                     repo["name"] for repo in self._app_settings["repositories"]
                 ]
-                missing_repos = set(self.target_repositories) - set(available_repos)
+                missing_from_settings = set(self.target_repositories) - set(available_repos)
+                
+                # Check if missing repositories are provided via repository_urls
+                missing_repos = missing_from_settings - set(self.repository_urls.keys())
                 if missing_repos:
                     raise ValueError(
-                        f"Repositories not found in appSettings: {missing_repos}"
+                        f"Repositories not found in appSettings or repository_urls: {missing_repos}"
                     )
-            repositories = self.target_repositories
+            elif not self.repository_urls:
+                raise ValueError("No app settings loaded and no repository URLs provided")
         else:
             # Process all repositories from appSettings
             if self._app_settings and "repositories" in self._app_settings:
@@ -380,12 +396,24 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
 
         # Initialize repository states
         for repo_name in repositories:
-            repo_config = self._get_repo_config(repo_name)
-            state["repository_states"][repo_name] = create_repository_state(
-                name=repo_name,
-                url=repo_config["url"],
-                branch=repo_config.get("branch", "main"),
-            )
+            try:
+                repo_config = self._get_repo_config(repo_name)
+                state["repository_states"][repo_name] = create_repository_state(
+                    name=repo_name,
+                    url=repo_config["url"],
+                    branch=repo_config.get("branch", "main"),
+                )
+            except ValueError:
+                # Repository not in appSettings, try repository_urls
+                if repo_name in self.repository_urls:
+                    repo_url = self.repository_urls[repo_name]
+                    state["repository_states"][repo_name] = create_repository_state(
+                        name=repo_name,
+                        url=repo_url,
+                        branch="main",  # Default branch
+                    )
+                else:
+                    raise ValueError(f"Repository configuration not found for: {repo_name}")
 
         self.logger.info(f"Initialized state for {len(repositories)} repositories")
         return cast(IndexingState, update_workflow_progress(
@@ -599,8 +627,8 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 total_changes += diff_result.total_changes
                 
                 self.logger.info(f"Changes detected for {repo_name}: {diff_result.total_changes} files changed")
-                self.logger.info(f"  - {len(files_to_process)} files to process")
-                self.logger.info(f"  - {len(files_to_remove)} files to remove from vector store")
+                self.logger.info(f"  - {len(files_to_process) if files_to_process is not None else 0} files to process")
+                self.logger.info(f"  - {len(files_to_remove) if files_to_remove is not None else 0} files to remove from vector store")
                 
                 # Debug: Log the types and values for troubleshooting
                 self.logger.debug(f"Debug - files_to_process type: {type(files_to_process)}, value: {files_to_process}")
@@ -1498,9 +1526,19 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
 
     def _get_repo_config(self, repo_name: str) -> Dict[str, Any]:
         """Get repository configuration by name."""
-        if repo_name not in self._repo_configs:
-            raise ValueError(f"Repository configuration not found: {repo_name}")
-        return self._repo_configs[repo_name]
+        # First try app settings
+        if repo_name in self._repo_configs:
+            return self._repo_configs[repo_name]
+        
+        # Then try repository URLs
+        if repo_name in self.repository_urls:
+            return {
+                "name": repo_name,
+                "url": self.repository_urls[repo_name],
+                "branch": "main"  # Default branch
+            }
+        
+        raise ValueError(f"Repository configuration not found: {repo_name}")
 
     def _parse_repo_url(self, url: str) -> Tuple[str, str]:
         """Parse GitHub repository URL to extract owner and name."""

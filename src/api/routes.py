@@ -167,7 +167,10 @@ async def index_all_repositories(
                 _run_indexing_workflow,
                 workflow_id,
                 repo_name,  # Pass repository name instead of request object
-                indexing_workflow
+                indexing_workflow,
+                False,  # incremental
+                False,  # dry_run
+                repo_config["url"]  # repository_url
             )
             
             # Track workflow
@@ -260,7 +263,8 @@ async def index_repository(
             repo_name,
             indexing_workflow,
             request.incremental,
-            request.dry_run
+            request.dry_run,
+            request.repository_url  # Pass full repository URL
         )
         
         # Track workflow
@@ -818,7 +822,8 @@ async def _run_indexing_workflow(
     repo_name: str,
     indexing_workflow: IndexingWorkflow,
     incremental: bool = False,
-    dry_run: bool = False
+    dry_run: bool = False,
+    repository_url: Optional[str] = None
 ):
     """
     Background task to run indexing workflow.
@@ -829,6 +834,7 @@ async def _run_indexing_workflow(
         indexing_workflow: Indexing workflow instance
         incremental: Enable incremental re-indexing
         dry_run: Only analyze changes without indexing
+        repository_url: Full repository URL
     """
     try:
         mode_desc = "incremental" if incremental else "full"
@@ -843,6 +849,7 @@ async def _run_indexing_workflow(
             active_workflows[workflow_id]["current_step"] = "initializing"
         
         # Create indexing workflow with incremental parameters
+        repository_urls = {repo_name: repository_url} if repository_url else {}
         incremental_workflow = IndexingWorkflow(
             repositories=[repo_name],
             vector_store_type="chroma",
@@ -850,6 +857,7 @@ async def _run_indexing_workflow(
             batch_size=100,
             incremental=incremental,
             dry_run=dry_run,
+            repository_urls=repository_urls,
             workflow_id=workflow_id
         )
         
