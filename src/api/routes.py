@@ -37,6 +37,7 @@ from src.utils.logging import get_logger
 from src.utils.feature_flags import is_graph_enabled
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
+from src.workflows.workflow_states import create_indexing_state
 
 
 logger = get_logger(__name__)
@@ -733,7 +734,6 @@ async def _run_indexing_workflow(
             active_workflows[workflow_id]["current_step"] = "initializing"
         
         # Create proper indexing state using the workflow state factory
-        from src.workflows.workflow_states import create_indexing_state
         
         indexing_state = create_indexing_state(
             workflow_id=workflow_id,
@@ -776,14 +776,8 @@ async def _run_indexing_workflow(
                 })
                 logger.info(f"Indexing workflow {workflow_id} completed successfully")
             else:
-                # Workflow failed or didn't complete properly
-                active_workflows[workflow_id].update({
-                    "status": WorkflowStatus.FAILED,
-                    "completed_at": datetime.now(),
-                    "current_step": "failed",
-                    "error_message": f"Workflow did not complete successfully. Final status: {workflow_status}"
-                })
-                logger.error(f"Indexing workflow {workflow_id} did not complete successfully")
+                # Workflow failed or didn't complete properly - raise exception to be handled by the common error handler below
+                raise Exception(f"Workflow did not complete successfully. Final status: {workflow_status}")
         
     except Exception as e:
         logger.error(f"Indexing workflow {workflow_id} failed: {e}")
