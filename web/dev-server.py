@@ -8,13 +8,12 @@ import http.server
 import socketserver
 import os
 import sys
+import argparse
 from pathlib import Path
 
 # Change to the web directory
 web_dir = Path(__file__).parent
 os.chdir(web_dir)
-
-PORT = 3000
 
 class DevHandler(http.server.SimpleHTTPRequestHandler):
     """Custom handler to serve index.html for all routes (SPA behavior)"""
@@ -33,6 +32,12 @@ class DevHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Development server for Knowledge Graph Agent')
+    parser.add_argument('--port', type=int, default=3000, help='Port to run the server on (default: 3000)')
+    args = parser.parse_args()
+    
+    PORT = args.port
+    
     print(f"Starting development server on http://localhost:{PORT}")
     print("Press Ctrl+C to stop the server")
     print("-" * 50)

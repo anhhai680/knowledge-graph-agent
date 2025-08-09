@@ -202,9 +202,46 @@ class RAGAgent(BaseAgent):
                     f"below threshold ({self.confidence_threshold})"
                 )
 
+            # For Q2 system visualization queries, use the specialized prompt instead of workflow LLM response
+            if is_q2_system_visualization and prompt_result.get("template_type") == "Q2SystemVisualizationTemplate":
+                logger.info("RAGAgent: Processing Q2 system visualization query with specialized template")
+                
+                # Get the specialized Q2 prompt from PromptManager
+                q2_prompt = prompt_result.get("prompt")
+                if q2_prompt:
+                    # Use LLM factory to generate Q2 response
+                    from src.llm.llm_factory import LLMFactory
+                    llm = LLMFactory.create()
+                    
+                    # Format the prompt properly for the LLM
+                    if hasattr(q2_prompt, 'format_prompt'):
+                        formatted_q2_prompt = q2_prompt.format_prompt()
+                    else:
+                        formatted_q2_prompt = str(q2_prompt)
+                    
+                    # Generate Q2 response using the specialized prompt
+                    q2_response = llm.invoke(formatted_q2_prompt)
+                    
+                    # Extract response content
+                    if hasattr(q2_response, 'content'):
+                        q2_answer = q2_response.content
+                    else:
+                        q2_answer = str(q2_response)
+                    
+                    logger.info(f"RAGAgent: Generated Q2 response with {len(q2_answer)} characters")
+                    
+                    # Use Q2 response instead of workflow response
+                    generated_answer = q2_answer
+                else:
+                    logger.warning("RAGAgent: Q2 template detected but no prompt available, using workflow response")
+                    generated_answer = result.get("llm_generation", {}).get("generated_response", "No answer generated")
+            else:
+                # Use standard workflow response for non-Q2 queries
+                generated_answer = result.get("llm_generation", {}).get("generated_response", "No answer generated")
+
             # Format response with enhanced context
             formatted_response = {
-                "answer": result.get("llm_generation", {}).get("generated_response", "No answer generated"),
+                "answer": generated_answer,
                 "sources": self._format_sources(retrieved_docs),
                 "confidence": confidence_score,
                 "query_intent": actual_query_intent,
@@ -223,6 +260,7 @@ class RAGAgent(BaseAgent):
                     "template_type": prompt_result.get("template_type"),
                     "system_prompt_type": prompt_result.get("system_prompt_type"),
                     "confidence_assessment": confidence_score,
+                    "is_q2_visualization": is_q2_system_visualization,
                 },
                 "processing_time": result.get("total_query_time", 0),
             }
