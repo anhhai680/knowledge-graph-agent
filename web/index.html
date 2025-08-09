@@ -1006,7 +1006,9 @@
                     
                     this.currentWorkflows.clear();
                     workflows.forEach(workflow => {
-                        this.currentWorkflows.set(workflow.workflow_id, workflow);
+                        if(workflow.status === 'running') {
+                            this.currentWorkflows.set(workflow.workflow_id, workflow);
+                        }
                     });
                     
                     this.updateWorkflowsList();
