@@ -394,6 +394,12 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         state["batch_size"] = self.batch_size
         state["status"] = ProcessingStatus.IN_PROGRESS
 
+        # Defensive programming: ensure repositories is not None and is a list
+        if repositories is None:
+            repositories = []
+        if not isinstance(repositories, list):
+            repositories = []
+
         # Initialize repository states
         for repo_name in repositories:
             try:
@@ -424,9 +430,15 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         """Load repository configurations from appSettings."""
         self.logger.info("Loading repository configurations")
 
+        # Defensive programming: ensure repositories list exists and is not None
+        repositories = state.get("repositories", [])
+        if repositories is None:
+            repositories = []
+        state["repositories"] = repositories
+
         # Repository configurations are loaded in _initialize_state
         # This step validates that all required configurations are present
-        for repo_name in state["repositories"]:
+        for repo_name in repositories:
             if repo_name not in state["repository_states"]:
                 raise ValueError(f"Repository state not found for: {repo_name}")
 
@@ -435,7 +447,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 raise ValueError(f"Repository configuration not found for: {repo_name}")
 
         self.logger.info(
-            f"Loaded configurations for {len(state['repositories'])} repositories"
+            f"Loaded configurations for {len(repositories)} repositories"
         )
         return cast(IndexingState, update_workflow_progress(
             state, 10.0, IndexingWorkflowSteps.LOAD_REPOSITORIES
@@ -445,9 +457,15 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         """Validate repository access and configurations."""
         self.logger.info("Validating repository access")
 
+        # Defensive programming: ensure repositories list exists and is not None
+        repositories = state.get("repositories", [])
+        if repositories is None:
+            repositories = []
+        state["repositories"] = repositories
+
         validation_errors = []
 
-        for repo_name in state["repositories"]:
+        for repo_name in repositories:
             try:
                 repo_config = self._get_repo_config(repo_name)
                 repo_state = state["repository_states"][repo_name]
@@ -492,7 +510,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
 
         valid_repos = [
             repo
-            for repo in state["repositories"]
+            for repo in repositories
             if state["repository_states"][repo]["status"] != ProcessingStatus.FAILED
         ]
 
@@ -500,7 +518,7 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
             raise ValueError("No valid repositories found after validation")
 
         self.logger.info(
-            f"Validated {len(valid_repos)}/{len(state['repositories'])} repositories"
+            f"Validated {len(valid_repos)}/{len(repositories)} repositories"
         )
         return cast(IndexingState, update_workflow_progress(
             state, 15.0, IndexingWorkflowSteps.VALIDATE_REPOS
@@ -742,17 +760,23 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         """Load files from GitHub repositories with parallel processing."""
         self.logger.info("Loading files from GitHub repositories")
 
+        # Defensive programming: ensure repositories list exists and is not None
+        repositories = state.get("repositories", [])
+        if repositories is None:
+            repositories = []
+        state["repositories"] = repositories
+
         all_documents = []
         total_files = 0
         incremental_changes = state["metadata"].get("incremental_changes", {})
 
         # Process repositories in parallel with controlled concurrency
         with ThreadPoolExecutor(
-            max_workers=min(self.max_workers, len(state["repositories"]))
+            max_workers=min(self.max_workers, len(repositories))
         ) as executor:
             # Submit repository loading tasks
             future_to_repo = {}
-            for repo_name in state["repositories"]:
+            for repo_name in repositories:
                 repo_state = state["repository_states"][repo_name]
                 
                 # Skip failed repositories
@@ -886,6 +910,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.logger.info("Processing documents with language-aware strategies")
 
         documents = state["metadata"].get("loaded_documents", [])
+        # Defensive programming: ensure documents is not None
+        if documents is None:
+            documents = []
         if not documents:
             # Check if we have repository states to provide better error information
             repo_states = state.get("repository_states", {})
@@ -1005,6 +1032,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         self.logger.info("Extracting and validating chunk metadata")
 
         processed_documents = state["metadata"].get("processed_documents", [])
+        # Defensive programming: ensure processed_documents is not None
+        if processed_documents is None:
+            processed_documents = []
         if not processed_documents:
             raise ValueError("No processed documents available for metadata extraction")
 
@@ -1061,6 +1091,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
 
         # Get processed documents (not embedded documents)
         processed_documents = state["metadata"].get("processed_documents", [])
+        # Defensive programming: ensure processed_documents is not None
+        if processed_documents is None:
+            processed_documents = []
         if not processed_documents:
             raise ValueError("No processed documents available for storage")
 
@@ -1147,6 +1180,9 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
         try:
             # Get processed chunks from state metadata
             processed_chunks = state["metadata"].get("processed_documents", [])
+            # Defensive programming: ensure processed_chunks is not None
+            if processed_chunks is None:
+                processed_chunks = []
             if not processed_chunks:
                 self.logger.warning("No processed documents available for graph storage")
                 return cast(IndexingState, update_workflow_progress(

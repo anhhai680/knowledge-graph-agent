@@ -891,11 +891,21 @@ async def _run_indexing_workflow(
             incremental_changes = result_state["metadata"]["incremental_changes"]
             if repo_name in incremental_changes:
                 change_info = incremental_changes[repo_name]
+                
+                # Defensive programming: ensure lists are not None before using len()
+                files_to_process = change_info.get("files_to_process", [])
+                if files_to_process is None:
+                    files_to_process = []
+                    
+                files_to_remove = change_info.get("files_to_remove", [])
+                if files_to_remove is None:
+                    files_to_remove = []
+                
                 change_summary = {
                     "change_type": change_info.get("change_type"),
                     "total_changes": change_info.get("total_changes", 0),
-                    "files_to_process": len(change_info.get("files_to_process", [])),
-                    "files_to_remove": len(change_info.get("files_to_remove", [])),
+                    "files_to_process": len(files_to_process),
+                    "files_to_remove": len(files_to_remove),
                     "diff_summary": change_info.get("diff_summary", {}),
                     "last_commit": change_info.get("last_commit"),
                     "current_commit": change_info.get("current_commit")
