@@ -337,15 +337,15 @@ async def process_query(
         )
         
         # Additional Q2 detection logging for debugging
-        logger.info(f"API Q2 DEBUG: Query='{request.query}', Generated answer length={len(generated_answer)}")
-        logger.info(f"API Q2 DEBUG: Template type={agent_result.get('prompt_metadata', {}).get('template_type')}")
-        logger.info(f"API Q2 DEBUG: Q2 response detected={is_q2_response}")
-        logger.info(f"API Q2 DEBUG: RAG result keys={list(agent_result.keys())}")
-        
+        logger.debug(f"API Q2 DEBUG: Query='{request.query}', Generated answer length={len(generated_answer)}")
+        logger.debug(f"API Q2 DEBUG: Template type={agent_result.get('prompt_metadata', {}).get('template_type')}")
+        logger.debug(f"API Q2 DEBUG: Q2 response detected={is_q2_response}")
+        logger.debug(f"API Q2 DEBUG: RAG result keys={list(agent_result.keys())}")
+
         # Check for Q2 flag in the RAGAgent result metadata
         if not is_q2_response and agent_result.get("prompt_metadata", {}).get("is_q2_visualization"):
             is_q2_response = True
-            logger.info("API Q2 DEBUG: Q2 detected via metadata flag")
+            logger.info("API Q2: Q2 detected via metadata flag")
         
         # Fallback: If Q2 was detected directly but response doesn't seem like Q2, force Q2 response
         if is_q2_query_direct and not is_q2_response:
