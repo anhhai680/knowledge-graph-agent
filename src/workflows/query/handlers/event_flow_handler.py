@@ -241,11 +241,11 @@ sequenceDiagram
                 line_start = base_line + (i * 5)  # Offset per method
                 line_end = line_start + min(50, max(15, content_lines))  # More realistic ranges
                 
-                # Create proper GitHub URL format as requested by user
-                github_file_path = f"https://github.com/anhhai680/{ref.repository}/blob/main/{ref.file_path}"
+                # Use clean file path format as requested by user
+                clean_file_path = ref.file_path
                 
-                # Format in Q4 style with GitHub URLs
-                explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in `{github_file_path}`")
+                # Format with clean file paths (not full GitHub URLs)
+                explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in `{clean_file_path}`")
                 explanation_parts.append(f"   - Location: Lines {line_start}-{line_end}")
                 explanation_parts.append(f"   - Context: {ref.context_type}")
                 if ref.content_snippet:

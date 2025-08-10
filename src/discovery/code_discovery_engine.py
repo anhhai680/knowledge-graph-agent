@@ -5,7 +5,7 @@ This module implements code discovery using existing vector store and graph stor
 infrastructure to find event handlers, service integrations, and data flows.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 import asyncio
 
@@ -26,11 +26,17 @@ class CodeReference:
     language: str
     content_snippet: str
     relevance_score: float = 0.0
-    metadata: Dict[str, Any] = None
-    
-    def __post_init__(self):
-        if self.metadata is None:
-            self.metadata = {}
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def code(self) -> str:
+        """Get formatted code snippet with context."""
+        return self.content_snippet
+
+    @property
+    def context(self) -> str:
+        """Get context type description."""
+        return self.context_type
 
 
 class CodeDiscoveryEngine:
@@ -286,13 +292,15 @@ class CodeDiscoveryEngine:
                 score = 0.8  # Default score since we don't have similarity scores from basic search
                 
                 # Extract file path and repository with better parsing
+                # Use file_path from metadata, not the source field which contains loader type
+                file_path_raw = metadata.get('file_path', '')
                 source = metadata.get('source', '')
                 repository = metadata.get('repository', 'unknown')
                 language = metadata.get('language', 'unknown')
                 
-                # Skip if we don't have actual source information
-                if not source or source == 'unknown':
-                    self.logger.debug(f"Skipping document with no source information")
+                # Skip if we don't have actual file path information
+                if not file_path_raw or file_path_raw == 'unknown':
+                    self.logger.debug(f"Skipping document with no file path information")
                     continue
                 
                 # Improve repository name extraction and clean any duplicate owner references
@@ -346,16 +354,19 @@ class CodeDiscoveryEngine:
                 content_lower = content.lower()
                 language_lower = language.lower()
                 
-                # Clean up source path - remove any github_git references
-                if 'github_git' in source:
-                    source = source.replace('github_git', '').strip('/')
-                    if not source:
-                        # Skip documents with no meaningful file path rather than generating fake ones
-                        self.logger.debug(f"Skipping document with no meaningful file path after github_git cleanup")
-                        continue
+                # Clean up source path - use actual file_path instead of source
+                # file_path contains the actual file name/path (e.g., "Order.cs")
+                file_path = file_path_raw
                 
-                # Use only the actual file path from metadata - don't generate fake paths
-                file_path = source
+                # Build full path context for better understanding
+                if repository and repository != 'unknown':
+                    # Clean repository name
+                    repo_clean = repository
+                    if '/' in repo_clean:
+                        repo_clean = repo_clean.split('/')[-1]  # Take only the repo name part
+                    
+                    # Create a meaningful path that includes repository context
+                    file_path = f"{repo_clean}/{file_path_raw}"
                 
                 # Determine context type
                 context_type = self._classify_context_type(content, source)
