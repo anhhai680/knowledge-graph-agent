@@ -247,3 +247,5 @@ await state_manager.save_state(workflow_id, {
 **Start services:** `make docker-up`
 **Environment setup:** `cp .env.example .env` then edit
 **Workflow debugging:** Set `LOG_LEVEL=DEBUG` in `.env`
+
+**Remember** to always clean up all debugging-related code or temporary files before completing the task.

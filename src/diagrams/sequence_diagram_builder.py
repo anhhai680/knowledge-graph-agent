@@ -113,32 +113,69 @@ class SequenceDiagramBuilder:
             if any(meaningful in entity.lower() for meaningful in meaningful_entities):
                 actor_candidates.add(entity.lower())
         
-        # Add actors from code references (only from actual repositories and file paths)
+        # Add actors from code references (improved logic for car marketplace services)
         for ref in code_refs:
-            # Extract actors from repository names (only if they are actual repositories)
+            # Extract actors from repository names (car marketplace specific)
             if ref.repository and ref.repository != 'unknown':
-                repo_parts = ref.repository.split('/')[-1].split('-')
-                for part in repo_parts:
-                    if len(part) > 3 and part.lower() in ['order', 'user', 'payment', 'notification', 'listing', 'auth', 'web', 'client']:
-                        actor_candidates.add(part.lower())
+                repo_name = ref.repository.split('/')[-1].lower()
+                
+                # Car marketplace specific mapping
+                if 'order' in repo_name:
+                    actor_candidates.add('orderservice')
+                elif 'notification' in repo_name:
+                    actor_candidates.add('notificationservice')
+                elif 'listing' in repo_name:
+                    actor_candidates.add('listingservice')
+                elif 'web' in repo_name or 'client' in repo_name:
+                    actor_candidates.add('webclient')
+                elif 'auth' in repo_name or 'user' in repo_name:
+                    actor_candidates.add('userservice')
+                elif 'payment' in repo_name:
+                    actor_candidates.add('paymentservice')
             
-            # Extract actors from file paths (only meaningful service components)
-            if ref.file_path:
-                path_parts = ref.file_path.split('/')
-                for part in path_parts:
-                    clean_part = part.lower().replace('controller', '').replace('service', '').replace('.cs', '').replace('.ts', '').replace('.js', '')
-                    if len(clean_part) > 3 and clean_part in ['order', 'user', 'payment', 'notification', 'auth']:
-                        actor_candidates.add(clean_part)
+            # Extract actors from class names and method contexts
+            if ref.method_name:
+                method_lower = ref.method_name.lower()
+                if 'order' in method_lower:
+                    actor_candidates.add('orderservice')
+                elif 'notification' in method_lower or 'notify' in method_lower:
+                    actor_candidates.add('notificationservice')
+                elif 'user' in method_lower or 'auth' in method_lower:
+                    actor_candidates.add('userservice')
         
         # Always include a user actor for user-initiated workflows
         if workflow.workflow in [WorkflowPattern.ORDER_PROCESSING, WorkflowPattern.USER_AUTHENTICATION]:
             actor_candidates.add('user')
         
-        # Convert to Actor objects with proper validation
+        # Ensure we have a web client for web-based workflows
+        if workflow.workflow == WorkflowPattern.ORDER_PROCESSING:
+            actor_candidates.add('webclient')
+        
+        # Convert to Actor objects with proper validation and specific ordering
         actors = []
         valid_actor_names = set()
         
-        for candidate in list(actor_candidates)[:self.max_actors]:
+        # Prioritize specific actors for car marketplace order flow
+        priority_actors = ['user', 'webclient', 'orderservice', 'notificationservice', 'userservice', 'paymentservice']
+        
+        # Add priority actors first
+        for priority in priority_actors:
+            if priority in actor_candidates and priority not in valid_actor_names:
+                actor_type = self._classify_actor_type(priority)
+                display_name = self._format_actor_name(priority)
+                
+                if display_name and len(display_name) >= 3:
+                    actors.append(Actor(
+                        name=priority,
+                        display_name=display_name,
+                        actor_type=actor_type,
+                        description=f"{display_name} component"
+                    ))
+                    valid_actor_names.add(priority)
+        
+        # Add remaining candidates up to max limit
+        remaining_candidates = actor_candidates - valid_actor_names
+        for candidate in list(remaining_candidates)[:self.max_actors - len(actors)]:
             # Ensure actor name is valid (no special characters, proper format)
             clean_candidate = re.sub(r'[^a-zA-Z0-9]', '', candidate).lower()
             if len(clean_candidate) < 3 or clean_candidate in valid_actor_names:
@@ -211,33 +248,65 @@ class SequenceDiagramBuilder:
         
         # Find relevant actors from the declared actors list
         user_actor = None
-        service_actor = None
+        order_service = None
+        notification_service = None
+        web_client = None
         
         # Map declared actors to workflow roles (use only what we have)
         for actor in actors:
             actor_name_lower = actor.name.lower()
             
-            if 'user' in actor_name_lower or 'client' in actor_name_lower:
-                if not user_actor:
-                    user_actor = actor.name
-            elif 'service' in actor_name_lower or 'order' in actor_name_lower or 'system' in actor_name_lower:
-                if not service_actor:
-                    service_actor = actor.name
+            if 'user' in actor_name_lower:
+                user_actor = actor.name
+            elif 'order' in actor_name_lower:
+                order_service = actor.name
+            elif 'notification' in actor_name_lower:
+                notification_service = actor.name
+            elif 'client' in actor_name_lower or 'web' in actor_name_lower:
+                web_client = actor.name
         
         # Use fallbacks from the declared actor list only
         if not user_actor and len(actors) > 0:
             user_actor = actors[0].name
-        if not service_actor and len(actors) > 1:
-            service_actor = actors[1].name
-        elif not service_actor and len(actors) > 0:
-            service_actor = actors[0].name  # Use same as user if only one actor
+        if not web_client and len(actors) > 1:
+            web_client = actors[1].name
+        if not order_service and len(actors) > 2:
+            order_service = actors[2].name
+        elif not order_service and web_client and web_client != user_actor:
+            order_service = web_client  # Fallback to web client if no order service
         
-        # Generate realistic order flow steps using ONLY declared actors
-        if user_actor and service_actor:
-            steps.append(SequenceStep(user_actor, service_actor, "Submit Order", step_type="sync"))
-            steps.append(SequenceStep(service_actor, service_actor, "Validate Order", step_type="sync"))
-            steps.append(SequenceStep(service_actor, service_actor, "Process Payment", step_type="sync"))
-            steps.append(SequenceStep(service_actor, user_actor, "Order Confirmation", step_type="sync"))
+        # Generate realistic car order flow steps using ONLY declared actors
+        if user_actor and web_client:
+            # User interacts with web client
+            steps.append(SequenceStep(user_actor, web_client, "Access Car Marketplace", step_type="sync"))
+            
+            if order_service and order_service != web_client:
+                # Web client communicates with order service
+                steps.append(SequenceStep(web_client, order_service, "Submit Car Order", step_type="sync"))
+                steps.append(SequenceStep(order_service, order_service, "Validate Order Details", step_type="sync"))
+                steps.append(SequenceStep(order_service, order_service, "Process Payment", step_type="sync"))
+                
+                # Order service sends confirmation back to web client
+                steps.append(SequenceStep(order_service, web_client, "Order Processed", step_type="sync"))
+                
+                # Notification service integration (if available)
+                if notification_service:
+                    steps.append(SequenceStep(order_service, notification_service, "Send Order Confirmation", step_type="async"))
+                    steps.append(SequenceStep(notification_service, user_actor, "Order Confirmation Email/SMS", step_type="async"))
+                
+                # Web client notifies user
+                steps.append(SequenceStep(web_client, user_actor, "Display Order Success", step_type="sync"))
+            else:
+                # Simplified flow when web client handles everything
+                steps.append(SequenceStep(user_actor, web_client, "Submit Car Order", step_type="sync"))
+                steps.append(SequenceStep(web_client, web_client, "Process Order", step_type="sync"))
+                
+                # Notification service integration (if available)
+                if notification_service:
+                    steps.append(SequenceStep(web_client, notification_service, "Send Confirmation", step_type="async"))
+                    steps.append(SequenceStep(notification_service, user_actor, "Order Confirmation", step_type="async"))
+                
+                steps.append(SequenceStep(web_client, user_actor, "Order Confirmation", step_type="sync"))
         
         # Try to map code references to steps
         self._map_code_references_to_steps(steps, code_refs)
@@ -337,6 +406,22 @@ class SequenceDiagramBuilder:
     
     def _format_actor_name(self, name: str) -> str:
         """Format actor name for display."""
+        # Special mappings for car marketplace services
+        special_mappings = {
+            'orderservice': 'Order Service',
+            'notificationservice': 'Notification Service',
+            'webclient': 'Web Client',
+            'userservice': 'User Service',
+            'paymentservice': 'Payment Service',
+            'listingservice': 'Listing Service',
+            'user': 'User'
+        }
+        
+        # Check for exact matches first
+        name_lower = name.lower()
+        if name_lower in special_mappings:
+            return special_mappings[name_lower]
+        
         # Remove common suffixes and format
         clean_name = re.sub(r'(service|controller|handler|manager)$', '', name, flags=re.IGNORECASE)
         return clean_name.title()
