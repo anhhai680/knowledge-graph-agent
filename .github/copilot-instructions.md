@@ -44,7 +44,16 @@ cp .env.example .env
 ```bash
 # Unit tests (fast, no external dependencies)
 PYTHONPATH=. pytest tests/unit/ -v
+## Copilot Guidance
 
+- When suggesting code, follow the repository's established patterns: use FastAPI async/await, LangChain/LangGraph workflows, and type annotations.
+- Prefer Python 3.11+ features and idioms.
+- Adhere to code style enforced by Black, isort, flake8, and mypy.
+- When generating tests, use pytest conventions and ensure PYTHONPATH is set as in the test instructions.
+- For environment setup or Docker-related code, reference the `.env.example` and Docker Compose files.
+- When in doubt, suggest code that is modular, well-documented, and includes type hints.
+
+For general repository information, setup, and usage instructions, refer to the `README.md` or documentation in the `docs/` directory.
 # Integration tests (require services to be running)
 make docker-up  # Start services first
 PYTHONPATH=. pytest tests/integration/ -v
