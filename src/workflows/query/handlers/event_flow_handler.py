@@ -218,7 +218,7 @@ sequenceDiagram
         return state
     
     def _create_explanation(self, state: QueryState) -> QueryState:
-        """Create step-by-step explanation of the event flow using only actual vector database data."""
+        """Create step-by-step explanation of the event flow using ONLY actual vector database data."""
         start_time = time.time()
         
         parsed_workflow = state["metadata"]["parsed_workflow"]
@@ -235,35 +235,41 @@ sequenceDiagram
             explanation_parts.append("**Step-by-step process with code references:**\n")
             
             for i, ref in enumerate(code_references[:5], 1):  # Limit to 5 references
-                # ONLY use actual data from vector database - no synthetic line numbers
-                # Check if the reference has real line number data from vector database
-                if ref.line_numbers and len(ref.line_numbers) > 0:
-                    line_info = f"Lines {min(ref.line_numbers)}-{max(ref.line_numbers)}"
-                else:
-                    # Don't fabricate line numbers - just indicate it's implemented
-                    line_info = "Implementation found"
+                # ONLY use actual data from vector database - NO fabrication
                 
-                # Use actual file path from vector database
+                # Use actual file path and repository from vector database
                 file_path = ref.file_path
+                repository = ref.repository
                 
-                # Only create GitHub URL if we have real repository data
-                if ref.repository and ref.repository != 'unknown' and ref.repository.strip():
+                # Only create GitHub URL if we have real repository data and it's a recognizable service
+                github_url = None
+                if repository and repository != 'unknown' and repository.strip():
                     # Create proper GitHub URL without duplication
-                    clean_repo = ref.repository
-                    if clean_repo.startswith('anhhai680/'):
-                        repo_url = f"https://github.com/{clean_repo}"
-                    else:
-                        repo_url = f"https://github.com/anhhai680/{clean_repo}"
+                    clean_repo = repository
+                    
+                    # Handle duplicate repository paths that might exist in vector database
+                    if 'anhhai680/anhhai680' in clean_repo:
+                        clean_repo = clean_repo.replace('anhhai680/anhhai680/', 'anhhai680/')
+                    elif clean_repo.startswith('anhhai680/') or 'anhhai680' not in clean_repo:
+                        # Repository is already clean or doesn't contain owner
+                        if not clean_repo.startswith('anhhai680/'):
+                            clean_repo = f"anhhai680/{clean_repo}"
                     
                     # Use actual file path in GitHub URL
-                    github_url = f"{repo_url}/blob/main/{ref.file_path}"
-                    
+                    github_url = f"https://github.com/{clean_repo}/blob/main/{file_path}"
+                
+                # Display the code reference
+                if github_url:
                     explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in `{github_url}`")
                 else:
-                    # If no real repository data, just use the file path
+                    # If no valid GitHub URL can be created, just show the file path
                     explanation_parts.append(f"{i}. **{ref.method_name}**: Found in `{file_path}`")
                 
-                explanation_parts.append(f"   - Location: {line_info}")
+                # Add location info only if we have real line numbers
+                if ref.line_numbers and len(ref.line_numbers) > 0:
+                    line_info = f"Lines {min(ref.line_numbers)}-{max(ref.line_numbers)}"
+                    explanation_parts.append(f"   - Location: {line_info}")
+                
                 explanation_parts.append(f"   - Context: {ref.context_type}")
                 
                 if ref.content_snippet:

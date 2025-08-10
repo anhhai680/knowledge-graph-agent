@@ -107,14 +107,21 @@ class SequenceDiagramBuilder:
         """Discover actors from workflow and code references using only meaningful, validated names."""
         actor_candidates = set()
         
-        # Add actors from workflow entities ONLY if they are actually meaningful business terms
+        # Add actors from workflow entities ONLY if they are meaningful business terms
         meaningful_entities = ['user', 'customer', 'client', 'admin', 'order', 'payment', 'notification']
         for entity in workflow.entities:
             entity_clean = entity.lower().strip()
             if any(meaningful in entity_clean for meaningful in meaningful_entities) and len(entity_clean) >= 3:
                 # Only add if it's a proper word without gibberish
                 if entity_clean.isalpha() or (entity_clean.replace('_', '').replace('-', '').isalpha()):
-                    actor_candidates.add(entity_clean)
+                    if entity_clean in ['user', 'customer', 'client', 'admin']:
+                        actor_candidates.add('user')
+                    elif entity_clean in ['order']:
+                        actor_candidates.add('orderservice')
+                    elif entity_clean in ['payment']:
+                        actor_candidates.add('paymentservice')
+                    elif entity_clean in ['notification']:
+                        actor_candidates.add('notificationservice')
         
         # Add actors from code references using ONLY real repository data from vector database
         for ref in code_refs:
@@ -123,35 +130,28 @@ class SequenceDiagramBuilder:
                 repo_name = ref.repository.split('/')[-1].lower()
                 
                 # Only add actors for repositories that actually contain meaningful service names
-                if any(service in repo_name for service in ['order', 'notification', 'listing', 'web', 'client', 'auth', 'user', 'payment']):
-                    # Car marketplace specific mapping using real repository names
-                    if 'order' in repo_name:
-                        actor_candidates.add('orderservice')
-                    elif 'notification' in repo_name:
-                        actor_candidates.add('notificationservice')
-                    elif 'listing' in repo_name:
-                        actor_candidates.add('listingservice')
-                    elif 'web' in repo_name or 'client' in repo_name:
-                        actor_candidates.add('webclient')
-                    elif 'auth' in repo_name or 'user' in repo_name:
-                        actor_candidates.add('userservice')
-                    elif 'payment' in repo_name:
-                        actor_candidates.add('paymentservice')
+                if 'car-order' in repo_name or 'order' in repo_name:
+                    actor_candidates.add('orderservice')
+                elif 'car-notification' in repo_name or 'notification' in repo_name:
+                    actor_candidates.add('notificationservice')
+                elif 'car-listing' in repo_name or 'listing' in repo_name:
+                    actor_candidates.add('listingservice')
+                elif 'car-web' in repo_name or 'web-client' in repo_name or 'client' in repo_name:
+                    actor_candidates.add('webclient')
+                elif 'auth' in repo_name or 'user' in repo_name:
+                    actor_candidates.add('userservice')
+                elif 'payment' in repo_name:
+                    actor_candidates.add('paymentservice')
         
         # Always include a user actor for user-initiated workflows
         if workflow.workflow in [WorkflowPattern.ORDER_PROCESSING, WorkflowPattern.USER_AUTHENTICATION]:
             actor_candidates.add('user')
         
-        # Ensure we have a web client for web-based workflows if we found web-related repos
-        if workflow.workflow == WorkflowPattern.ORDER_PROCESSING:
-            if any('web' in ref.repository.lower() or 'client' in ref.repository.lower() for ref in code_refs if ref.repository):
-                actor_candidates.add('webclient')
-        
-        # Convert to Actor objects with strict validation
+        # Convert to Actor objects with strict validation - ONLY predefined valid actors
         actors = []
         valid_actor_names = set()
         
-        # Define valid, meaningful actors only
+        # Define ONLY valid, meaningful actors - reject any undefined names
         valid_actor_mapping = {
             'user': ('User', 'user'),
             'webclient': ('Web Client', 'service'),
@@ -161,17 +161,19 @@ class SequenceDiagramBuilder:
             'paymentservice': ('Payment Service', 'service'),
             'listingservice': ('Listing Service', 'service'),
             'authservice': ('Auth Service', 'service'),
-            'apiservice': ('API Service', 'service')
+            'apigateway': ('API Gateway', 'service'),
+            'database': ('Database', 'system'),
+            'messagequeue': ('Message Queue', 'system')
         }
         
-        # Only include actors that are in our valid mapping
+        # Only include actors that are in our strict valid mapping
         for candidate in actor_candidates:
             clean_candidate = candidate.lower().strip()
             if clean_candidate in valid_actor_mapping and clean_candidate not in valid_actor_names:
                 display_name, actor_type = valid_actor_mapping[clean_candidate]
                 
-                # Double-check the display name is valid (not None)
-                if display_name and len(display_name) >= 3:
+                # Validate display name is meaningful
+                if display_name and len(display_name) >= 3 and display_name.replace(' ', '').isalpha():
                     actor = Actor(
                         name=clean_candidate,
                         display_name=display_name,
@@ -402,7 +404,10 @@ class SequenceDiagramBuilder:
         return 'service'  # Default type
     
     def _format_actor_name(self, name: str) -> str:
-        """Format actor name for display with strict validation."""
+        """Format actor name for display with strict validation to prevent gibberish names."""
+        if not name or not isinstance(name, str):
+            return None
+        
         # Special mappings for car marketplace services - ONLY these are allowed
         special_mappings = {
             'orderservice': 'Order Service',
@@ -412,15 +417,21 @@ class SequenceDiagramBuilder:
             'paymentservice': 'Payment Service',
             'listingservice': 'Listing Service',
             'authservice': 'Auth Service',
-            'apiservice': 'API Service',
+            'apigateway': 'API Gateway',
             'user': 'User',
-            'system': 'System'
+            'system': 'System',
+            'database': 'Database',
+            'messagequeue': 'Message Queue'
         }
         
         # Only return mapped names - reject anything else to avoid gibberish
-        name_lower = name.lower().strip()
-        if name_lower in special_mappings:
-            return special_mappings[name_lower]
+        name_clean = name.lower().strip()
+        
+        # Remove any non-alphabetic characters except spaces
+        name_clean = ''.join(c for c in name_clean if c.isalpha() or c in [' ', '_']).replace('_', '').strip()
+        
+        if name_clean in special_mappings:
+            return special_mappings[name_clean]
         
         # Reject any unmapped names to prevent gibberish like "UserServicecs"
         return None

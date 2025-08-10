@@ -274,7 +274,7 @@ class CodeDiscoveryEngine:
             return []
     
     def _convert_documents_to_code_references(self, documents: List[Any], search_term: str) -> List[CodeReference]:
-        """Convert vector store search results (Documents) to CodeReference objects using only real vector database data."""
+        """Convert vector store search results (Documents) to CodeReference objects using ONLY real vector database data."""
         references = []
         
         for doc in documents:
@@ -288,71 +288,70 @@ class CodeDiscoveryEngine:
                     self.logger.debug(f"Skipping irrelevant content from {metadata.get('source', 'unknown')}")
                     continue
                 
-                # Calculate a basic score (could be enhanced)
-                score = 0.8  # Default score since we don't have similarity scores from basic search
-                
-                # ONLY use actual metadata from vector database - NO fabrication
-                file_path_raw = metadata.get('file_path', '')
+                # ONLY use actual metadata from vector database - NO fabrication whatsoever
                 source = metadata.get('source', '')
                 repository = metadata.get('repository', '')
                 language = metadata.get('language', 'unknown')
                 
-                # Skip documents without actual file path data
-                if not file_path_raw or file_path_raw == 'unknown':
-                    self.logger.debug(f"Skipping document with no file path information")
+                # Skip documents without actual source information
+                if not source:
+                    self.logger.debug(f"Skipping document with no source information")
                     continue
                 
-                # Only use real repository data from vector database
+                # Only use repository data if it exists in metadata, don't fabricate
                 if not repository or repository == 'unknown':
-                    # Only try to extract from source if it contains actual repository information
-                    if source and ('/' in source or any(keyword in source.lower() for keyword in ['service', 'api', 'app', 'client'])):
-                        # Extract minimal repository info only from real source paths
+                    # Try to extract from source ONLY if it contains clear repository patterns
+                    if source and '/' in source:
                         path_parts = source.split('/')
-                        if len(path_parts) > 1:
-                            # Look for actual repository patterns, don't fabricate
-                            for part in path_parts:
-                                if any(service_word in part.lower() for service_word in ['service', 'api', 'app', 'client', 'web']) and '-' in part:
-                                    repository = part
-                                    break
+                        # Look for actual repository names that include service identifiers
+                        for part in path_parts:
+                            if any(service_word in part.lower() for service_word in ['car-', 'order', 'notification', 'listing', 'web']) and len(part) > 3:
+                                repository = part
+                                break
                     
                     # If still no repository, skip rather than fabricate
-                    if not repository or repository == 'unknown':
-                        self.logger.debug(f"Skipping document without real repository information: {source}")
+                    if not repository:
+                        self.logger.debug(f"Skipping document without identifiable repository: {source}")
                         continue
                 
-                # Clean repository name only if it contains actual duplicates from vector database
-                if repository and 'anhhai680' in repository:
-                    # Handle duplicate owner references that might exist in actual vector database metadata
-                    if repository.count('anhhai680') > 1:
-                        # Remove duplicate anhhai680 references
-                        parts = repository.split('/')
-                        clean_parts = []
-                        for part in parts:
-                            if part == 'anhhai680' and 'anhhai680' in clean_parts:
-                                continue  # Skip duplicate
-                            clean_parts.append(part)
-                        repository = '/'.join(clean_parts)
+                # Clean repository name ONLY if it contains actual duplicates
+                if repository and repository.count('anhhai680') > 1:
+                    # Remove duplicate anhhai680 references that might exist in vector database
+                    parts = repository.split('/')
+                    clean_parts = []
+                    for part in parts:
+                        if part == 'anhhai680' and 'anhhai680' in clean_parts:
+                            continue  # Skip duplicate
+                        clean_parts.append(part)
+                    repository = '/'.join(clean_parts)
                 
-                # Use the actual file path from vector database - DO NOT modify or enhance
-                file_path = file_path_raw
-                
-                # Only enhance path if we have real repository context from vector database
-                if repository and repository != 'unknown' and '/' not in file_path:
-                    # Only add repository context if file_path doesn't already include it
-                    repo_name = repository.split('/')[-1] if '/' in repository else repository
-                    file_path = f"{repo_name}/{file_path_raw}"
+                # Use actual source as file_path - no modification
+                file_path = source
                 
                 # Determine context type from actual content
                 context_type = self._classify_context_type(content, source)
                 
-                # Extract method name from actual code content
+                # Extract method name from actual code content only
                 method_name = self._extract_method_name(content, language)
+                
+                # Only use real line numbers if they exist in metadata
+                line_numbers = []
+                if 'line_start' in metadata and 'line_end' in metadata:
+                    try:
+                        start = int(metadata['line_start'])
+                        end = int(metadata['line_end'])
+                        line_numbers = list(range(start, end + 1))
+                    except (ValueError, TypeError):
+                        line_numbers = []
+                
+                # Calculate relevance score based on actual content match
+                score = self._calculate_relevance_score(content, search_term)
                 
                 # Create code reference with ONLY real data from vector database
                 ref = CodeReference(
                     repository=repository,
                     file_path=file_path,
-                    line_numbers=[],  # Real line numbers would come from vector database metadata
+                    line_numbers=line_numbers,
                     method_name=method_name,
                     context_type=context_type,
                     language=language,
@@ -368,6 +367,29 @@ class CodeDiscoveryEngine:
                 continue
         
         return references
+    
+    def _calculate_relevance_score(self, content: str, search_term: str) -> float:
+        """Calculate relevance score based on actual content match."""
+        if not content or not search_term:
+            return 0.5
+        
+        content_lower = content.lower()
+        search_lower = search_term.lower()
+        
+        # Simple scoring based on term presence
+        score = 0.3  # Base score
+        
+        # Check for exact term matches
+        search_words = search_lower.split()
+        for word in search_words:
+            if word in content_lower:
+                score += 0.1
+        
+        # Bonus for method signatures or class definitions
+        if any(pattern in content_lower for pattern in ['def ', 'function ', 'class ', 'public ']):
+            score += 0.2
+        
+        return min(score, 1.0)
     
     def _is_relevant_code_content(self, content: str, metadata: Dict[str, Any]) -> bool:
         """
