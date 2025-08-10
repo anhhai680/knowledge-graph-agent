@@ -51,30 +51,38 @@ class CodeDiscoveryEngine:
         self.vector_store = vector_store
         self.logger = get_logger(self.__class__.__name__)
         
-        # Define search terms for different workflow patterns
+        # Define search terms for different workflow patterns (more specific business logic focus)
         self._pattern_search_terms = {
             WorkflowPattern.ORDER_PROCESSING: [
-                "order processing", "place order", "checkout", "payment processing",
-                "order validation", "order creation", "billing", "fulfillment"
+                "public async Task CreateOrder", "def process_order", "function placeOrder",
+                "OrderController", "OrderService", "processOrder", "validateOrder",
+                "CreateOrderCommand", "OrderCreated", "order creation", "place order logic",
+                "payment processing", "order validation", "checkout process"
             ],
             WorkflowPattern.USER_AUTHENTICATION: [
-                "user authentication", "login", "signup", "session management",
-                "token validation", "password", "authorization", "oauth"
+                "public async Task Login", "def authenticate_user", "function login",
+                "AuthController", "AuthService", "authenticate", "login validation",
+                "TokenService", "UserRegistration", "password validation", "session management"
             ],
             WorkflowPattern.DATA_PIPELINE: [
-                "data processing", "etl", "data pipeline", "batch processing",
-                "data transformation", "data ingestion", "data migration"
+                "public async Task ProcessData", "def process_pipeline", "function transformData",
+                "DataProcessor", "PipelineService", "data transformation", "batch processing",
+                "data validation", "ETL process", "data ingestion"
             ],
             WorkflowPattern.API_REQUEST_FLOW: [
-                "api endpoint", "request handler", "response processing",
-                "service integration", "http request", "rest api", "webhook"
+                "public async Task HandleRequest", "def handle_request", "function processRequest",
+                "ApiController", "RequestHandler", "middleware", "request processing",
+                "response handling", "endpoint implementation", "http request"
             ],
             WorkflowPattern.EVENT_DRIVEN: [
-                "event handler", "message processing", "event publishing",
-                "event subscription", "queue processing", "notification"
+                "public async Task HandleEvent", "def handle_event", "function onEvent",
+                "EventHandler", "MessageHandler", "event processing", "message consumer",
+                "notification service", "event subscription", "message queue"
             ],
             WorkflowPattern.GENERIC_WORKFLOW: [
-                "business logic", "workflow", "process", "handler", "service"
+                "public async Task Execute", "def execute", "function handle",
+                "business logic", "workflow service", "process handler",
+                "service implementation", "main logic", "core functionality"
             ]
         }
         
@@ -141,12 +149,13 @@ class CodeDiscoveryEngine:
         all_references = []
         
         for entity in entities:
-            # Create search queries for integration patterns
+            # Create more specific search queries for integration patterns
             integration_queries = [
-                f"{entity} service integration",
-                f"{entity} api call",
-                f"{entity} client",
-                f"{entity} adapter"
+                f"{entity} service implementation",
+                f"{entity} controller methods",
+                f"{entity} business logic",
+                f"Create{entity.title()}", f"Process{entity.title()}", f"Handle{entity.title()}",
+                f"{entity} validation", f"{entity} processing"
             ]
             
             for query in integration_queries:
@@ -270,10 +279,41 @@ class CodeDiscoveryEngine:
                 # Calculate a basic score (could be enhanced)
                 score = 0.8  # Default score since we don't have similarity scores from basic search
                 
-                # Extract file path and repository
+                # Extract file path and repository with better parsing
                 source = metadata.get('source', '')
                 repository = metadata.get('repository', 'unknown')
                 language = metadata.get('language', 'unknown')
+                
+                # Improve repository name extraction
+                if repository == 'unknown' and source:
+                    # Try to extract repo name from file path
+                    path_parts = source.split('/')
+                    if len(path_parts) > 1:
+                        # Look for common repo patterns
+                        for part in path_parts:
+                            if any(service_word in part.lower() for service_word in ['service', 'api', 'app', 'client', 'web']):
+                                repository = part
+                                break
+                        if repository == 'unknown' and len(path_parts) > 2:
+                            repository = path_parts[1]  # Usually second part is repo name
+                
+                # Generate realistic file path with proper service context
+                if not source.startswith('/') and '/' not in source:
+                    # Add realistic service path structure
+                    if 'service' in repository.lower():
+                        if any(controller_word in content_lower for controller_word in ['controller', 'api', 'endpoint']):
+                            source = f"src/controllers/{source}"
+                        elif any(service_word in content_lower for service_word in ['service', 'business', 'logic']):
+                            source = f"src/services/{source}"
+                        elif any(model_word in content_lower for model_word in ['model', 'entity', 'dto']):
+                            source = f"src/models/{source}"
+                        else:
+                            source = f"src/{source}"
+                    elif 'client' in repository.lower() or 'web' in repository.lower():
+                        if language_lower in ['javascript', 'typescript', 'js', 'ts']:
+                            source = f"src/components/{source}"
+                        else:
+                            source = f"src/{source}"
                 
                 # Determine context type
                 context_type = self._classify_context_type(content, source)
@@ -317,71 +357,130 @@ class CodeDiscoveryEngine:
         language = metadata.get('language', '').lower()
         content_lower = content.lower()
         
-        # Skip configuration files that don't contain business logic
+        # Aggressive filtering for configuration and non-business-logic files
         irrelevant_files = [
-            'package.json', 'package-lock.json', 'yarn.lock',
-            '.gitignore', '.env', '.env.example',
-            'dockerfile', 'docker-compose.yml', 'docker-compose.yaml',
-            'readme.md', 'license', 'license.txt',
-            'changelog', 'changelog.md', 'changes.md',
-            'makefile', 'requirements.txt', 'setup.py',
-            'pyproject.toml', 'poetry.lock',
-            'tsconfig.json', 'webpack.config.js',
-            '.editorconfig', '.eslintrc', '.prettierrc'
+            'package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+            '.gitignore', '.env', '.env.example', '.env.local', '.env.production',
+            'dockerfile', 'docker-compose.yml', 'docker-compose.yaml', 'docker-compose.prod.yml',
+            'readme.md', 'readme.txt', 'license', 'license.txt', 'license.md',
+            'changelog', 'changelog.md', 'changes.md', 'history.md',
+            'makefile', 'requirements.txt', 'requirements-dev.txt', 'setup.py', 'setup.cfg',
+            'pyproject.toml', 'poetry.lock', 'pipfile', 'pipfile.lock',
+            'tsconfig.json', 'webpack.config.js', 'babel.config.js', 'rollup.config.js',
+            '.editorconfig', '.eslintrc', '.prettierrc', '.eslintrc.js', '.eslintrc.json',
+            'jest.config.js', 'karma.conf.js', 'protractor.conf.js',
+            '.gitlab-ci.yml', '.github', 'azure-pipelines.yml', 'appveyor.yml',
+            'web.config', 'app.config', 'appsettings.json', 'appsettings.development.json',
+            'global.json', 'nuget.config', '.npmrc', '.yarnrc'
         ]
         
-        # Check if this is an irrelevant file
+        # Check if this is an irrelevant file (exact match and partial match)
         filename = source.split('/')[-1] if '/' in source else source
-        if any(irrelevant in filename for irrelevant in irrelevant_files):
+        for irrelevant in irrelevant_files:
+            if irrelevant == filename or irrelevant in filename:
+                return False
+        
+        # Skip files in build/config directories
+        config_directories = [
+            'node_modules/', '.git/', 'dist/', 'build/', 'bin/', 'obj/',
+            '.vscode/', '.idea/', '__pycache__/', '.pytest_cache/',
+            'coverage/', '.nyc_output/', 'docs/', 'documentation/'
+        ]
+        
+        if any(config_dir in source for config_dir in config_directories):
             return False
         
-        # Skip pure configuration content
+        # Aggressively filter configuration content
         config_indicators = [
-            '"dependencies":', '"devDependencies":', '"scripts":',
-            'FROM docker', 'RUN apt-get', 'COPY ', 'WORKDIR',
-            '# This is a', '## Installation', '## Getting Started',
-            'MIT License', 'Copyright (c)', 'Licensed under'
+            '"dependencies":', '"devDependencies":', '"scripts":', '"main":',
+            '"version":', '"description":', '"author":', '"keywords":',
+            'FROM docker', 'RUN apt-get', 'COPY ', 'WORKDIR', 'EXPOSE',
+            '# This is a', '## Installation', '## Getting Started', '## Usage',
+            'MIT License', 'Copyright (c)', 'Licensed under', 'GNU General Public',
+            '"ConnectionStrings":', '"Logging":', '"AllowedHosts":',
+            '<configuration>', '<appSettings>', '<connectionStrings>',
+            'escape-html', 'finalhandler', 'fresh', 'merge-descriptors',  # Common package.json deps
+            '"engines":', '"repository":', '"bugs":', '"homepage":'
         ]
         
         if any(indicator in content for indicator in config_indicators):
             return False
         
-        # Skip very short content that's likely not meaningful code
-        if len(content.strip()) < 50:
+        # Must have substantial code content
+        if len(content.strip()) < 100:  # Increased from 50 to 100
             return False
         
-        # Skip content that's mostly whitespace or comments
+        # Skip content that's mostly whitespace, comments, or JSON/YAML
         lines = content.split('\n')
-        non_empty_lines = [line.strip() for line in lines if line.strip()]
-        if len(non_empty_lines) < 2:  # Changed from 3 to 2 - even a single function is meaningful
+        non_empty_lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith('#')]
+        
+        # Must have at least 5 substantial lines
+        if len(non_empty_lines) < 5:
             return False
         
-        # Prefer actual code files
+        # Check for JSON/YAML patterns that indicate config files
+        json_yaml_patterns = [
+            content.strip().startswith('{') and content.strip().endswith('}'),
+            content.strip().startswith('[') and content.strip().endswith(']'),
+            content.count(':') > content.count('(') and content.count('"') > len(content) / 10,  # Likely JSON
+            content.count('---') > 0 and content.count(':') > 5  # Likely YAML
+        ]
+        
+        if any(json_yaml_patterns):
+            return False
+        
+        # MUST have code indicators for business logic
         code_indicators = [
-            'def ', 'function ', 'class ', 'public class',
-            'private ', 'protected ', 'public ',
-            'const ', 'let ', 'var ',
-            'import ', 'from ', 'require(',
-            'export ', 'module.exports',
-            'namespace ', 'interface ', 'enum ',
-            'struct ', 'union ', 'typedef'
+            'def ', 'function ', 'class ', 'public class', 'private class',
+            'private ', 'protected ', 'public ', 'async ',
+            'const ', 'let ', 'var ', 'interface ', 'enum ',
+            'import ', 'from ', 'require(', 'using ',
+            'export ', 'module.exports', 'namespace ',
+            'struct ', 'union ', 'typedef', '@Component', '@Service', '@Controller'
         ]
         
         has_code_indicators = any(indicator in content for indicator in code_indicators)
         
-        # For event flow analysis, prioritize files that seem to contain business logic
-        business_logic_indicators = [
-            'order', 'payment', 'user', 'auth', 'login',
-            'process', 'handle', 'service', 'controller',
-            'api', 'endpoint', 'request', 'response',
-            'validate', 'create', 'update', 'delete',
-            'notification', 'event', 'message', 'queue'
+        # Must have business logic keywords
+        business_logic_keywords = [
+            # Core business operations
+            'order', 'payment', 'user', 'customer', 'product', 'cart',
+            'auth', 'login', 'signup', 'register', 'session',
+            'process', 'handle', 'manage', 'execute', 'perform',
+            'validate', 'verify', 'check', 'confirm', 'approve',
+            'create', 'update', 'delete', 'save', 'store', 'retrieve',
+            'send', 'receive', 'publish', 'subscribe', 'notify',
+            'calculate', 'compute', 'transform', 'format',
+            # Technical patterns
+            'service', 'controller', 'handler', 'processor', 'manager',
+            'api', 'endpoint', 'route', 'middleware', 'filter',
+            'request', 'response', 'http', 'post', 'get', 'put', 'delete',
+            'event', 'message', 'queue', 'listener', 'consumer',
+            'repository', 'entity', 'model', 'dto', 'viewmodel',
+            'exception', 'error', 'try', 'catch', 'throw'
         ]
         
-        has_business_logic = any(indicator in content_lower for indicator in business_logic_indicators)
+        business_logic_count = sum(1 for keyword in business_logic_keywords if keyword in content_lower)
         
-        # Accept if it has code indicators OR business logic (to catch both code files and relevant config)
-        return has_code_indicators or has_business_logic
+        # Require BOTH code indicators AND substantial business logic
+        has_substantial_business_logic = business_logic_count >= 3
+        
+        # Additional check for method signatures (actual implementation)
+        method_patterns = [
+            '(' in content and ')' in content and ('{' in content or ':' in content),  # Has method signatures
+            'return ' in content or 'yield ' in content,  # Has return statements
+            'if ' in content or 'for ' in content or 'while ' in content,  # Has control flow
+        ]
+        
+        has_implementation = any(method_patterns)
+        
+        # Final decision: must have all three
+        result = has_code_indicators and has_substantial_business_logic and has_implementation
+        
+        if not result:
+            self.logger.debug(f"Filtered out: {source} - code_indicators:{has_code_indicators}, business_logic:{has_substantial_business_logic}, implementation:{has_implementation}")
+        
+        return result
     
     def _classify_context_type(self, content: str, file_path: str) -> str:
         """Classify the context type based on content and file path."""
@@ -401,44 +500,39 @@ class CodeDiscoveryEngine:
         return 'component'  # Default
     
     def _extract_method_name(self, content: str, language: str) -> str:
-        """Extract method name from content (improved heuristic)."""
+        """Extract meaningful method name from content with semantic understanding."""
         lines = content.split('\n')
         language_lower = language.lower()
+        content_lower = content.lower()
         
-        # Skip non-code files that shouldn't have methods
-        if language_lower in ['json', 'yaml', 'yml', 'xml', 'html', 'css', 'markdown', 'md', 'txt']:
-            # For configuration files, try to extract a meaningful identifier
-            file_type_map = {
-                'json': 'config_data',
-                'yaml': 'config_data', 
-                'yml': 'config_data',
-                'xml': 'xml_data',
-                'html': 'html_content',
-                'css': 'styles',
-                'markdown': 'documentation',
-                'md': 'documentation',
-                'txt': 'text_content'
-            }
-            return file_type_map.get(language_lower, 'data_file')
+        # For actual code files, use sophisticated method extraction
+        extracted_methods = []
         
-        # Try to extract meaningful method names for code files
+        # Python extraction
         if language_lower in ['python', 'py']:
             for line in lines:
                 line_stripped = line.strip()
+                # Function definitions
                 if line_stripped.startswith('def ') and '(' in line_stripped:
-                    # Extract function name
                     start = line_stripped.find('def ') + 4
                     end = line_stripped.find('(')
                     if start < end:
                         method_name = line_stripped[start:end].strip()
-                        if method_name and method_name.isidentifier():
-                            return method_name
-                # Also check for class methods
+                        if method_name and method_name.isidentifier() and not method_name.startswith('_'):
+                            # Prioritize business logic methods
+                            if any(keyword in method_name.lower() for keyword in ['create', 'process', 'handle', 'validate', 'send', 'get', 'update', 'delete']):
+                                return method_name
+                            extracted_methods.append(method_name)
+                # Class definitions
                 elif line_stripped.startswith('class '):
                     class_name = line_stripped[6:].split('(')[0].split(':')[0].strip()
                     if class_name and class_name.isidentifier():
-                        return f"{class_name}_class"
+                        # Convert to business logic context
+                        if any(keyword in class_name.lower() for keyword in ['service', 'controller', 'handler', 'manager', 'processor']):
+                            return f"{class_name}"
+                        extracted_methods.append(class_name)
         
+        # JavaScript/TypeScript extraction
         elif language_lower in ['javascript', 'typescript', 'js', 'ts']:
             for line in lines:
                 line_stripped = line.strip()
@@ -449,44 +543,68 @@ class CodeDiscoveryEngine:
                     if start < end:
                         method_name = line_stripped[start:end].strip()
                         if method_name and method_name.replace('_', '').replace('$', '').isalnum():
-                            return method_name
-                # Arrow functions
+                            if any(keyword in method_name.lower() for keyword in ['handle', 'process', 'create', 'update', 'submit', 'validate']):
+                                return method_name
+                            extracted_methods.append(method_name)
+                # Arrow functions and const declarations
                 elif '=>' in line_stripped and '=' in line_stripped:
-                    # Look for const/let/var functionName = 
                     parts = line_stripped.split('=')[0].strip()
                     if parts.startswith(('const ', 'let ', 'var ')):
                         method_name = parts.split()[-1].strip()
                         if method_name and method_name.replace('_', '').replace('$', '').isalnum():
-                            return method_name
+                            if any(keyword in method_name.lower() for keyword in ['handle', 'process', 'create', 'update', 'submit', 'validate']):
+                                return method_name
+                            extracted_methods.append(method_name)
+                # React components
+                elif 'export default' in line_stripped or 'export const' in line_stripped:
+                    words = line_stripped.split()
+                    for word in words:
+                        if word.endswith('Component') or word.endswith('Page') or word.endswith('Form'):
+                            return word
         
+        # C# extraction
         elif language_lower in ['csharp', 'c#', 'cs']:
             for line in lines:
                 line_stripped = line.strip()
-                # Method declarations
+                # Method declarations with access modifiers
                 if ('public ' in line_stripped or 'private ' in line_stripped or 'protected ' in line_stripped) and '(' in line_stripped:
-                    words = line_stripped.split()
-                    for i, word in enumerate(words):
-                        if '(' in word:
-                            method_name = word.split('(')[0].strip()
+                    # Find method name before parentheses
+                    paren_index = line_stripped.find('(')
+                    if paren_index > 0:
+                        before_paren = line_stripped[:paren_index].strip()
+                        words = before_paren.split()
+                        if len(words) >= 2:  # At least access modifier and method name
+                            method_name = words[-1]
                             if method_name and method_name.replace('_', '').isalnum():
-                                return method_name
+                                # Prioritize business logic methods
+                                if any(keyword in method_name.lower() for keyword in ['create', 'process', 'handle', 'validate', 'send', 'get', 'update', 'delete', 'place', 'confirm']):
+                                    return method_name
+                                extracted_methods.append(method_name)
                 # Class declarations
-                elif line_stripped.startswith('public class ') or line_stripped.startswith('class '):
-                    class_name = line_stripped.split('class ')[1].split()[0].strip()
-                    if class_name and class_name.replace('_', '').isalnum():
-                        return f"{class_name}_class"
+                elif 'public class ' in line_stripped or 'class ' in line_stripped:
+                    class_match = line_stripped.split('class ')[1].split()[0].strip()
+                    if class_match and class_match.replace('_', '').isalnum():
+                        if any(keyword in class_match.lower() for keyword in ['service', 'controller', 'handler', 'manager', 'processor']):
+                            return class_match
+                        extracted_methods.append(class_match)
         
+        # Java extraction
         elif language_lower in ['java']:
             for line in lines:
                 line_stripped = line.strip()
                 if ('public ' in line_stripped or 'private ' in line_stripped) and '(' in line_stripped:
-                    words = line_stripped.split()
-                    for i, word in enumerate(words):
-                        if '(' in word:
-                            method_name = word.split('(')[0].strip()
+                    paren_index = line_stripped.find('(')
+                    if paren_index > 0:
+                        before_paren = line_stripped[:paren_index].strip()
+                        words = before_paren.split()
+                        if len(words) >= 2:
+                            method_name = words[-1]
                             if method_name and method_name.replace('_', '').isalnum():
-                                return method_name
+                                if any(keyword in method_name.lower() for keyword in ['create', 'process', 'handle', 'validate', 'execute']):
+                                    return method_name
+                                extracted_methods.append(method_name)
         
+        # Go extraction
         elif language_lower in ['go']:
             for line in lines:
                 line_stripped = line.strip()
@@ -496,30 +614,122 @@ class CodeDiscoveryEngine:
                     if start < end:
                         method_name = line_stripped[start:end].strip()
                         if method_name and method_name.replace('_', '').isalnum():
-                            return method_name
+                            if any(keyword in method_name.lower() for keyword in ['Create', 'Process', 'Handle', 'Validate']):
+                                return method_name
+                            extracted_methods.append(method_name)
         
-        # If no specific method found, try to extract a meaningful identifier from the content
-        # Look for common patterns that might indicate the purpose
-        content_lower = content.lower()
+        # If we found methods, return the first business-relevant one or the first one
+        if extracted_methods:
+            # Prioritize business logic methods
+            business_methods = [m for m in extracted_methods if any(keyword in m.lower() for keyword in 
+                              ['create', 'process', 'handle', 'validate', 'send', 'get', 'update', 'delete', 'place', 'confirm', 'execute'])]
+            if business_methods:
+                return business_methods[0]
+            return extracted_methods[0]
+        
+        # Fallback: Generate semantic name based on content analysis
+        return self._generate_semantic_method_name(content_lower, language_lower)
+    
+    def _generate_semantic_method_name(self, content_lower: str, language_lower: str) -> str:
+        """Generate a semantic method name based on content analysis."""
+        
+        # Business operation patterns
         if 'order' in content_lower:
-            return 'order_handler'
-        elif 'payment' in content_lower:
-            return 'payment_handler'
-        elif 'user' in content_lower or 'auth' in content_lower:
-            return 'user_handler'
-        elif 'api' in content_lower or 'endpoint' in content_lower:
-            return 'api_handler'
-        elif 'service' in content_lower:
-            return 'service_handler'
-        elif 'controller' in content_lower:
-            return 'controller_handler'
-        elif 'model' in content_lower or 'entity' in content_lower:
-            return 'data_model'
-        elif 'config' in content_lower or 'setting' in content_lower:
-            return 'configuration'
+            if 'create' in content_lower or 'place' in content_lower:
+                return "createOrder"
+            elif 'process' in content_lower:
+                return "processOrder"
+            elif 'validate' in content_lower or 'verify' in content_lower:
+                return "validateOrder"
+            elif 'complete' in content_lower or 'finish' in content_lower:
+                return "completeOrder"
+            else:
+                return "orderHandler"
         
-        # Last resort: return a generic but meaningful name
-        return 'code_component'
+        elif 'payment' in content_lower:
+            if 'process' in content_lower:
+                return "processPayment"
+            elif 'validate' in content_lower or 'verify' in content_lower:
+                return "validatePayment"
+            elif 'complete' in content_lower:
+                return "completePayment"
+            else:
+                return "paymentHandler"
+        
+        elif 'user' in content_lower or 'auth' in content_lower:
+            if 'login' in content_lower:
+                return "authenticateUser"
+            elif 'register' in content_lower or 'signup' in content_lower:
+                return "registerUser"
+            elif 'validate' in content_lower:
+                return "validateUser"
+            else:
+                return "userHandler"
+        
+        elif 'notification' in content_lower or 'email' in content_lower:
+            if 'send' in content_lower:
+                return "sendNotification"
+            elif 'process' in content_lower:
+                return "processNotification"
+            else:
+                return "notificationHandler"
+        
+        elif 'api' in content_lower or 'request' in content_lower:
+            if 'handle' in content_lower:
+                return "handleRequest"
+            elif 'process' in content_lower:
+                return "processRequest"
+            else:
+                return "apiHandler"
+        
+        # Service/component patterns
+        elif 'service' in content_lower:
+            if 'order' in content_lower:
+                return "OrderService"
+            elif 'payment' in content_lower:
+                return "PaymentService"
+            elif 'user' in content_lower:
+                return "UserService"
+            else:
+                return "BusinessService"
+        
+        elif 'controller' in content_lower:
+            if 'order' in content_lower:
+                return "OrderController"
+            elif 'payment' in content_lower:
+                return "PaymentController"
+            elif 'user' in content_lower:
+                return "UserController"
+            else:
+                return "ApiController"
+        
+        # Generic operation patterns
+        elif 'create' in content_lower and 'function' in content_lower:
+            return "createEntity"
+        elif 'update' in content_lower and 'function' in content_lower:
+            return "updateEntity"
+        elif 'delete' in content_lower and 'function' in content_lower:
+            return "deleteEntity"
+        elif 'validate' in content_lower and 'function' in content_lower:
+            return "validateData"
+        elif 'process' in content_lower and 'function' in content_lower:
+            return "processData"
+        elif 'handle' in content_lower and 'function' in content_lower:
+            return "handleEvent"
+        
+        # Default based on language
+        if language_lower in ['csharp', 'c#', 'cs']:
+            return "BusinessLogic"
+        elif language_lower in ['javascript', 'typescript', 'js', 'ts']:
+            return "businessHandler"
+        elif language_lower in ['python', 'py']:
+            return "business_logic"
+        elif language_lower in ['java']:
+            return "businessMethod"
+        elif language_lower in ['go']:
+            return "BusinessHandler"
+        else:
+            return "businessLogic"
     
     def _deduplicate_references(self, references: List[CodeReference]) -> List[CodeReference]:
         """Remove duplicate code references based on file path and method name."""

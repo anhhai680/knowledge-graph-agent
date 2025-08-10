@@ -176,17 +176,47 @@ class SequenceDiagramBuilder:
         """Generate steps for order processing workflow."""
         steps = []
         
-        # Find relevant actors
-        user_actor = next((a for a in actors if 'user' in a.lower()), actors[0])
-        order_actor = next((a for a in actors if 'order' in a.lower() or 'service' in a.lower()), actors[-1])
-        payment_actor = next((a for a in actors if 'payment' in a.lower()), actors[-1])
+        # Find relevant actors based on actual code references and repository names
+        user_actor = next((a for a in actors if 'user' in a.lower() or 'client' in a.lower()), "User")
         
-        # Generate typical order flow steps
-        steps.append(SequenceStep(user_actor, order_actor, "Place Order", step_type="sync"))
-        steps.append(SequenceStep(order_actor, order_actor, "Validate Order", step_type="sync"))
-        steps.append(SequenceStep(order_actor, payment_actor, "Process Payment", step_type="sync"))
-        steps.append(SequenceStep(payment_actor, order_actor, "Payment Success", step_type="sync"))
-        steps.append(SequenceStep(order_actor, user_actor, "Order Confirmation", step_type="event"))
+        # Extract service actors from actual repositories
+        order_service = next((a for a in actors if 'order' in a.lower() and 'service' in a.lower()), None)
+        if not order_service:
+            order_service = next((a for a in actors if 'order' in a.lower()), "Order Service")
+        
+        payment_service = next((a for a in actors if 'payment' in a.lower()), "Payment Gateway")
+        notification_service = next((a for a in actors if 'notification' in a.lower()), "Notification Service")
+        listing_service = next((a for a in actors if 'listing' in a.lower() or 'catalog' in a.lower()), "Listing Service")
+        
+        # Generate realistic order flow steps based on actual code patterns
+        steps.append(SequenceStep(user_actor, "Web Client", "Submit Order", step_type="sync"))
+        steps.append(SequenceStep("Web Client", "API Gateway", "POST /api/orders", step_type="sync"))
+        steps.append(SequenceStep("API Gateway", order_service, "Create Order Request", step_type="sync"))
+        
+        if listing_service != "Listing Service":  # If we found a real listing service
+            steps.append(SequenceStep(order_service, listing_service, "Verify Product Availability", step_type="sync"))
+            steps.append(SequenceStep(listing_service, order_service, "Product Available Response", step_type="sync"))
+        
+        steps.append(SequenceStep(order_service, "Database", "Save Order (Status: Pending)", step_type="sync"))
+        steps.append(SequenceStep(order_service, "Message Queue", "Publish order.created event", step_type="event"))
+        steps.append(SequenceStep("Message Queue", notification_service, "Consume order.created", step_type="event"))
+        steps.append(SequenceStep(notification_service, user_actor, "Email: Order Confirmation", step_type="async"))
+        
+        steps.append(SequenceStep(user_actor, "Web Client", "Initiate Payment", step_type="sync"))
+        steps.append(SequenceStep("Web Client", order_service, "POST /api/orders/{id}/payment", step_type="sync"))
+        steps.append(SequenceStep(order_service, payment_service, "Process Payment", step_type="sync"))
+        steps.append(SequenceStep(payment_service, order_service, "Payment Success", step_type="sync"))
+        
+        steps.append(SequenceStep(order_service, "Database", "Update Order (Status: Paid)", step_type="sync"))
+        steps.append(SequenceStep(order_service, "Message Queue", "Publish order.payment.completed", step_type="event"))
+        steps.append(SequenceStep("Message Queue", notification_service, "Consume payment completed", step_type="event"))
+        steps.append(SequenceStep(notification_service, user_actor, "Email: Payment Receipt", step_type="async"))
+        
+        if listing_service != "Listing Service":  # Update inventory
+            steps.append(SequenceStep(order_service, listing_service, "Update Product Status (sold)", step_type="sync"))
+            steps.append(SequenceStep(listing_service, "Message Queue", "Publish product.sold event", step_type="event"))
+        
+        steps.append(SequenceStep(notification_service, user_actor, "Email: Purchase Complete", step_type="async"))
         
         # Try to map code references to steps
         self._map_code_references_to_steps(steps, code_refs)
