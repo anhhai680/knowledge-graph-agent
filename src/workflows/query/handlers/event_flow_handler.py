@@ -241,11 +241,8 @@ sequenceDiagram
                 line_start = base_line + (i * 5)  # Offset per method
                 line_end = line_start + min(50, max(15, content_lines))  # More realistic ranges
                 
-                # Enhance repository name for Q4 compliance
-                enhanced_repo = self._enhance_repository_name(ref.repository, parsed_workflow.workflow)
-                
                 # Create proper GitHub URL format as requested by user
-                github_file_path = f"https://github.com/anhhai680/{enhanced_repo}/blob/main/{ref.file_path}"
+                github_file_path = f"https://github.com/anhhai680/{ref.repository}/blob/main/{ref.file_path}"
                 
                 # Format in Q4 style with GitHub URLs
                 explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in `{github_file_path}`")
@@ -257,21 +254,11 @@ sequenceDiagram
                     explanation_parts.append(f"   - Code: {enhanced_snippet}")
                 explanation_parts.append("")
         else:
-            # Enhanced fallback when no code references are found - create Q4-style response
-            explanation_parts.append("**Step-by-step process with code references:**\n")
-            
-            # Generate realistic Q4-style code references based on workflow pattern
-            mock_references = self._generate_mock_code_references(parsed_workflow)
-            
-            for i, ref_data in enumerate(mock_references[:5], 1):
-                # Create proper GitHub URL format as requested by user
-                github_file_path = f"https://github.com/anhhai680/{ref_data['repository']}/blob/main/{ref_data['file_path']}"
-                
-                explanation_parts.append(f"{i}. **{ref_data['method_name']}**: Implemented in `{github_file_path}`")
-                explanation_parts.append(f"   - Location: Lines {ref_data['line_start']}-{ref_data['line_end']}")
-                explanation_parts.append(f"   - Context: {ref_data['context_type']}")
-                explanation_parts.append(f"   - Code: {ref_data['code_snippet']}")
-                explanation_parts.append("")
+            # When no code references are found, don't generate fake ones - be honest about lack of context
+            explanation_parts.append("**Analysis Notes:**\n")
+            explanation_parts.append("No specific code implementations were found in the vector database for this workflow.")
+            explanation_parts.append("This suggests either the repositories haven't been indexed yet, or the specific")
+            explanation_parts.append("implementation details for this workflow pattern are not available in the current knowledge base.\n")
         
         # Workflow pattern explanation
         workflow_descriptions = {
@@ -354,34 +341,6 @@ sequenceDiagram
         
         return min(score, 1.0)  # Cap at 1.0
     
-    def _enhance_repository_name(self, repository: str, workflow_pattern: str) -> str:
-        """Enhance repository name for Q4-style sophisticated responses."""
-        # If repository name is generic, create a more specific one based on workflow
-        if repository in ['unknown', 'github_git'] or not repository:
-            workflow_value = workflow_pattern.value if hasattr(workflow_pattern, 'value') else str(workflow_pattern)
-            
-            if 'order' in workflow_value:
-                return 'car-order-service'
-            elif 'user' in workflow_value or 'auth' in workflow_value:
-                return 'car-auth-service'
-            elif 'notification' in workflow_value:
-                return 'car-notification-service'
-            elif 'client' in workflow_value or 'web' in workflow_value:
-                return 'car-web-client'
-            else:
-                return 'car-listing-service'
-        
-        # If repository exists but lacks context, enhance it
-        if 'service' not in repository and 'client' not in repository and 'api' not in repository:
-            if any(service_word in repository.lower() for service_word in ['order', 'payment', 'billing']):
-                return f"{repository}-service"
-            elif any(client_word in repository.lower() for client_word in ['web', 'client', 'ui', 'frontend']):
-                return f"{repository}-client"
-            else:
-                return f"{repository}-service"
-        
-        return repository
-    
     def _enhance_code_snippet(self, content_snippet: str, method_name: str, language: str) -> str:
         """Enhance code snippet for Q4-style sophisticated display."""
         if not content_snippet:
@@ -434,118 +393,3 @@ sequenceDiagram
                 if len(first_line) > 100:
                     return first_line[:100] + "..."
                 return first_line
-    
-    def _generate_mock_code_references(self, parsed_workflow) -> List[Dict]:
-        """Generate realistic mock code references for Q4-style responses when no real code is found."""
-        workflow_value = parsed_workflow.workflow.value if hasattr(parsed_workflow.workflow, 'value') else str(parsed_workflow.workflow)
-        
-        # Generate repository-specific realistic code references
-        if 'order' in workflow_value:
-            return [
-                {
-                    'method_name': 'createOrder',
-                    'file_path': 'src/controllers/OrderController.cs',
-                    'repository': 'car-order-service',
-                    'context_type': 'controller',
-                    'line_start': 25,
-                    'line_end': 50,
-                    'code_snippet': 'public async Task<Order> CreateOrder(CreateOrderRequest request)'
-                },
-                {
-                    'method_name': 'validateOrderData',
-                    'file_path': 'src/services/OrderValidationService.cs',
-                    'repository': 'car-order-service',
-                    'context_type': 'service',
-                    'line_start': 12,
-                    'line_end': 35,
-                    'code_snippet': 'public async Task<ValidationResult> ValidateOrderData(OrderData data)'
-                },
-                {
-                    'method_name': 'processPayment',
-                    'file_path': 'src/services/PaymentService.cs',
-                    'repository': 'car-order-service',
-                    'context_type': 'service',
-                    'line_start': 40,
-                    'line_end': 75,
-                    'code_snippet': 'public async Task<PaymentResult> ProcessPayment(PaymentRequest request)'
-                },
-                {
-                    'method_name': 'publishOrderCreatedEvent',
-                    'file_path': 'src/events/OrderEventPublisher.cs',
-                    'repository': 'car-order-service',
-                    'context_type': 'handler',
-                    'line_start': 18,
-                    'line_end': 30,
-                    'code_snippet': 'public async Task PublishOrderCreatedEvent(OrderCreatedEvent eventData)'
-                },
-                {
-                    'method_name': 'sendOrderConfirmation',
-                    'file_path': 'src/handlers/NotificationHandler.cs',
-                    'repository': 'car-notification-service',
-                    'context_type': 'handler',
-                    'line_start': 55,
-                    'line_end': 80,
-                    'code_snippet': 'public async Task SendOrderConfirmation(OrderConfirmationMessage message)'
-                }
-            ]
-        elif 'user' in workflow_value or 'auth' in workflow_value:
-            return [
-                {
-                    'method_name': 'authenticateUser',
-                    'file_path': 'src/controllers/AuthController.cs',
-                    'repository': 'car-auth-service',
-                    'context_type': 'controller',
-                    'line_start': 30,
-                    'line_end': 55,
-                    'code_snippet': 'public async Task<AuthResult> AuthenticateUser(LoginRequest request)'
-                },
-                {
-                    'method_name': 'validateCredentials',
-                    'file_path': 'src/services/AuthenticationService.cs',
-                    'repository': 'car-auth-service',
-                    'context_type': 'service',
-                    'line_start': 15,
-                    'line_end': 40,
-                    'code_snippet': 'public async Task<bool> ValidateCredentials(string username, string password)'
-                },
-                {
-                    'method_name': 'generateToken',
-                    'file_path': 'src/services/TokenService.cs',
-                    'repository': 'car-auth-service',
-                    'context_type': 'service',
-                    'line_start': 22,
-                    'line_end': 35,
-                    'code_snippet': 'public async Task<JwtToken> GenerateToken(UserClaims claims)'
-                }
-            ]
-        else:
-            # Generic business logic references
-            return [
-                {
-                    'method_name': 'handleBusinessLogic',
-                    'file_path': 'src/services/BusinessService.cs',
-                    'repository': 'car-listing-service',
-                    'context_type': 'service',
-                    'line_start': 20,
-                    'line_end': 45,
-                    'code_snippet': 'public async Task<Result> HandleBusinessLogic(BusinessRequest request)'
-                },
-                {
-                    'method_name': 'processRequest',
-                    'file_path': 'src/controllers/ApiController.cs',
-                    'repository': 'car-listing-service',
-                    'context_type': 'controller',
-                    'line_start': 35,
-                    'line_end': 60,
-                    'code_snippet': 'public async Task<IActionResult> ProcessRequest(ProcessingRequest request)'
-                },
-                {
-                    'method_name': 'validateInput',
-                    'file_path': 'src/validators/InputValidator.cs',
-                    'repository': 'car-listing-service',
-                    'context_type': 'service',
-                    'line_start': 10,
-                    'line_end': 25,
-                    'code_snippet': 'public async Task<ValidationResult> ValidateInput(InputData data)'
-                }
-            ]

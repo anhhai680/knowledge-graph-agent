@@ -290,6 +290,24 @@ class CodeDiscoveryEngine:
                 repository = metadata.get('repository', 'unknown')
                 language = metadata.get('language', 'unknown')
                 
+                # Skip if we don't have actual source information
+                if not source or source == 'unknown':
+                    self.logger.debug(f"Skipping document with no source information")
+                    continue
+                
+                # Improve repository name extraction and clean any duplicate owner references
+                if repository == 'unknown' and source:
+                    # Try to extract repo name from file path
+                    path_parts = source.split('/')
+                    if len(path_parts) > 1:
+                        # Look for common repo patterns
+                        for part in path_parts:
+                            if any(service_word in part.lower() for service_word in ['service', 'api', 'app', 'client', 'web']):
+                                repository = part
+                                break
+                        if repository == 'unknown' and len(path_parts) > 2:
+                            repository = path_parts[1]  # Usually second part is repo name
+                
                 # Improve repository name extraction and clean any duplicate owner references
                 if repository == 'unknown' and source:
                     # Try to extract repo name from file path
@@ -313,6 +331,17 @@ class CodeDiscoveryEngine:
                 elif repository and repository.startswith('anhhai680-'):
                     repository = repository[10:]  # Remove "anhhai680-" prefix
                 
+                # Additional cleaning for duplicate owner references in repository names
+                # Handle cases like "anhhai680/anhhai680/car-order-service" -> "car-order-service"
+                if repository and 'anhhai680' in repository:
+                    # Split by common separators and remove anhhai680 parts
+                    parts = repository.replace('/', '-').split('-')
+                    clean_parts = [part for part in parts if part != 'anhhai680' and part.strip()]
+                    if clean_parts:
+                        repository = '-'.join(clean_parts)
+                    else:
+                        repository = 'unknown'
+                
                 # Generate realistic file path with proper service context
                 content_lower = content.lower()
                 language_lower = language.lower()
@@ -321,52 +350,12 @@ class CodeDiscoveryEngine:
                 if 'github_git' in source:
                     source = source.replace('github_git', '').strip('/')
                     if not source:
-                        # Generate a realistic file name based on content analysis instead of "UnknownFile"
-                        source = self._generate_realistic_filename(content, language, metadata)
+                        # Skip documents with no meaningful file path rather than generating fake ones
+                        self.logger.debug(f"Skipping document with no meaningful file path after github_git cleanup")
+                        continue
                 
-                # Ensure source has a proper file extension if missing
-                if not source.endswith(('.cs', '.ts', '.js', '.py', '.java', '.go', '.tsx', '.jsx')):
-                    if language_lower in ['csharp', 'c#', 'cs']:
-                        source = f"{source}.cs"
-                    elif language_lower in ['typescript', 'ts']:
-                        source = f"{source}.ts"
-                    elif language_lower in ['javascript', 'js']:
-                        source = f"{source}.js"
-                    elif language_lower in ['python', 'py']:
-                        source = f"{source}.py"
-                    elif language_lower in ['java']:
-                        source = f"{source}.java"
-                    elif language_lower in ['go']:
-                        source = f"{source}.go"
-                    else:
-                        source = f"{source}.cs"  # Default to C#
-                
-                # Build proper repository-relative path
-                if not source.startswith(('src/', 'controllers/', 'services/', 'components/', 'models/')):
-                    # Add realistic service path structure based on content and repository type
-                    if 'service' in repository.lower():
-                        if any(controller_word in content_lower for controller_word in ['controller', 'api', 'endpoint']):
-                            source = f"src/controllers/{source}"
-                        elif any(service_word in content_lower for service_word in ['service', 'business', 'logic']):
-                            source = f"src/services/{source}"
-                        elif any(model_word in content_lower for model_word in ['model', 'entity', 'dto']):
-                            source = f"src/models/{source}"
-                        elif any(handler_word in content_lower for handler_word in ['handler', 'event', 'message']):
-                            source = f"src/handlers/{source}"
-                        else:
-                            source = f"src/{source}"
-                    elif 'client' in repository.lower() or 'web' in repository.lower():
-                        if language_lower in ['javascript', 'typescript', 'js', 'ts']:
-                            if any(component_word in content_lower for component_word in ['component', 'react', 'jsx', 'tsx']):
-                                source = f"src/components/{source}"
-                            elif any(hook_word in content_lower for hook_word in ['hook', 'use']):
-                                source = f"src/hooks/{source}"
-                            else:
-                                source = f"src/{source}"
-                        else:
-                            source = f"src/{source}"
-                    else:
-                        source = f"src/{source}"
+                # Use only the actual file path from metadata - don't generate fake paths
+                file_path = source
                 
                 # Determine context type
                 context_type = self._classify_context_type(content, source)
@@ -377,7 +366,7 @@ class CodeDiscoveryEngine:
                 # Create code reference
                 ref = CodeReference(
                     repository=repository,
-                    file_path=source,
+                    file_path=file_path,
                     line_numbers=[],  # Could be enhanced to extract line numbers
                     method_name=method_name,
                     context_type=context_type,

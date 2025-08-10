@@ -107,56 +107,77 @@ class SequenceDiagramBuilder:
         """Discover actors from workflow and code references."""
         actor_candidates = set()
         
-        # Add actors from workflow entities
+        # Add actors from workflow entities (only if they are meaningful business terms)
+        meaningful_entities = ['user', 'customer', 'client', 'admin', 'service', 'system', 'order', 'payment', 'notification']
         for entity in workflow.entities:
-            actor_candidates.add(entity)
+            if any(meaningful in entity.lower() for meaningful in meaningful_entities):
+                actor_candidates.add(entity.lower())
         
-        # Add actors from code references
+        # Add actors from code references (only from actual repositories and file paths)
         for ref in code_refs:
-            # Extract potential actors from repository names
-            repo_parts = ref.repository.split('/')[-1].split('-')
-            for part in repo_parts:
-                if len(part) > 3:  # Filter short words
-                    actor_candidates.add(part)
+            # Extract actors from repository names (only if they are actual repositories)
+            if ref.repository and ref.repository != 'unknown':
+                repo_parts = ref.repository.split('/')[-1].split('-')
+                for part in repo_parts:
+                    if len(part) > 3 and part.lower() in ['order', 'user', 'payment', 'notification', 'listing', 'auth', 'web', 'client']:
+                        actor_candidates.add(part.lower())
             
-            # Extract actors from file paths
-            path_parts = ref.file_path.split('/')
-            for part in path_parts:
-                if 'service' in part.lower() or 'controller' in part.lower():
-                    clean_name = re.sub(r'[^a-zA-Z]', '', part)
-                    if len(clean_name) > 3:
-                        actor_candidates.add(clean_name)
+            # Extract actors from file paths (only meaningful service components)
+            if ref.file_path:
+                path_parts = ref.file_path.split('/')
+                for part in path_parts:
+                    clean_part = part.lower().replace('controller', '').replace('service', '').replace('.cs', '').replace('.ts', '').replace('.js', '')
+                    if len(clean_part) > 3 and clean_part in ['order', 'user', 'payment', 'notification', 'auth']:
+                        actor_candidates.add(clean_part)
         
         # Always include a user actor for user-initiated workflows
         if workflow.workflow in [WorkflowPattern.ORDER_PROCESSING, WorkflowPattern.USER_AUTHENTICATION]:
             actor_candidates.add('user')
         
-        # Convert to Actor objects
+        # Convert to Actor objects with proper validation
         actors = []
+        valid_actor_names = set()
+        
         for candidate in list(actor_candidates)[:self.max_actors]:
-            actor_type = self._classify_actor_type(candidate)
-            display_name = self._format_actor_name(candidate)
+            # Ensure actor name is valid (no special characters, proper format)
+            clean_candidate = re.sub(r'[^a-zA-Z0-9]', '', candidate).lower()
+            if len(clean_candidate) < 3 or clean_candidate in valid_actor_names:
+                continue
+                
+            actor_type = self._classify_actor_type(clean_candidate)
+            display_name = self._format_actor_name(clean_candidate)
+            
+            # Ensure display name is also clean
+            clean_display = re.sub(r'[^a-zA-Z0-9\s]', '', display_name).strip()
+            if not clean_display:
+                continue
             
             actor = Actor(
-                name=candidate,
-                display_name=display_name,
+                name=clean_candidate,
+                display_name=clean_display,
                 actor_type=actor_type,
                 description=f"{actor_type.title()} component"
             )
             actors.append(actor)
+            valid_actor_names.add(clean_candidate)
         
-        # Ensure we have at least a basic set of actors
+        # Ensure we have at least a basic set of actors if nothing meaningful was found
         if len(actors) < 2:
             actors.extend(self._get_default_actors(workflow.workflow))
         
         return actors[:self.max_actors]
     
     def _generate_sequence_steps(self, workflow: EventFlowQuery, code_refs: List[CodeReference], actors: List[Actor]) -> List[SequenceStep]:
-        """Generate sequence steps from workflow and code references."""
+        """Generate sequence steps from workflow and code references using only declared actors."""
         steps = []
         actor_names = [actor.name for actor in actors]
         
-        # Generate steps based on workflow pattern and ensure all participants are in actor list
+        # Only generate steps if we have declared actors
+        if len(actors) < 2:
+            self.logger.warning("Not enough valid actors for sequence diagram")
+            return steps
+        
+        # Validate all steps only use declared actors
         if workflow.workflow == WorkflowPattern.ORDER_PROCESSING:
             steps.extend(self._generate_order_processing_steps(actors, code_refs))
         elif workflow.workflow == WorkflowPattern.USER_AUTHENTICATION:
@@ -166,79 +187,57 @@ class SequenceDiagramBuilder:
         else:
             steps.extend(self._generate_generic_steps(workflow, actors, code_refs))
         
+        # Filter steps to ensure all participants are declared
+        valid_steps = []
+        for step in steps:
+            if step.actor in actor_names and step.target in actor_names:
+                valid_steps.append(step)
+            else:
+                self.logger.debug(f"Skipping step with undeclared participants: {step.actor} -> {step.target}")
+        
         # Assign order and limit steps
-        for i, step in enumerate(steps):
+        for i, step in enumerate(valid_steps):
             step.order = i + 1
         
-        return steps[:self.max_steps]
+        return valid_steps[:self.max_steps]
     
     def _generate_order_processing_steps(self, actors: List[Actor], code_refs: List[CodeReference]) -> List[SequenceStep]:
-        """Generate steps for order processing workflow."""
+        """Generate steps for order processing workflow using only declared actors."""
         steps = []
         
         # Convert actors to a dictionary for easy lookup
         actor_dict = {actor.name: actor.display_name for actor in actors}
+        actor_names = list(actor_dict.keys())
         
         # Find relevant actors from the declared actors list
         user_actor = None
-        web_client = None
-        order_service = None
-        payment_service = None
-        notification_service = None
-        listing_service = None
+        service_actor = None
         
-        # Map declared actors to workflow roles
+        # Map declared actors to workflow roles (use only what we have)
         for actor in actors:
             actor_name_lower = actor.name.lower()
-            display_name_lower = actor.display_name.lower()
             
             if 'user' in actor_name_lower or 'client' in actor_name_lower:
                 if not user_actor:
                     user_actor = actor.name
-            elif 'web' in actor_name_lower or 'frontend' in actor_name_lower:
-                web_client = actor.name
-            elif 'order' in actor_name_lower:
-                order_service = actor.name
-            elif 'payment' in actor_name_lower:
-                payment_service = actor.name
-            elif 'notification' in actor_name_lower:
-                notification_service = actor.name
-            elif 'listing' in actor_name_lower or 'catalog' in actor_name_lower:
-                listing_service = actor.name
+            elif 'service' in actor_name_lower or 'order' in actor_name_lower or 'system' in actor_name_lower:
+                if not service_actor:
+                    service_actor = actor.name
         
-        # Use fallbacks from the actor list if specific services not found
-        if not user_actor:
-            user_actor = actors[0].name if actors else "user"
-        if not order_service:
-            order_service = next((a.name for a in actors if 'service' in a.name.lower()), actors[1].name if len(actors) > 1 else "service")
-        if not web_client:
-            web_client = user_actor  # Use user actor for web client if not found
-        if not payment_service:
-            payment_service = order_service  # Use order service for payment if not found
-        if not notification_service:
-            notification_service = order_service  # Use order service for notifications if not found
+        # Use fallbacks from the declared actor list only
+        if not user_actor and len(actors) > 0:
+            user_actor = actors[0].name
+        if not service_actor and len(actors) > 1:
+            service_actor = actors[1].name
+        elif not service_actor and len(actors) > 0:
+            service_actor = actors[0].name  # Use same as user if only one actor
         
-        # Generate realistic order flow steps using only declared actors
-        steps.append(SequenceStep(user_actor, web_client, "Submit Order", step_type="sync"))
-        steps.append(SequenceStep(web_client, order_service, "POST /api/orders", step_type="sync"))
-        
-        if listing_service:
-            steps.append(SequenceStep(order_service, listing_service, "Verify Product Availability", step_type="sync"))
-            steps.append(SequenceStep(listing_service, order_service, "Product Available Response", step_type="sync"))
-        
-        steps.append(SequenceStep(order_service, order_service, "Save Order (Status: Pending)", step_type="sync"))
-        steps.append(SequenceStep(order_service, notification_service, "Publish order.created event", step_type="event"))
-        steps.append(SequenceStep(notification_service, user_actor, "Email: Order Confirmation", step_type="async"))
-        
-        steps.append(SequenceStep(user_actor, web_client, "Initiate Payment", step_type="sync"))
-        steps.append(SequenceStep(web_client, order_service, "POST /api/orders/{id}/payment", step_type="sync"))
-        steps.append(SequenceStep(order_service, payment_service, "Process Payment", step_type="sync"))
-        steps.append(SequenceStep(payment_service, order_service, "Payment Success", step_type="sync"))
-        
-        steps.append(SequenceStep(order_service, order_service, "Update Order (Status: Paid)", step_type="sync"))
-        steps.append(SequenceStep(order_service, notification_service, "Publish order.payment.completed", step_type="event"))
-        steps.append(SequenceStep(notification_service, user_actor, "Email: Payment Receipt", step_type="async"))
-        steps.append(SequenceStep(notification_service, user_actor, "Email: Purchase Complete", step_type="async"))
+        # Generate realistic order flow steps using ONLY declared actors
+        if user_actor and service_actor:
+            steps.append(SequenceStep(user_actor, service_actor, "Submit Order", step_type="sync"))
+            steps.append(SequenceStep(service_actor, service_actor, "Validate Order", step_type="sync"))
+            steps.append(SequenceStep(service_actor, service_actor, "Process Payment", step_type="sync"))
+            steps.append(SequenceStep(service_actor, user_actor, "Order Confirmation", step_type="sync"))
         
         # Try to map code references to steps
         self._map_code_references_to_steps(steps, code_refs)
