@@ -104,103 +104,100 @@ class SequenceDiagramBuilder:
             return self._create_fallback_diagram(workflow)
     
     def _discover_actors(self, workflow: EventFlowQuery, code_refs: List[CodeReference]) -> List[Actor]:
-        """Discover actors from workflow and code references."""
+        """Discover actors from workflow and code references using only meaningful, validated names."""
         actor_candidates = set()
         
-        # Add actors from workflow entities (only if they are meaningful business terms)
-        meaningful_entities = ['user', 'customer', 'client', 'admin', 'service', 'system', 'order', 'payment', 'notification']
+        # Add actors from workflow entities ONLY if they are actually meaningful business terms
+        meaningful_entities = ['user', 'customer', 'client', 'admin', 'order', 'payment', 'notification']
         for entity in workflow.entities:
-            if any(meaningful in entity.lower() for meaningful in meaningful_entities):
-                actor_candidates.add(entity.lower())
+            entity_clean = entity.lower().strip()
+            if any(meaningful in entity_clean for meaningful in meaningful_entities) and len(entity_clean) >= 3:
+                # Only add if it's a proper word without gibberish
+                if entity_clean.isalpha() or (entity_clean.replace('_', '').replace('-', '').isalpha()):
+                    actor_candidates.add(entity_clean)
         
-        # Add actors from code references (improved logic for car marketplace services)
+        # Add actors from code references using ONLY real repository data from vector database
         for ref in code_refs:
-            # Extract actors from repository names (car marketplace specific)
-            if ref.repository and ref.repository != 'unknown':
+            # Only use real repository data - no fabrication
+            if ref.repository and ref.repository != 'unknown' and ref.repository.strip():
                 repo_name = ref.repository.split('/')[-1].lower()
                 
-                # Car marketplace specific mapping
-                if 'order' in repo_name:
-                    actor_candidates.add('orderservice')
-                elif 'notification' in repo_name:
-                    actor_candidates.add('notificationservice')
-                elif 'listing' in repo_name:
-                    actor_candidates.add('listingservice')
-                elif 'web' in repo_name or 'client' in repo_name:
-                    actor_candidates.add('webclient')
-                elif 'auth' in repo_name or 'user' in repo_name:
-                    actor_candidates.add('userservice')
-                elif 'payment' in repo_name:
-                    actor_candidates.add('paymentservice')
-            
-            # Extract actors from class names and method contexts
-            if ref.method_name:
-                method_lower = ref.method_name.lower()
-                if 'order' in method_lower:
-                    actor_candidates.add('orderservice')
-                elif 'notification' in method_lower or 'notify' in method_lower:
-                    actor_candidates.add('notificationservice')
-                elif 'user' in method_lower or 'auth' in method_lower:
-                    actor_candidates.add('userservice')
+                # Only add actors for repositories that actually contain meaningful service names
+                if any(service in repo_name for service in ['order', 'notification', 'listing', 'web', 'client', 'auth', 'user', 'payment']):
+                    # Car marketplace specific mapping using real repository names
+                    if 'order' in repo_name:
+                        actor_candidates.add('orderservice')
+                    elif 'notification' in repo_name:
+                        actor_candidates.add('notificationservice')
+                    elif 'listing' in repo_name:
+                        actor_candidates.add('listingservice')
+                    elif 'web' in repo_name or 'client' in repo_name:
+                        actor_candidates.add('webclient')
+                    elif 'auth' in repo_name or 'user' in repo_name:
+                        actor_candidates.add('userservice')
+                    elif 'payment' in repo_name:
+                        actor_candidates.add('paymentservice')
         
         # Always include a user actor for user-initiated workflows
         if workflow.workflow in [WorkflowPattern.ORDER_PROCESSING, WorkflowPattern.USER_AUTHENTICATION]:
             actor_candidates.add('user')
         
-        # Ensure we have a web client for web-based workflows
+        # Ensure we have a web client for web-based workflows if we found web-related repos
         if workflow.workflow == WorkflowPattern.ORDER_PROCESSING:
-            actor_candidates.add('webclient')
+            if any('web' in ref.repository.lower() or 'client' in ref.repository.lower() for ref in code_refs if ref.repository):
+                actor_candidates.add('webclient')
         
-        # Convert to Actor objects with proper validation and specific ordering
+        # Convert to Actor objects with strict validation
         actors = []
         valid_actor_names = set()
         
-        # Prioritize specific actors for car marketplace order flow
-        priority_actors = ['user', 'webclient', 'orderservice', 'notificationservice', 'userservice', 'paymentservice']
+        # Define valid, meaningful actors only
+        valid_actor_mapping = {
+            'user': ('User', 'user'),
+            'webclient': ('Web Client', 'service'),
+            'orderservice': ('Order Service', 'service'),
+            'notificationservice': ('Notification Service', 'service'),
+            'userservice': ('User Service', 'service'),
+            'paymentservice': ('Payment Service', 'service'),
+            'listingservice': ('Listing Service', 'service'),
+            'authservice': ('Auth Service', 'service'),
+            'apiservice': ('API Service', 'service')
+        }
         
-        # Add priority actors first
-        for priority in priority_actors:
-            if priority in actor_candidates and priority not in valid_actor_names:
-                actor_type = self._classify_actor_type(priority)
-                display_name = self._format_actor_name(priority)
+        # Only include actors that are in our valid mapping
+        for candidate in actor_candidates:
+            clean_candidate = candidate.lower().strip()
+            if clean_candidate in valid_actor_mapping and clean_candidate not in valid_actor_names:
+                display_name, actor_type = valid_actor_mapping[clean_candidate]
                 
+                # Double-check the display name is valid (not None)
                 if display_name and len(display_name) >= 3:
-                    actors.append(Actor(
-                        name=priority,
+                    actor = Actor(
+                        name=clean_candidate,
                         display_name=display_name,
                         actor_type=actor_type,
                         description=f"{display_name} component"
-                    ))
-                    valid_actor_names.add(priority)
+                    )
+                    actors.append(actor)
+                    valid_actor_names.add(clean_candidate)
         
-        # Add remaining candidates up to max limit
-        remaining_candidates = actor_candidates - valid_actor_names
-        for candidate in list(remaining_candidates)[:self.max_actors - len(actors)]:
-            # Ensure actor name is valid (no special characters, proper format)
-            clean_candidate = re.sub(r'[^a-zA-Z0-9]', '', candidate).lower()
-            if len(clean_candidate) < 3 or clean_candidate in valid_actor_names:
-                continue
-                
-            actor_type = self._classify_actor_type(clean_candidate)
-            display_name = self._format_actor_name(clean_candidate)
-            
-            # Ensure display name is also clean
-            clean_display = re.sub(r'[^a-zA-Z0-9\s]', '', display_name).strip()
-            if not clean_display:
-                continue
-            
-            actor = Actor(
-                name=clean_candidate,
-                display_name=clean_display,
-                actor_type=actor_type,
-                description=f"{actor_type.title()} component"
-            )
-            actors.append(actor)
-            valid_actor_names.add(clean_candidate)
-        
-        # Ensure we have at least a basic set of actors if nothing meaningful was found
+        # Ensure we have at least basic actors for the workflow if nothing was found
         if len(actors) < 2:
-            actors.extend(self._get_default_actors(workflow.workflow))
+            if workflow.workflow == WorkflowPattern.ORDER_PROCESSING:
+                actors.extend([
+                    Actor("user", "User", "user"),
+                    Actor("orderservice", "Order Service", "service")
+                ])
+            elif workflow.workflow == WorkflowPattern.USER_AUTHENTICATION:
+                actors.extend([
+                    Actor("user", "User", "user"),
+                    Actor("authservice", "Auth Service", "service")
+                ])
+            else:
+                actors.extend([
+                    Actor("user", "User", "user"),
+                    Actor("system", "System", "service")
+                ])
         
         return actors[:self.max_actors]
     
@@ -405,8 +402,8 @@ class SequenceDiagramBuilder:
         return 'service'  # Default type
     
     def _format_actor_name(self, name: str) -> str:
-        """Format actor name for display."""
-        # Special mappings for car marketplace services
+        """Format actor name for display with strict validation."""
+        # Special mappings for car marketplace services - ONLY these are allowed
         special_mappings = {
             'orderservice': 'Order Service',
             'notificationservice': 'Notification Service',
@@ -414,17 +411,19 @@ class SequenceDiagramBuilder:
             'userservice': 'User Service',
             'paymentservice': 'Payment Service',
             'listingservice': 'Listing Service',
-            'user': 'User'
+            'authservice': 'Auth Service',
+            'apiservice': 'API Service',
+            'user': 'User',
+            'system': 'System'
         }
         
-        # Check for exact matches first
-        name_lower = name.lower()
+        # Only return mapped names - reject anything else to avoid gibberish
+        name_lower = name.lower().strip()
         if name_lower in special_mappings:
             return special_mappings[name_lower]
         
-        # Remove common suffixes and format
-        clean_name = re.sub(r'(service|controller|handler|manager)$', '', name, flags=re.IGNORECASE)
-        return clean_name.title()
+        # Reject any unmapped names to prevent gibberish like "UserServicecs"
+        return None
     
     def _get_default_actors(self, workflow: WorkflowPattern) -> List[Actor]:
         """Get default actors for a workflow pattern."""

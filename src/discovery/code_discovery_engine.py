@@ -274,7 +274,7 @@ class CodeDiscoveryEngine:
             return []
     
     def _convert_documents_to_code_references(self, documents: List[Any], search_term: str) -> List[CodeReference]:
-        """Convert vector store search results (Documents) to CodeReference objects."""
+        """Convert vector store search results (Documents) to CodeReference objects using only real vector database data."""
         references = []
         
         for doc in documents:
@@ -291,94 +291,68 @@ class CodeDiscoveryEngine:
                 # Calculate a basic score (could be enhanced)
                 score = 0.8  # Default score since we don't have similarity scores from basic search
                 
-                # Extract file path and repository with better parsing
-                # Use file_path from metadata, not the source field which contains loader type
+                # ONLY use actual metadata from vector database - NO fabrication
                 file_path_raw = metadata.get('file_path', '')
                 source = metadata.get('source', '')
-                repository = metadata.get('repository', 'unknown')
+                repository = metadata.get('repository', '')
                 language = metadata.get('language', 'unknown')
                 
-                # Skip if we don't have actual file path information
+                # Skip documents without actual file path data
                 if not file_path_raw or file_path_raw == 'unknown':
                     self.logger.debug(f"Skipping document with no file path information")
                     continue
                 
-                # Improve repository name extraction and clean any duplicate owner references
-                if repository == 'unknown' and source:
-                    # Try to extract repo name from file path
-                    path_parts = source.split('/')
-                    if len(path_parts) > 1:
-                        # Look for common repo patterns
-                        for part in path_parts:
-                            if any(service_word in part.lower() for service_word in ['service', 'api', 'app', 'client', 'web']):
-                                repository = part
-                                break
-                        if repository == 'unknown' and len(path_parts) > 2:
-                            repository = path_parts[1]  # Usually second part is repo name
+                # Only use real repository data from vector database
+                if not repository or repository == 'unknown':
+                    # Only try to extract from source if it contains actual repository information
+                    if source and ('/' in source or any(keyword in source.lower() for keyword in ['service', 'api', 'app', 'client'])):
+                        # Extract minimal repository info only from real source paths
+                        path_parts = source.split('/')
+                        if len(path_parts) > 1:
+                            # Look for actual repository patterns, don't fabricate
+                            for part in path_parts:
+                                if any(service_word in part.lower() for service_word in ['service', 'api', 'app', 'client', 'web']) and '-' in part:
+                                    repository = part
+                                    break
+                    
+                    # If still no repository, skip rather than fabricate
+                    if not repository or repository == 'unknown':
+                        self.logger.debug(f"Skipping document without real repository information: {source}")
+                        continue
                 
-                # Improve repository name extraction and clean any duplicate owner references
-                if repository == 'unknown' and source:
-                    # Try to extract repo name from file path
-                    path_parts = source.split('/')
-                    if len(path_parts) > 1:
-                        # Look for common repo patterns
-                        for part in path_parts:
-                            if any(service_word in part.lower() for service_word in ['service', 'api', 'app', 'client', 'web']):
-                                repository = part
-                                break
-                        if repository == 'unknown' and len(path_parts) > 2:
-                            repository = path_parts[1]  # Usually second part is repo name
-                
-                # Clean repository name - remove any owner references to avoid duplication
-                if repository and '/' in repository:
-                    repository = repository.split('/')[-1]  # Take only the repo name part
-                
-                # Remove any anhhai680 prefix to avoid duplication in URL
-                if repository and repository.startswith('anhhai680/'):
-                    repository = repository[10:]  # Remove "anhhai680/" prefix
-                elif repository and repository.startswith('anhhai680-'):
-                    repository = repository[10:]  # Remove "anhhai680-" prefix
-                
-                # Additional cleaning for duplicate owner references in repository names
-                # Handle cases like "anhhai680/anhhai680/car-order-service" -> "car-order-service"
+                # Clean repository name only if it contains actual duplicates from vector database
                 if repository and 'anhhai680' in repository:
-                    # Split by common separators and remove anhhai680 parts
-                    parts = repository.replace('/', '-').split('-')
-                    clean_parts = [part for part in parts if part != 'anhhai680' and part.strip()]
-                    if clean_parts:
-                        repository = '-'.join(clean_parts)
-                    else:
-                        repository = 'unknown'
+                    # Handle duplicate owner references that might exist in actual vector database metadata
+                    if repository.count('anhhai680') > 1:
+                        # Remove duplicate anhhai680 references
+                        parts = repository.split('/')
+                        clean_parts = []
+                        for part in parts:
+                            if part == 'anhhai680' and 'anhhai680' in clean_parts:
+                                continue  # Skip duplicate
+                            clean_parts.append(part)
+                        repository = '/'.join(clean_parts)
                 
-                # Generate realistic file path with proper service context
-                content_lower = content.lower()
-                language_lower = language.lower()
-                
-                # Clean up source path - use actual file_path instead of source
-                # file_path contains the actual file name/path (e.g., "Order.cs")
+                # Use the actual file path from vector database - DO NOT modify or enhance
                 file_path = file_path_raw
                 
-                # Build full path context for better understanding
-                if repository and repository != 'unknown':
-                    # Clean repository name
-                    repo_clean = repository
-                    if '/' in repo_clean:
-                        repo_clean = repo_clean.split('/')[-1]  # Take only the repo name part
-                    
-                    # Create a meaningful path that includes repository context
-                    file_path = f"{repo_clean}/{file_path_raw}"
+                # Only enhance path if we have real repository context from vector database
+                if repository and repository != 'unknown' and '/' not in file_path:
+                    # Only add repository context if file_path doesn't already include it
+                    repo_name = repository.split('/')[-1] if '/' in repository else repository
+                    file_path = f"{repo_name}/{file_path_raw}"
                 
-                # Determine context type
+                # Determine context type from actual content
                 context_type = self._classify_context_type(content, source)
                 
-                # Extract method name (improved heuristic)
+                # Extract method name from actual code content
                 method_name = self._extract_method_name(content, language)
                 
-                # Create code reference
+                # Create code reference with ONLY real data from vector database
                 ref = CodeReference(
                     repository=repository,
                     file_path=file_path,
-                    line_numbers=[],  # Could be enhanced to extract line numbers
+                    line_numbers=[],  # Real line numbers would come from vector database metadata
                     method_name=method_name,
                     context_type=context_type,
                     language=language,

@@ -218,7 +218,7 @@ sequenceDiagram
         return state
     
     def _create_explanation(self, state: QueryState) -> QueryState:
-        """Create step-by-step explanation of the event flow."""
+        """Create step-by-step explanation of the event flow using only actual vector database data."""
         start_time = time.time()
         
         parsed_workflow = state["metadata"]["parsed_workflow"]
@@ -230,48 +230,72 @@ sequenceDiagram
         # Introduction
         explanation_parts.append(f"Let me walk you through the {parsed_workflow.workflow.replace('_', ' ')} workflow:\n")
         
-        # Steps explanation with Q4-style formatting
+        # Only include code references if we have REAL ones from vector database
         if code_references and self.event_flow_config.include_code_references:
             explanation_parts.append("**Step-by-step process with code references:**\n")
             
             for i, ref in enumerate(code_references[:5], 1):  # Limit to 5 references
-                # Generate realistic line numbers based on content and complexity
-                base_line = 20 + (i * 20)  # More realistic starting lines
-                content_lines = len(ref.content_snippet.split('\n')) if ref.content_snippet else 10
-                line_start = base_line + (i * 5)  # Offset per method
-                line_end = line_start + min(50, max(15, content_lines))  # More realistic ranges
+                # ONLY use actual data from vector database - no synthetic line numbers
+                # Check if the reference has real line number data from vector database
+                if ref.line_numbers and len(ref.line_numbers) > 0:
+                    line_info = f"Lines {min(ref.line_numbers)}-{max(ref.line_numbers)}"
+                else:
+                    # Don't fabricate line numbers - just indicate it's implemented
+                    line_info = "Implementation found"
                 
-                # Use clean file path format as requested by user
-                clean_file_path = ref.file_path
+                # Use actual file path from vector database
+                file_path = ref.file_path
                 
-                # Format with clean file paths (not full GitHub URLs)
-                explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in `{clean_file_path}`")
-                explanation_parts.append(f"   - Location: Lines {line_start}-{line_end}")
+                # Only create GitHub URL if we have real repository data
+                if ref.repository and ref.repository != 'unknown' and ref.repository.strip():
+                    # Create proper GitHub URL without duplication
+                    clean_repo = ref.repository
+                    if clean_repo.startswith('anhhai680/'):
+                        repo_url = f"https://github.com/{clean_repo}"
+                    else:
+                        repo_url = f"https://github.com/anhhai680/{clean_repo}"
+                    
+                    # Use actual file path in GitHub URL
+                    github_url = f"{repo_url}/blob/main/{ref.file_path}"
+                    
+                    explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in `{github_url}`")
+                else:
+                    # If no real repository data, just use the file path
+                    explanation_parts.append(f"{i}. **{ref.method_name}**: Found in `{file_path}`")
+                
+                explanation_parts.append(f"   - Location: {line_info}")
                 explanation_parts.append(f"   - Context: {ref.context_type}")
+                
                 if ref.content_snippet:
-                    # Show more sophisticated code snippet with better formatting
-                    enhanced_snippet = self._enhance_code_snippet(ref.content_snippet, ref.method_name, ref.language)
-                    explanation_parts.append(f"   - Code: {enhanced_snippet}")
+                    # Show actual code snippet from vector database
+                    snippet = ref.content_snippet[:100] + "..." if len(ref.content_snippet) > 100 else ref.content_snippet
+                    explanation_parts.append(f"   - Code: {snippet}")
                 explanation_parts.append("")
         else:
-            # When no code references are found, don't generate fake ones - be honest about lack of context
+            # Be completely honest when no code references are found
             explanation_parts.append("**Analysis Notes:**\n")
             explanation_parts.append("No specific code implementations were found in the vector database for this workflow.")
-            explanation_parts.append("This suggests either the repositories haven't been indexed yet, or the specific")
-            explanation_parts.append("implementation details for this workflow pattern are not available in the current knowledge base.\n")
+            explanation_parts.append("This indicates that either:")
+            explanation_parts.append("- The relevant repositories haven't been indexed yet")
+            explanation_parts.append("- The specific implementation details for this workflow are not available in the current knowledge base")
+            explanation_parts.append("- The query may need to be more specific to find relevant code\n")
+            
+            explanation_parts.append("**Recommendation**: Index the relevant repositories containing the order processing implementation ")
+            explanation_parts.append("to get detailed code references and implementation insights.\n")
         
-        # Workflow pattern explanation
-        workflow_descriptions = {
-            "order_processing": "This follows a typical order processing pattern where user actions trigger a series of validations, payments, and confirmations.",
-            "user_authentication": "This represents a standard authentication flow with credential validation and session management.",
-            "data_pipeline": "This shows a data processing pipeline with transformation and validation steps.",
-            "api_request_flow": "This demonstrates an API request/response pattern with processing logic.",
-            "event_driven": "This illustrates an event-driven architecture with message passing and handlers.",
-            "generic_workflow": "This represents a general workflow pattern with sequential processing steps."
-        }
-        
-        pattern_desc = workflow_descriptions.get(parsed_workflow.workflow.value, "This shows the workflow steps and interactions.")
-        explanation_parts.append(f"**Workflow Pattern**: {pattern_desc}")
+        # Only include workflow pattern explanation if we found some context
+        if code_references:
+            workflow_descriptions = {
+                "order_processing": "This follows a typical order processing pattern where user actions trigger a series of validations, payments, and confirmations.",
+                "user_authentication": "This represents a standard authentication flow with credential validation and session management.",
+                "data_pipeline": "This shows a data processing pipeline with transformation and validation steps.",
+                "api_request_flow": "This demonstrates an API request/response pattern with processing logic.",
+                "event_driven": "This illustrates an event-driven architecture with message passing and handlers.",
+                "generic_workflow": "This represents a general workflow pattern with sequential processing steps."
+            }
+            
+            pattern_desc = workflow_descriptions.get(parsed_workflow.workflow.value, "This shows the workflow steps and interactions.")
+            explanation_parts.append(f"**Workflow Pattern**: {pattern_desc}")
         
         # Combine explanation
         explanation = "\n".join(explanation_parts)
@@ -280,7 +304,7 @@ sequenceDiagram
         state["metadata"]["explanation"] = explanation
         state["metadata"]["explanation_generation_time"] = time.time() - start_time
         
-        self.logger.info("Generated event flow explanation")
+        self.logger.info("Generated event flow explanation using only real vector database data")
         
         return state
     
