@@ -156,15 +156,15 @@ class SequenceDiagramBuilder:
         steps = []
         actor_names = [actor.name for actor in actors]
         
-        # Generate steps based on workflow pattern
+        # Generate steps based on workflow pattern and ensure all participants are in actor list
         if workflow.workflow == WorkflowPattern.ORDER_PROCESSING:
-            steps.extend(self._generate_order_processing_steps(actor_names, code_refs))
+            steps.extend(self._generate_order_processing_steps(actors, code_refs))
         elif workflow.workflow == WorkflowPattern.USER_AUTHENTICATION:
-            steps.extend(self._generate_auth_steps(actor_names, code_refs))
+            steps.extend(self._generate_auth_steps(actors, code_refs))
         elif workflow.workflow == WorkflowPattern.API_REQUEST_FLOW:
-            steps.extend(self._generate_api_flow_steps(actor_names, code_refs))
+            steps.extend(self._generate_api_flow_steps(actors, code_refs))
         else:
-            steps.extend(self._generate_generic_steps(workflow, actor_names, code_refs))
+            steps.extend(self._generate_generic_steps(workflow, actors, code_refs))
         
         # Assign order and limit steps
         for i, step in enumerate(steps):
@@ -172,50 +172,72 @@ class SequenceDiagramBuilder:
         
         return steps[:self.max_steps]
     
-    def _generate_order_processing_steps(self, actors: List[str], code_refs: List[CodeReference]) -> List[SequenceStep]:
+    def _generate_order_processing_steps(self, actors: List[Actor], code_refs: List[CodeReference]) -> List[SequenceStep]:
         """Generate steps for order processing workflow."""
         steps = []
         
-        # Find relevant actors based on actual code references and repository names
-        user_actor = next((a for a in actors if 'user' in a.lower() or 'client' in a.lower()), "User")
+        # Convert actors to a dictionary for easy lookup
+        actor_dict = {actor.name: actor.display_name for actor in actors}
         
-        # Extract service actors from actual repositories
-        order_service = next((a for a in actors if 'order' in a.lower() and 'service' in a.lower()), None)
+        # Find relevant actors from the declared actors list
+        user_actor = None
+        web_client = None
+        order_service = None
+        payment_service = None
+        notification_service = None
+        listing_service = None
+        
+        # Map declared actors to workflow roles
+        for actor in actors:
+            actor_name_lower = actor.name.lower()
+            display_name_lower = actor.display_name.lower()
+            
+            if 'user' in actor_name_lower or 'client' in actor_name_lower:
+                if not user_actor:
+                    user_actor = actor.name
+            elif 'web' in actor_name_lower or 'frontend' in actor_name_lower:
+                web_client = actor.name
+            elif 'order' in actor_name_lower:
+                order_service = actor.name
+            elif 'payment' in actor_name_lower:
+                payment_service = actor.name
+            elif 'notification' in actor_name_lower:
+                notification_service = actor.name
+            elif 'listing' in actor_name_lower or 'catalog' in actor_name_lower:
+                listing_service = actor.name
+        
+        # Use fallbacks from the actor list if specific services not found
+        if not user_actor:
+            user_actor = actors[0].name if actors else "user"
         if not order_service:
-            order_service = next((a for a in actors if 'order' in a.lower()), "Order Service")
+            order_service = next((a.name for a in actors if 'service' in a.name.lower()), actors[1].name if len(actors) > 1 else "service")
+        if not web_client:
+            web_client = user_actor  # Use user actor for web client if not found
+        if not payment_service:
+            payment_service = order_service  # Use order service for payment if not found
+        if not notification_service:
+            notification_service = order_service  # Use order service for notifications if not found
         
-        payment_service = next((a for a in actors if 'payment' in a.lower()), "Payment Gateway")
-        notification_service = next((a for a in actors if 'notification' in a.lower()), "Notification Service")
-        listing_service = next((a for a in actors if 'listing' in a.lower() or 'catalog' in a.lower()), "Listing Service")
+        # Generate realistic order flow steps using only declared actors
+        steps.append(SequenceStep(user_actor, web_client, "Submit Order", step_type="sync"))
+        steps.append(SequenceStep(web_client, order_service, "POST /api/orders", step_type="sync"))
         
-        # Generate realistic order flow steps based on actual code patterns
-        steps.append(SequenceStep(user_actor, "Web Client", "Submit Order", step_type="sync"))
-        steps.append(SequenceStep("Web Client", "API Gateway", "POST /api/orders", step_type="sync"))
-        steps.append(SequenceStep("API Gateway", order_service, "Create Order Request", step_type="sync"))
-        
-        if listing_service != "Listing Service":  # If we found a real listing service
+        if listing_service:
             steps.append(SequenceStep(order_service, listing_service, "Verify Product Availability", step_type="sync"))
             steps.append(SequenceStep(listing_service, order_service, "Product Available Response", step_type="sync"))
         
-        steps.append(SequenceStep(order_service, "Database", "Save Order (Status: Pending)", step_type="sync"))
-        steps.append(SequenceStep(order_service, "Message Queue", "Publish order.created event", step_type="event"))
-        steps.append(SequenceStep("Message Queue", notification_service, "Consume order.created", step_type="event"))
+        steps.append(SequenceStep(order_service, order_service, "Save Order (Status: Pending)", step_type="sync"))
+        steps.append(SequenceStep(order_service, notification_service, "Publish order.created event", step_type="event"))
         steps.append(SequenceStep(notification_service, user_actor, "Email: Order Confirmation", step_type="async"))
         
-        steps.append(SequenceStep(user_actor, "Web Client", "Initiate Payment", step_type="sync"))
-        steps.append(SequenceStep("Web Client", order_service, "POST /api/orders/{id}/payment", step_type="sync"))
+        steps.append(SequenceStep(user_actor, web_client, "Initiate Payment", step_type="sync"))
+        steps.append(SequenceStep(web_client, order_service, "POST /api/orders/{id}/payment", step_type="sync"))
         steps.append(SequenceStep(order_service, payment_service, "Process Payment", step_type="sync"))
         steps.append(SequenceStep(payment_service, order_service, "Payment Success", step_type="sync"))
         
-        steps.append(SequenceStep(order_service, "Database", "Update Order (Status: Paid)", step_type="sync"))
-        steps.append(SequenceStep(order_service, "Message Queue", "Publish order.payment.completed", step_type="event"))
-        steps.append(SequenceStep("Message Queue", notification_service, "Consume payment completed", step_type="event"))
+        steps.append(SequenceStep(order_service, order_service, "Update Order (Status: Paid)", step_type="sync"))
+        steps.append(SequenceStep(order_service, notification_service, "Publish order.payment.completed", step_type="event"))
         steps.append(SequenceStep(notification_service, user_actor, "Email: Payment Receipt", step_type="async"))
-        
-        if listing_service != "Listing Service":  # Update inventory
-            steps.append(SequenceStep(order_service, listing_service, "Update Product Status (sold)", step_type="sync"))
-            steps.append(SequenceStep(listing_service, "Message Queue", "Publish product.sold event", step_type="event"))
-        
         steps.append(SequenceStep(notification_service, user_actor, "Email: Purchase Complete", step_type="async"))
         
         # Try to map code references to steps
@@ -223,12 +245,12 @@ class SequenceDiagramBuilder:
         
         return steps
     
-    def _generate_auth_steps(self, actors: List[str], code_refs: List[CodeReference]) -> List[SequenceStep]:
+    def _generate_auth_steps(self, actors: List[Actor], code_refs: List[CodeReference]) -> List[SequenceStep]:
         """Generate steps for authentication workflow."""
         steps = []
         
-        user_actor = next((a for a in actors if 'user' in a.lower()), actors[0])
-        auth_actor = next((a for a in actors if 'auth' in a.lower() or 'service' in a.lower()), actors[-1])
+        user_actor = next((a.name for a in actors if 'user' in a.name.lower()), actors[0].name if actors else "user")
+        auth_actor = next((a.name for a in actors if 'auth' in a.name.lower() or 'service' in a.name.lower()), actors[-1].name if actors else "service")
         
         steps.append(SequenceStep(user_actor, auth_actor, "Login Request", step_type="sync"))
         steps.append(SequenceStep(auth_actor, auth_actor, "Validate Credentials", step_type="sync"))
@@ -237,12 +259,12 @@ class SequenceDiagramBuilder:
         self._map_code_references_to_steps(steps, code_refs)
         return steps
     
-    def _generate_api_flow_steps(self, actors: List[str], code_refs: List[CodeReference]) -> List[SequenceStep]:
+    def _generate_api_flow_steps(self, actors: List[Actor], code_refs: List[CodeReference]) -> List[SequenceStep]:
         """Generate steps for API request flow."""
         steps = []
         
-        client_actor = next((a for a in actors if 'client' in a.lower() or 'user' in a.lower()), actors[0])
-        api_actor = next((a for a in actors if 'api' in a.lower() or 'service' in a.lower()), actors[-1])
+        client_actor = next((a.name for a in actors if 'client' in a.name.lower() or 'user' in a.name.lower()), actors[0].name if actors else "client")
+        api_actor = next((a.name for a in actors if 'api' in a.name.lower() or 'service' in a.name.lower()), actors[-1].name if actors else "service")
         
         steps.append(SequenceStep(client_actor, api_actor, "API Request", step_type="sync"))
         steps.append(SequenceStep(api_actor, api_actor, "Process Request", step_type="sync"))
@@ -251,13 +273,13 @@ class SequenceDiagramBuilder:
         self._map_code_references_to_steps(steps, code_refs)
         return steps
     
-    def _generate_generic_steps(self, workflow: EventFlowQuery, actors: List[str], code_refs: List[CodeReference]) -> List[SequenceStep]:
+    def _generate_generic_steps(self, workflow: EventFlowQuery, actors: List[Actor], code_refs: List[CodeReference]) -> List[SequenceStep]:
         """Generate generic steps based on workflow actions."""
         steps = []
         
         if len(actors) >= 2:
-            source_actor = actors[0]
-            target_actor = actors[1]
+            source_actor = actors[0].name
+            target_actor = actors[1].name
             
             # Create steps from workflow actions
             for i, action in enumerate(workflow.actions):
