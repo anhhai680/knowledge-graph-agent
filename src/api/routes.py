@@ -83,6 +83,7 @@ def _map_workflow_intent_to_api(workflow_intent: str) -> QueryIntent:
         "debugging": QueryIntent.DEBUGGING,
         "architecture": QueryIntent.ARCHITECTURE,  # Now available in API enum
         "implementation": QueryIntent.IMPLEMENTATION,
+        "event_flow": QueryIntent.EVENT_FLOW,  # Add missing event_flow mapping
         "general": QueryIntent.GENERAL,
     }
     return mapping.get(workflow_intent, QueryIntent.GENERAL)

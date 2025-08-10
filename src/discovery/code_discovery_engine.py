@@ -262,6 +262,11 @@ class CodeDiscoveryEngine:
                 metadata = getattr(doc, 'metadata', {})
                 content = getattr(doc, 'page_content', '')
                 
+                # Filter out irrelevant files early
+                if not self._is_relevant_code_content(content, metadata):
+                    self.logger.debug(f"Skipping irrelevant content from {metadata.get('source', 'unknown')}")
+                    continue
+                
                 # Calculate a basic score (could be enhanced)
                 score = 0.8  # Default score since we don't have similarity scores from basic search
                 
@@ -273,7 +278,7 @@ class CodeDiscoveryEngine:
                 # Determine context type
                 context_type = self._classify_context_type(content, source)
                 
-                # Extract method name (simple heuristic)
+                # Extract method name (improved heuristic)
                 method_name = self._extract_method_name(content, language)
                 
                 # Create code reference
@@ -297,6 +302,87 @@ class CodeDiscoveryEngine:
         
         return references
     
+    def _is_relevant_code_content(self, content: str, metadata: Dict[str, Any]) -> bool:
+        """
+        Filter out irrelevant content that shouldn't be included in event flow analysis.
+        
+        Args:
+            content: Document content
+            metadata: Document metadata
+            
+        Returns:
+            bool: True if content is relevant for code analysis, False otherwise
+        """
+        source = metadata.get('source', '').lower()
+        language = metadata.get('language', '').lower()
+        content_lower = content.lower()
+        
+        # Skip configuration files that don't contain business logic
+        irrelevant_files = [
+            'package.json', 'package-lock.json', 'yarn.lock',
+            '.gitignore', '.env', '.env.example',
+            'dockerfile', 'docker-compose.yml', 'docker-compose.yaml',
+            'readme.md', 'license', 'license.txt',
+            'changelog', 'changelog.md', 'changes.md',
+            'makefile', 'requirements.txt', 'setup.py',
+            'pyproject.toml', 'poetry.lock',
+            'tsconfig.json', 'webpack.config.js',
+            '.editorconfig', '.eslintrc', '.prettierrc'
+        ]
+        
+        # Check if this is an irrelevant file
+        filename = source.split('/')[-1] if '/' in source else source
+        if any(irrelevant in filename for irrelevant in irrelevant_files):
+            return False
+        
+        # Skip pure configuration content
+        config_indicators = [
+            '"dependencies":', '"devDependencies":', '"scripts":',
+            'FROM docker', 'RUN apt-get', 'COPY ', 'WORKDIR',
+            '# This is a', '## Installation', '## Getting Started',
+            'MIT License', 'Copyright (c)', 'Licensed under'
+        ]
+        
+        if any(indicator in content for indicator in config_indicators):
+            return False
+        
+        # Skip very short content that's likely not meaningful code
+        if len(content.strip()) < 50:
+            return False
+        
+        # Skip content that's mostly whitespace or comments
+        lines = content.split('\n')
+        non_empty_lines = [line.strip() for line in lines if line.strip()]
+        if len(non_empty_lines) < 2:  # Changed from 3 to 2 - even a single function is meaningful
+            return False
+        
+        # Prefer actual code files
+        code_indicators = [
+            'def ', 'function ', 'class ', 'public class',
+            'private ', 'protected ', 'public ',
+            'const ', 'let ', 'var ',
+            'import ', 'from ', 'require(',
+            'export ', 'module.exports',
+            'namespace ', 'interface ', 'enum ',
+            'struct ', 'union ', 'typedef'
+        ]
+        
+        has_code_indicators = any(indicator in content for indicator in code_indicators)
+        
+        # For event flow analysis, prioritize files that seem to contain business logic
+        business_logic_indicators = [
+            'order', 'payment', 'user', 'auth', 'login',
+            'process', 'handle', 'service', 'controller',
+            'api', 'endpoint', 'request', 'response',
+            'validate', 'create', 'update', 'delete',
+            'notification', 'event', 'message', 'queue'
+        ]
+        
+        has_business_logic = any(indicator in content_lower for indicator in business_logic_indicators)
+        
+        # Accept if it has code indicators OR business logic (to catch both code files and relevant config)
+        return has_code_indicators or has_business_logic
+    
     def _classify_context_type(self, content: str, file_path: str) -> str:
         """Classify the context type based on content and file path."""
         content_lower = content.lower()
@@ -315,39 +401,125 @@ class CodeDiscoveryEngine:
         return 'component'  # Default
     
     def _extract_method_name(self, content: str, language: str) -> str:
-        """Extract method name from content (simple heuristic)."""
+        """Extract method name from content (improved heuristic)."""
         lines = content.split('\n')
+        language_lower = language.lower()
         
-        # Simple patterns for different languages
-        if language.lower() in ['python']:
+        # Skip non-code files that shouldn't have methods
+        if language_lower in ['json', 'yaml', 'yml', 'xml', 'html', 'css', 'markdown', 'md', 'txt']:
+            # For configuration files, try to extract a meaningful identifier
+            file_type_map = {
+                'json': 'config_data',
+                'yaml': 'config_data', 
+                'yml': 'config_data',
+                'xml': 'xml_data',
+                'html': 'html_content',
+                'css': 'styles',
+                'markdown': 'documentation',
+                'md': 'documentation',
+                'txt': 'text_content'
+            }
+            return file_type_map.get(language_lower, 'data_file')
+        
+        # Try to extract meaningful method names for code files
+        if language_lower in ['python', 'py']:
             for line in lines:
-                if 'def ' in line and '(' in line:
+                line_stripped = line.strip()
+                if line_stripped.startswith('def ') and '(' in line_stripped:
                     # Extract function name
-                    start = line.find('def ') + 4
-                    end = line.find('(')
+                    start = line_stripped.find('def ') + 4
+                    end = line_stripped.find('(')
                     if start < end:
-                        return line[start:end].strip()
+                        method_name = line_stripped[start:end].strip()
+                        if method_name and method_name.isidentifier():
+                            return method_name
+                # Also check for class methods
+                elif line_stripped.startswith('class '):
+                    class_name = line_stripped[6:].split('(')[0].split(':')[0].strip()
+                    if class_name and class_name.isidentifier():
+                        return f"{class_name}_class"
         
-        elif language.lower() in ['javascript', 'typescript']:
+        elif language_lower in ['javascript', 'typescript', 'js', 'ts']:
             for line in lines:
-                if 'function ' in line or '=>' in line:
-                    # Simple extraction for JS/TS
-                    if 'function ' in line:
-                        start = line.find('function ') + 9
-                        end = line.find('(')
-                        if start < end:
-                            return line[start:end].strip()
+                line_stripped = line.strip()
+                # Function declarations
+                if 'function ' in line_stripped and '(' in line_stripped:
+                    start = line_stripped.find('function ') + 9
+                    end = line_stripped.find('(')
+                    if start < end:
+                        method_name = line_stripped[start:end].strip()
+                        if method_name and method_name.replace('_', '').replace('$', '').isalnum():
+                            return method_name
+                # Arrow functions
+                elif '=>' in line_stripped and '=' in line_stripped:
+                    # Look for const/let/var functionName = 
+                    parts = line_stripped.split('=')[0].strip()
+                    if parts.startswith(('const ', 'let ', 'var ')):
+                        method_name = parts.split()[-1].strip()
+                        if method_name and method_name.replace('_', '').replace('$', '').isalnum():
+                            return method_name
         
-        elif language.lower() in ['csharp', 'c#']:
+        elif language_lower in ['csharp', 'c#', 'cs']:
             for line in lines:
-                if 'public ' in line and '(' in line:
-                    # Simple extraction for C#
-                    words = line.split()
+                line_stripped = line.strip()
+                # Method declarations
+                if ('public ' in line_stripped or 'private ' in line_stripped or 'protected ' in line_stripped) and '(' in line_stripped:
+                    words = line_stripped.split()
                     for i, word in enumerate(words):
                         if '(' in word:
-                            return word.split('(')[0]
+                            method_name = word.split('(')[0].strip()
+                            if method_name and method_name.replace('_', '').isalnum():
+                                return method_name
+                # Class declarations
+                elif line_stripped.startswith('public class ') or line_stripped.startswith('class '):
+                    class_name = line_stripped.split('class ')[1].split()[0].strip()
+                    if class_name and class_name.replace('_', '').isalnum():
+                        return f"{class_name}_class"
         
-        return 'unknown_method'
+        elif language_lower in ['java']:
+            for line in lines:
+                line_stripped = line.strip()
+                if ('public ' in line_stripped or 'private ' in line_stripped) and '(' in line_stripped:
+                    words = line_stripped.split()
+                    for i, word in enumerate(words):
+                        if '(' in word:
+                            method_name = word.split('(')[0].strip()
+                            if method_name and method_name.replace('_', '').isalnum():
+                                return method_name
+        
+        elif language_lower in ['go']:
+            for line in lines:
+                line_stripped = line.strip()
+                if line_stripped.startswith('func ') and '(' in line_stripped:
+                    start = line_stripped.find('func ') + 5
+                    end = line_stripped.find('(')
+                    if start < end:
+                        method_name = line_stripped[start:end].strip()
+                        if method_name and method_name.replace('_', '').isalnum():
+                            return method_name
+        
+        # If no specific method found, try to extract a meaningful identifier from the content
+        # Look for common patterns that might indicate the purpose
+        content_lower = content.lower()
+        if 'order' in content_lower:
+            return 'order_handler'
+        elif 'payment' in content_lower:
+            return 'payment_handler'
+        elif 'user' in content_lower or 'auth' in content_lower:
+            return 'user_handler'
+        elif 'api' in content_lower or 'endpoint' in content_lower:
+            return 'api_handler'
+        elif 'service' in content_lower:
+            return 'service_handler'
+        elif 'controller' in content_lower:
+            return 'controller_handler'
+        elif 'model' in content_lower or 'entity' in content_lower:
+            return 'data_model'
+        elif 'config' in content_lower or 'setting' in content_lower:
+            return 'configuration'
+        
+        # Last resort: return a generic but meaningful name
+        return 'code_component'
     
     def _deduplicate_references(self, references: List[CodeReference]) -> List[CodeReference]:
         """Remove duplicate code references based on file path and method name."""
