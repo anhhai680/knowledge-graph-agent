@@ -1,269 +1,249 @@
 # GitHub Copilot Instructions for Knowledge Graph Agent
 
-## Repository Overview
+## Code Implementation Guidelines
 
-The **Knowledge Graph Agent** is an AI-powered system that automatically indexes GitHub repositories and provides intelligent, context-aware responses about codebases through a RAG (Retrieval-Augmented Generation) architecture. This is a Python 3.11+ FastAPI application using LangChain/LangGraph workflows for orchestration.
+This is an AI-powered RAG system using **FastAPI + LangChain/LangGraph + OpenAI**. When implementing features or fixing bugs, follow these project-specific patterns and conventions.
 
-**Key Technologies:**
-- **Framework:** FastAPI with async/await patterns
-- **AI/ML:** LangChain, LangGraph workflows, OpenAI GPT models
-- **Vector Storage:** Dual support for Chroma DB and Pinecone (configurable)
-- **Graph Database:** MemGraph (for relationship modeling)
-- **Development:** Python 3.11-3.12, pytest, Docker Compose
-- **Code Quality:** Black, isort, flake8, mypy, pre-commit hooks
+### Core Architecture Patterns
 
-**Repository Size:** ~87 Python files, ~15K lines of code
+**1. LangGraph Workflow Pattern** - All complex operations use stateful workflows:
+```python
+from src.workflows.base_workflow import BaseWorkflow, WorkflowStep
+from src.workflows.workflow_states import WorkflowState
 
-## Build and Development Setup
+class MyWorkflow(BaseWorkflow):
+    async def process_step(self, state: Dict[str, Any], step: WorkflowStep) -> Dict[str, Any]:
+        # Always include error handling and state updates
+        try:
+            result = await self._execute_operation(state)
+            return self._update_state(state, result)
+        except Exception as e:
+            return self._handle_error(state, e, step)
+```
 
-### Environment Requirements
-- **Python Version:** 3.11 or 3.12 (use `python --version` to check)
-- **Docker:** Required for services (Chroma, MemGraph, web interface)
-- **Environment Variables:** Copy `.env.example` to `.env` and configure
+**2. FastAPI Async Pattern** - All API endpoints must be async:
+```python
+from fastapi import APIRouter, HTTPException, Depends
+from src.api.models import QueryRequest, QueryResponse
+from src.utils.logging import get_logger
 
-### Critical Setup Sequence
+logger = get_logger(__name__)
 
-**ALWAYS follow this exact order for initial setup:**
+@router.post("/query", response_model=QueryResponse)
+async def process_query(request: QueryRequest) -> QueryResponse:
+    try:
+        result = await workflow_instance.execute({"query": request.query})
+        return QueryResponse(**result)
+    except Exception as e:
+        logger.error(f"Query processing failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+```
 
+**3. Vector Store Factory Pattern** - Always use the factory for vector operations:
+```python
+from src.vectorstores.store_factory import VectorStoreFactory
+from src.config.settings import get_settings
+
+settings = get_settings()
+vector_store = VectorStoreFactory.create_store(settings.database_type)
+```
+
+### Configuration & Environment Patterns
+
+**1. Settings Validation** - Use Pydantic for all configuration:
+```python
+from src.config.settings import get_settings
+from pydantic import BaseModel, Field, field_validator
+
+class MyConfig(BaseModel):
+    timeout_seconds: int = Field(default=300, ge=1, le=7200)
+    
+    @field_validator('timeout_seconds')
+    @classmethod
+    def validate_timeout(cls, v):
+        if v > 3600:
+            logger.warning(f"High timeout value: {v}s")
+        return v
+```
+
+**2. Environment Variables** - Always check required keys:
+```python
+import os
+from src.config.settings import get_settings
+
+# Required environment variables for this project:
+# OPENAI_API_KEY, GITHUB_TOKEN, DATABASE_TYPE (chroma|pinecone)
+settings = get_settings()
+if not settings.openai_api_key:
+    raise ValueError("OPENAI_API_KEY is required")
+```
+
+### Error Handling & Logging Patterns
+
+**1. Structured Logging** - Use loguru, not print statements:
+```python
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+# Good patterns:
+logger.info(f"Processing repository: {repo_name}")
+logger.error(f"Failed to index {file_path}: {e}", exc_info=True)
+logger.debug(f"State transition: {old_state} -> {new_state}")
+
+# Avoid: print statements or basic logging
+```
+
+**2. Exception Handling** - Project-specific error types:
+```python
+from src.utils.defensive_programming import safe_execute
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+async def robust_operation():
+    try:
+        result = await risky_operation()
+        return safe_execute(lambda: process_result(result))
+    except SpecificProjectError as e:
+        logger.error(f"Known error pattern: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        raise
+```
+
+### Data Processing Patterns
+
+**1. Document Chunking** - Use project's chunking strategy:
+```python
+from src.processors.chunking_strategy import ChunkingStrategy
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+strategy = ChunkingStrategy(
+    chunk_size=settings.chunk_size,  # Default: 1000
+    chunk_overlap=settings.chunk_overlap,  # Default: 200
+    file_extension=file_ext
+)
+chunks = await strategy.process_document(content, metadata)
+```
+
+**2. Metadata Enrichment** - Always include context:
+```python
+metadata = {
+    "source": file_path,
+    "repository": repo_name,
+    "file_type": file_extension,
+    "chunk_index": chunk_idx,
+    "timestamp": datetime.utcnow().isoformat(),
+    "language": detect_language(file_extension),
+    "symbols": extract_code_symbols(content)  # For code files
+}
+```
+
+### Testing Patterns
+
+**CRITICAL:** Always set PYTHONPATH when running tests:
 ```bash
-# 1. Install dependencies (required before any other commands)
-make install-dev
-
-# 2. Setup pre-commit hooks (prevents commit failures)
-make pre-commit
-
-# 3. Copy and configure environment
-cp .env.example .env
-# Edit .env to add required API keys (OPENAI_API_KEY, GITHUB_TOKEN)
+PYTHONPATH=. pytest tests/unit/test_my_feature.py -v
 ```
 
-### Running Tests
+**1. Async Test Pattern**:
+```python
+import pytest
+from unittest.mock import AsyncMock, patch
 
-**CRITICAL:** Tests require PYTHONPATH to be set explicitly:
-
-```bash
-# Unit tests (fast, no external dependencies)
-PYTHONPATH=. pytest tests/unit/ -v
-## Copilot Guidance
-
-- When suggesting code, follow the repository's established patterns: use FastAPI async/await, LangChain/LangGraph workflows, and type annotations.
-- Prefer Python 3.11+ features and idioms.
-- Adhere to code style enforced by Black, isort, flake8, and mypy.
-- When generating tests, use pytest conventions and ensure PYTHONPATH is set as in the test instructions.
-- For environment setup or Docker-related code, reference the `.env.example` and Docker Compose files.
-- When in doubt, suggest code that is modular, well-documented, and includes type hints.
-
-For general repository information, setup, and usage instructions, refer to the `README.md` or documentation in the `docs/` directory.
-# Integration tests (require services to be running)
-make docker-up  # Start services first
-PYTHONPATH=. pytest tests/integration/ -v
-
-# All tests with coverage
-PYTHONPATH=. pytest tests/ -v --cov=src --cov-report=term-missing
+@pytest.mark.asyncio
+async def test_workflow_execution():
+    # Mock external dependencies
+    with patch('src.vectorstores.store_factory.VectorStoreFactory.create_store') as mock_store:
+        mock_store.return_value = AsyncMock()
+        
+        workflow = MyWorkflow()
+        result = await workflow.execute({"test": "data"})
+        
+        assert result["status"] == "completed"
+        mock_store.assert_called_once()
 ```
 
-**Common Test Failure:** If you see `ModuleNotFoundError: No module named 'src'`, you forgot to set `PYTHONPATH=.`
-
-### Code Quality and Formatting
-
-**ALWAYS run before committing changes:**
-
-```bash
-# Format code (auto-fixes most issues)
-make format
-
-# Run all quality checks
-make lint
-
-# Type checking
-make type-check
+**2. Integration Test Pattern**:
+```python
+@pytest.mark.integration
+async def test_end_to_end_workflow():
+    # These tests require Docker services running: make docker-up
+    settings = get_settings()
+    vector_store = VectorStoreFactory.create_store(settings.database_type)
+    
+    # Test with real vector store
+    result = await index_document("test content", {"source": "test.py"})
+    assert result is not None
 ```
 
-**Note:** The `make format` command will modify many files. This is expected behavior - the codebase uses strict Black formatting with 88-character line length.
+### Performance & Scalability Patterns
 
-### Docker Services
+**1. Batch Processing** - Use project's batch patterns:
+```python
+from src.loaders.enhanced_github_loader import EnhancedGitHubLoader
 
-**Development workflow with Docker:**
-
-```bash
-# Start all services (API, Chroma, MemGraph, Web UI)
-make docker-up
-
-# View logs from all services
-make docker-logs
-
-# Stop all services
-make docker-down
-
-# Alternative: Use development script for faster iteration
-./web/dev.sh start-backend  # Start only backend services
-./web/dev.sh start-web      # Start web UI with live reload
+# Process in configurable batches
+batch_size = settings.embedding_batch_size  # Default: 50
+for batch in chunk_list(documents, batch_size):
+    embeddings = await embedding_provider.embed_batch(batch)
+    await vector_store.add_documents(batch, embeddings)
 ```
 
-**Service Ports:**
-- Main API: http://localhost:8000
-- Chroma DB: http://localhost:8001
-- MemGraph: bolt://localhost:7687, HTTP: http://localhost:7444
-- Web UI: http://localhost:3000
+**2. Workflow State Management**:
+```python
+from src.workflows.state_manager import WorkflowStateManager
 
-### Running the Application
+# Always persist state for long-running operations
+state_manager = WorkflowStateManager(backend=settings.workflow_state_backend)
+workflow_id = str(uuid.uuid4())
 
-```bash
-# Method 1: Direct Python execution
-python main.py
-
-# Method 2: Using Docker (recommended for development)
-make docker-up
-
-# Method 3: Development server with auto-reload
-uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+await state_manager.save_state(workflow_id, {
+    "step": "processing",
+    "progress": {"completed": 10, "total": 100},
+    "last_updated": datetime.utcnow()
+})
 ```
 
-## Project Architecture
+## Common Implementation Patterns
 
-### Directory Structure
+### Adding New API Endpoints
+1. Define request/response models in `src/api/models.py`
+2. Implement route in appropriate router file
+3. Add workflow if complex processing needed
+4. Include proper error handling and logging
+5. Add tests with PYTHONPATH set
 
-```
-src/
-├── api/           # FastAPI routes and request/response models
-├── agents/        # RAG agent implementations
-├── config/        # Environment settings and validation
-├── workflows/     # LangGraph stateful workflows
-│   ├── query/     # Query processing handlers
-│   └── indexing_workflow.py
-├── loaders/       # GitHub repository loading and processing
-├── vectorstores/  # Chroma and Pinecone implementations
-├── graphstores/   # MemGraph integration
-├── llm/           # OpenAI and embedding providers
-├── processors/    # Document chunking and processing
-└── utils/         # Logging, prompt management, utilities
+### Adding New Workflow Steps
+1. Extend `BaseWorkflow` class
+2. Implement required abstract methods
+3. Add proper state transitions
+4. Include retry logic with tenacity
+5. Add comprehensive error handling
 
-tests/
-├── unit/          # Fast unit tests (no external deps)
-├── integration/   # Tests requiring external services
-└── workflows/     # Workflow-specific test suites
-```
+### Integrating New Vector Stores
+1. Implement `BaseVectorStore` interface
+2. Add to `VectorStoreFactory`
+3. Update settings configuration
+4. Add environment variables to `.env.example`
+5. Update Docker compose if needed
 
-### Key Configuration Files
+## Critical Development Rules
 
-- `pyproject.toml` - Python package configuration, dependencies
-- `requirements.txt` - Production dependencies
-- `requirements-dev.txt` - Development dependencies (includes production)
-- `Makefile` - All build, test, and quality commands
-- `pytest.ini` - Test configuration with coverage settings
-- `setup.cfg` - flake8, mypy, and pydocstyle configuration
-- `docker-compose.yml` - Multi-service Docker setup
-- `appSettings.json` - Repository configuration for indexing
+1. **Always use async/await** - This is an async-first codebase
+2. **Type hints everywhere** - Use Python 3.11+ type annotations
+3. **Environment-driven config** - No hardcoded values
+4. **Structured logging** - Use loguru with context
+5. **Error resilience** - Include retry logic and proper error handling
+6. **Test with PYTHONPATH** - Set `PYTHONPATH=.` for all pytest runs
+7. **Docker for integration** - Use `make docker-up` for external services
+8. **Format before commit** - Run `make format` before any commit
 
-### Environment Variables
+## Quick Reference
 
-**Required for basic functionality:**
-- `OPENAI_API_KEY` - OpenAI API access
-- `GITHUB_TOKEN` - GitHub repository access
-
-**Important configurations:**
-- `DATABASE_TYPE` - Switch between "chroma" and "pinecone"
-- `APP_ENV` - "development" or "production"
-- `LOG_LEVEL` - "DEBUG", "INFO", "WARNING", "ERROR"
-- `WORKFLOW_STATE_BACKEND` - "memory" or "database"
-
-## CI/CD Pipeline
-
-### GitHub Actions Workflows
-
-**CI Pipeline (`.github/workflows/ci.yml`):**
-- Runs on: Push to main, Pull Requests
-- Python versions: 3.11, 3.12
-- Steps: Dependencies → Unit Tests → Coverage Report
-- **Critical:** Requires `OPENAI_API_KEY` and `GITHUB_TOKEN` in repository secrets
-
-**Release Pipeline (`.github/workflows/release.yml`):**
-- Trigger: Git tags starting with 'v' (e.g., v1.0.0)
-- Full test suite → Code quality checks → Build artifacts
-
-### Pre-commit Hooks
-
-**Configured tools:**
-- Black (code formatting)
-- isort (import sorting)
-- flake8 (linting)
-- trailing-whitespace removal
-- end-of-file-fixer
-
-**Setup required:** Run `make pre-commit` after initial setup
-
-## Common Issues and Workarounds
-
-### Import Errors in Tests
-**Problem:** `ModuleNotFoundError: No module named 'src'`
-**Solution:** Always use `PYTHONPATH=. pytest` instead of just `pytest`
-
-### Docker Compose Issues
-**Problem:** Services fail to start
-**Solutions:**
-- Use `docker compose` (not `docker-compose`) - modern syntax
-- Check ports 8000, 8001, 7687, 7444 are not in use
-- Run `make docker-down` then `make docker-up` to restart
-
-### Code Formatting Conflicts
-**Problem:** Pre-commit hooks fail
-**Solution:** Run `make format` first, then commit. The project uses very strict formatting.
-
-### Memory Issues with Large Repositories
-**Problem:** Indexing workflows timeout or fail
-**Solution:** Adjust environment variables:
-- `WORKFLOW_TIMEOUT_SECONDS=7200` (increase timeout)
-- `WORKFLOW_PARALLEL_REPOS=1` (reduce parallelism)
-- `CHUNK_SIZE=500` (smaller chunks)
-
-### Vector Store Connection Issues
-**Problem:** Chroma or Pinecone connection fails
-**Solutions:**
-- Chroma: Ensure `make docker-up` started services
-- Pinecone: Verify `PINECONE_API_KEY` and `PINECONE_API_BASE_URL` in `.env`
-- Check `DATABASE_TYPE` setting matches intended backend
-
-## Validation Steps
-
-Before creating pull requests, **always run this complete validation sequence:**
-
-```bash
-# 1. Clean environment
-make clean
-
-# 2. Install and setup
-make install-dev
-make pre-commit
-
-# 3. Code quality
-make format
-make lint
-make type-check
-
-# 4. Tests (with proper PYTHONPATH)
-PYTHONPATH=. pytest tests/unit/ -v
-make docker-up
-PYTHONPATH=. pytest tests/integration/ -v --tb=short
-
-# 5. Security and coverage
-make security
-PYTHONPATH=. pytest tests/ --cov=src --cov-fail-under=80
-```
-
-**Expected timing:**
-- Unit tests: ~30 seconds
-- Integration tests: ~2-3 minutes (requires Docker services)
-- Full quality checks: ~1-2 minutes
-
-## Important Notes for AI Agents
-
-1. **Trust these instructions first** - Only explore with grep/search if information is incomplete or contradictory
-2. **PYTHONPATH is critical** - Always set `PYTHONPATH=.` when running pytest directly
-3. **Dependencies matter** - Run `make install-dev` before any other commands
-4. **Docker vs local** - Most development uses Docker services with local Python code
-5. **Configuration-driven** - Many behaviors controlled by `.env` and `appSettings.json`
-6. **Async patterns** - Codebase uses modern async/await throughout
-7. **Structured logging** - Use `loguru` logger, not print statements
-8. **LangGraph workflows** - Stateful execution with proper error handling and retries
-
-- Full quality checks: ~1-2 minutes
+**Running tests:** `PYTHONPATH=. pytest tests/unit/ -v`
+**Code formatting:** `make format && make lint`
+**Start services:** `make docker-up`
+**Environment setup:** `cp .env.example .env` then edit
+**Workflow debugging:** Set `LOG_LEVEL=DEBUG` in `.env`
