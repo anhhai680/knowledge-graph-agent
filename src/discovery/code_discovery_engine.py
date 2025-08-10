@@ -307,8 +307,32 @@ class CodeDiscoveryEngine:
                 content_lower = content.lower()
                 language_lower = language.lower()
                 
-                if not source.startswith('/') and '/' not in source:
-                    # Add realistic service path structure
+                # Clean up source path - remove any github_git references
+                if 'github_git' in source:
+                    source = source.replace('github_git', '').strip('/')
+                    if not source:
+                        source = 'UnknownFile'
+                
+                # Ensure source has a proper file extension if missing
+                if not source.endswith(('.cs', '.ts', '.js', '.py', '.java', '.go', '.tsx', '.jsx')):
+                    if language_lower in ['csharp', 'c#', 'cs']:
+                        source = f"{source}.cs"
+                    elif language_lower in ['typescript', 'ts']:
+                        source = f"{source}.ts"
+                    elif language_lower in ['javascript', 'js']:
+                        source = f"{source}.js"
+                    elif language_lower in ['python', 'py']:
+                        source = f"{source}.py"
+                    elif language_lower in ['java']:
+                        source = f"{source}.java"
+                    elif language_lower in ['go']:
+                        source = f"{source}.go"
+                    else:
+                        source = f"{source}.cs"  # Default to C#
+                
+                # Build proper repository-relative path
+                if not source.startswith(('src/', 'controllers/', 'services/', 'components/', 'models/')):
+                    # Add realistic service path structure based on content and repository type
                     if 'service' in repository.lower():
                         if any(controller_word in content_lower for controller_word in ['controller', 'api', 'endpoint']):
                             source = f"src/controllers/{source}"
@@ -316,13 +340,22 @@ class CodeDiscoveryEngine:
                             source = f"src/services/{source}"
                         elif any(model_word in content_lower for model_word in ['model', 'entity', 'dto']):
                             source = f"src/models/{source}"
+                        elif any(handler_word in content_lower for handler_word in ['handler', 'event', 'message']):
+                            source = f"src/handlers/{source}"
                         else:
                             source = f"src/{source}"
                     elif 'client' in repository.lower() or 'web' in repository.lower():
                         if language_lower in ['javascript', 'typescript', 'js', 'ts']:
-                            source = f"src/components/{source}"
+                            if any(component_word in content_lower for component_word in ['component', 'react', 'jsx', 'tsx']):
+                                source = f"src/components/{source}"
+                            elif any(hook_word in content_lower for hook_word in ['hook', 'use']):
+                                source = f"src/hooks/{source}"
+                            else:
+                                source = f"src/{source}"
                         else:
                             source = f"src/{source}"
+                    else:
+                        source = f"src/{source}"
                 
                 # Determine context type
                 context_type = self._classify_context_type(content, source)

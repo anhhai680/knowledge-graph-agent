@@ -244,8 +244,11 @@ sequenceDiagram
                 # Enhance repository name for Q4 compliance
                 enhanced_repo = self._enhance_repository_name(ref.repository, parsed_workflow.workflow)
                 
-                # Format in Q4 style with enhanced details
-                explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in `{ref.file_path}` ({enhanced_repo})")
+                # Create proper GitHub URL format as requested by user
+                github_file_path = f"https://github.com/anhhai680/{enhanced_repo}/blob/main/{ref.file_path}"
+                
+                # Format in Q4 style with GitHub URLs
+                explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in `{github_file_path}`")
                 explanation_parts.append(f"   - Location: Lines {line_start}-{line_end}")
                 explanation_parts.append(f"   - Context: {ref.context_type}")
                 if ref.content_snippet:
@@ -261,7 +264,10 @@ sequenceDiagram
             mock_references = self._generate_mock_code_references(parsed_workflow)
             
             for i, ref_data in enumerate(mock_references[:5], 1):
-                explanation_parts.append(f"{i}. **{ref_data['method_name']}**: Implemented in `{ref_data['file_path']}` ({ref_data['repository']})")
+                # Create proper GitHub URL format as requested by user
+                github_file_path = f"https://github.com/anhhai680/{ref_data['repository']}/blob/main/{ref_data['file_path']}"
+                
+                explanation_parts.append(f"{i}. **{ref_data['method_name']}**: Implemented in `{github_file_path}`")
                 explanation_parts.append(f"   - Location: Lines {ref_data['line_start']}-{ref_data['line_end']}")
                 explanation_parts.append(f"   - Context: {ref_data['context_type']}")
                 explanation_parts.append(f"   - Code: {ref_data['code_snippet']}")
