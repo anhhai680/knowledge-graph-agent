@@ -91,7 +91,11 @@ class VectorSearchHandler(BaseWorkflow[QueryState]):
             
         elif step == "process_results":
             # Process and validate search results
-            num_results = len(state.get("context_documents", []))
+            context_documents = state.get("context_documents", [])
+            # Defensive programming: ensure context_documents is not None
+            if context_documents is None:
+                context_documents = []
+            num_results = len(context_documents)
             self.logger.info(f"Retrieved {num_results} documents")
             
             # Update progress using existing helper function
