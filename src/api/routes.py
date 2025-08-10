@@ -389,18 +389,24 @@ async def process_query(
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()
         
-        # Check if this is a Q2 query by looking for generated response content and metadata
+        # Check if this is a Q2 query vs event flow query with proper logic
         generated_answer = agent_result.get("answer", "")
+        actual_query_intent = agent_result.get("query_intent")
+        intent_value = actual_query_intent.value if actual_query_intent else "general"
+        
+        # Event flow queries should be handled differently from Q2 system visualization
+        is_event_flow_response = (intent_value == "event_flow")
+        
+        # Q2 system visualization detection (exclude event flow)
         is_q2_response = (
-            "mermaid" in generated_answer.lower() or
-            "graph TB" in generated_answer or
-            agent_result.get("prompt_metadata", {}).get("template_type") == "Q2SystemVisualizationTemplate"
+            not is_event_flow_response and (
+                "graph TB" in generated_answer or
+                agent_result.get("prompt_metadata", {}).get("template_type") == "Q2SystemVisualizationTemplate"
+            )
         )
         
         # Additional Q2 detection logging for debugging
-        logger.debug(f"API Q2 DEBUG: Query='{request.query}', Generated answer length={len(generated_answer)}")
         logger.debug(f"API Q2 DEBUG: Template type={agent_result.get('prompt_metadata', {}).get('template_type')}")
-        logger.debug(f"API Q2 DEBUG: Q2 response detected={is_q2_response}")
         logger.debug(f"API Q2 DEBUG: RAG result keys={list(agent_result.keys())}")
 
         # Check for Q2 flag in the RAGAgent result metadata
@@ -442,7 +448,6 @@ This architecture provides flexibility and maintainability by organizing functio
             logger.info("API Q2 FALLBACK: Created generic fallback Q2 response based on actual repositories")
         
         logger.debug(f"Generated answer length: {len(generated_answer)}")
-        logger.debug(f"Is Q2 response: {is_q2_response}")
         logger.debug(f"Template type: {agent_result.get('prompt_metadata', {}).get('template_type')}")
         
         # Convert RAGAgent sources to API document results
@@ -469,21 +474,24 @@ This architecture provides flexibility and maintainability by organizing functio
         # Extract confidence score
         confidence_score = agent_result.get("confidence", 0.0)
         
-        # Extract and map query intent
-        query_intent = agent_result.get("query_intent")
-        intent_value = query_intent.value if query_intent else "general"
+        # Extract and map query intent (moved up to use in response determination)
+        intent_value = intent_value  # Already defined above
         
         logger.debug(f"API ROUTE DEBUG: RAGAgent result keys: {list(agent_result.keys())}")
-        logger.debug(f"API ROUTE DEBUG: Query='{request.query}', Intent from agent={query_intent}, Intent value={intent_value}")
-        logger.debug(f"API ROUTE DEBUG: Intent type: {type(query_intent)}")
+        logger.debug(f"API ROUTE DEBUG: Query='{request.query}', Intent from agent={actual_query_intent}, Intent value={intent_value}")
+        logger.debug(f"API ROUTE DEBUG: Intent type: {type(actual_query_intent)}")
         logger.debug(f"API ROUTE DEBUG: Generated answer length: {len(generated_answer)}")
+        logger.debug(f"API ROUTE DEBUG: Is event flow: {is_event_flow_response}, Is Q2: {is_q2_response}")
         
         # Determine response type and content based on query type
-        if is_q2_response and generated_answer:
-            # For Q2 queries, return the generated Mermaid diagram and explanation
+        if is_event_flow_response or is_q2_response:
+            # For event flow or Q2 queries, return the generated response
             response_type = "generated"
             generated_response = generated_answer
-            logger.info(f"Returning generated response for Q2 query: {len(generated_response)} characters")
+            if is_event_flow_response:
+                logger.info(f"Returning generated response for EVENT_FLOW query: {len(generated_response)} characters")
+            else:
+                logger.info(f"Returning generated response for Q2 query: {len(generated_response)} characters")
         else:
             # For regular queries, return search results
             response_type = "search"

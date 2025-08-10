@@ -54,35 +54,41 @@ class CodeDiscoveryEngine:
         # Define search terms for different workflow patterns (more specific business logic focus)
         self._pattern_search_terms = {
             WorkflowPattern.ORDER_PROCESSING: [
-                "public async Task CreateOrder", "def process_order", "function placeOrder",
-                "OrderController", "OrderService", "processOrder", "validateOrder",
-                "CreateOrderCommand", "OrderCreated", "order creation", "place order logic",
-                "payment processing", "order validation", "checkout process"
+                # Core business operations with realistic method names
+                "createOrder processOrder validateOrder",
+                "PlaceOrderAsync HandleOrderCreation OrderService.CreateAsync",
+                "order validation payment processing checkout workflow",
+                "ProcessOrderRequest ValidateOrderData HandleOrderSubmission",
+                "OrderController PostOrderAsync CreateOrderCommand",
+                "order.created event OrderCreatedHandler publishOrderEvent",
+                "payment.process PaymentService.ProcessAsync validatePayment"
             ],
             WorkflowPattern.USER_AUTHENTICATION: [
-                "public async Task Login", "def authenticate_user", "function login",
-                "AuthController", "AuthService", "authenticate", "login validation",
-                "TokenService", "UserRegistration", "password validation", "session management"
+                "authenticateUser loginUser validateCredentials", 
+                "AuthenticateAsync LoginAsync UserService.AuthenticateAsync",
+                "login validation session management token generation",
+                "AuthController PostLoginAsync LoginCommand",
+                "user.authenticated UserAuthenticatedHandler generateToken"
             ],
             WorkflowPattern.DATA_PIPELINE: [
-                "public async Task ProcessData", "def process_pipeline", "function transformData",
-                "DataProcessor", "PipelineService", "data transformation", "batch processing",
-                "data validation", "ETL process", "data ingestion"
+                "processData transformData validateData",
+                "ProcessDataAsync TransformAsync DataProcessor.ProcessAsync",
+                "data transformation validation pipeline processing"
             ],
             WorkflowPattern.API_REQUEST_FLOW: [
-                "public async Task HandleRequest", "def handle_request", "function processRequest",
-                "ApiController", "RequestHandler", "middleware", "request processing",
-                "response handling", "endpoint implementation", "http request"
+                "handleRequest processRequest validateRequest",
+                "HandleRequestAsync ProcessAsync ApiController.HandleAsync",
+                "request processing response handling middleware"
             ],
             WorkflowPattern.EVENT_DRIVEN: [
-                "public async Task HandleEvent", "def handle_event", "function onEvent",
-                "EventHandler", "MessageHandler", "event processing", "message consumer",
-                "notification service", "event subscription", "message queue"
+                "handleEvent processEvent publishEvent",
+                "HandleEventAsync ProcessEventAsync EventHandler.ProcessAsync",
+                "event processing message handling notification service"
             ],
             WorkflowPattern.GENERIC_WORKFLOW: [
-                "public async Task Execute", "def execute", "function handle",
-                "business logic", "workflow service", "process handler",
-                "service implementation", "main logic", "core functionality"
+                "execute process handle",
+                "ExecuteAsync ProcessAsync HandleAsync",
+                "business logic workflow service"
             ]
         }
         
@@ -298,6 +304,9 @@ class CodeDiscoveryEngine:
                             repository = path_parts[1]  # Usually second part is repo name
                 
                 # Generate realistic file path with proper service context
+                content_lower = content.lower()
+                language_lower = language.lower()
+                
                 if not source.startswith('/') and '/' not in source:
                     # Add realistic service path structure
                     if 'service' in repository.lower():
