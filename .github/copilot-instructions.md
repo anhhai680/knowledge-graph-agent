@@ -1,39 +1,249 @@
-# Overview
-You are an AI programming assistant. Your task is to help users with their coding questions and provide code snippets based on the context provided. You should not suggest code that has been deleted or is not relevant to the current context.
+# GitHub Copilot Instructions for Knowledge Graph Agent
 
-## Instructions
-1. **Understand the Context**: Read the provided context carefully to understand the requirements and constraints.
-2. **Provide Relevant Code**: Suggest code snippets that are relevant to the context and requirements. Ensure that the code is syntactically correct and adheres to best practices.
-3. **Avoid Deleted Code**: Do not suggest any code that has been marked as deleted or is not present in the current context.
-4. **Be Concise**: Keep your responses concise and focused on the specific coding question or requirement.
-5. **Use Clear Language**: Write in clear and understandable language, avoiding jargon unless necessary.
+## Code Implementation Guidelines
 
-## Rules
-- Always check for the latest context and do not reference or suggest code that has been deleted.
-- Ensure that the code you provide is compatible with the technologies mentioned in the context, such as Python, LangChain, Pinecone, and LLM models.
-- Follow the architecture and design patterns outlined in the context, such as the use of document loaders, text processors, and vector stores.
-- Maintain consistency with the configuration settings provided, such as file extensions and application environment settings.
-- If the context mentions specific libraries or frameworks, ensure that your code is compatible with those libraries (e.g., LangChain for AI Agent development).
-- If the context includes a system architecture diagram, align your code suggestions with the components and data flow described in the diagram.
-- Always include necessary imports and ensure that the code is executable in the given environment.
-- If the context specifies certain configurations (like API keys or environment variables), ensure that your code respects those configurations.
-- If the context includes a list of requirements, ensure that your code addresses those requirements directly.
-- If the context mentions specific models or APIs, ensure that your code integrates with those models or APIs correctly.
-- If the context includes a section on monitoring or logging, consider how your code can be instrumented for logging and monitoring purposes.
+This is an AI-powered RAG system using **FastAPI + LangChain/LangGraph + OpenAI**. When implementing features or fixing bugs, follow these project-specific patterns and conventions.
 
-## THINGS NOT TO DO
-- Do not suggest code that has been marked as "IGNORE" in the context.
-- Do not suggest code that does not adhere to the architecture overview provided in the context.
-- Do not include any code that is not relevant to the current requirements or context.
-- Do not suggest code that conflicts with the configuration settings outlined in the context.
-- Do not suggest code that does not follow the best practices for the technologies mentioned in the context.
-- Do not provide code that does not align with the data flow described in the system architecture diagram.
-- Do not suggest code that does not integrate with the specified LLM models or vector databases.
-- Do not suggest code that does not follow the testing strategies outlined in the context, such as unit testing with pytest or integration testing.
-- Do not suggest duplication of existing code or functionality, or testing that is already implemented in the context.
-- Never suggest the solution to resolve the issue by commenting out the code or ignoring certain lines, unless explicitly stated in the context.
-- Never complete the solution for fix the issue by removing the code or truncate the data, unless it is explicitly required by the context.
-- Do not mock data or functionality that is not explicitly mentioned in the context, such as creating mock responses for workflows unless specified.
-- Do not ignore or disable type checking for this file due to complex typing issues unless it is explicitly required by the context.
+### Core Architecture Patterns
 
-**Remember** to always clean up any console logs or debugging code, testing code, or files that are just only used for debugging, or validate the output purposes before finalizing your changes.
+**1. LangGraph Workflow Pattern** - All complex operations use stateful workflows:
+```python
+from src.workflows.base_workflow import BaseWorkflow, WorkflowStep
+from src.workflows.workflow_states import WorkflowState
+
+class MyWorkflow(BaseWorkflow):
+    async def process_step(self, state: Dict[str, Any], step: WorkflowStep) -> Dict[str, Any]:
+        # Always include error handling and state updates
+        try:
+            result = await self._execute_operation(state)
+            return self._update_state(state, result)
+        except Exception as e:
+            return self._handle_error(state, e, step)
+```
+
+**2. FastAPI Async Pattern** - All API endpoints must be async:
+```python
+from fastapi import APIRouter, HTTPException, Depends
+from src.api.models import QueryRequest, QueryResponse
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+@router.post("/query", response_model=QueryResponse)
+async def process_query(request: QueryRequest) -> QueryResponse:
+    try:
+        result = await workflow_instance.execute({"query": request.query})
+        return QueryResponse(**result)
+    except Exception as e:
+        logger.error(f"Query processing failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+**3. Vector Store Factory Pattern** - Always use the factory for vector operations:
+```python
+from src.vectorstores.store_factory import VectorStoreFactory
+from src.config.settings import get_settings
+
+settings = get_settings()
+vector_store = VectorStoreFactory.create_store(settings.database_type)
+```
+
+### Configuration & Environment Patterns
+
+**1. Settings Validation** - Use Pydantic for all configuration:
+```python
+from src.config.settings import get_settings
+from pydantic import BaseModel, Field, field_validator
+
+class MyConfig(BaseModel):
+    timeout_seconds: int = Field(default=300, ge=1, le=7200)
+    
+    @field_validator('timeout_seconds')
+    @classmethod
+    def validate_timeout(cls, v):
+        if v > 3600:
+            logger.warning(f"High timeout value: {v}s")
+        return v
+```
+
+**2. Environment Variables** - Always check required keys:
+```python
+import os
+from src.config.settings import get_settings
+
+# Required environment variables for this project:
+# OPENAI_API_KEY, GITHUB_TOKEN, DATABASE_TYPE (chroma|pinecone)
+settings = get_settings()
+if not settings.openai_api_key:
+    raise ValueError("OPENAI_API_KEY is required")
+```
+
+### Error Handling & Logging Patterns
+
+**1. Structured Logging** - Use loguru, not print statements:
+```python
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+# Good patterns:
+logger.info(f"Processing repository: {repo_name}")
+logger.error(f"Failed to index {file_path}: {e}", exc_info=True)
+logger.debug(f"State transition: {old_state} -> {new_state}")
+
+# Avoid: print statements or basic logging
+```
+
+**2. Exception Handling** - Project-specific error types:
+```python
+from src.utils.defensive_programming import safe_execute
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+async def robust_operation():
+    try:
+        result = await risky_operation()
+        return safe_execute(lambda: process_result(result))
+    except SpecificProjectError as e:
+        logger.error(f"Known error pattern: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        raise
+```
+
+### Data Processing Patterns
+
+**1. Document Chunking** - Use project's chunking strategy:
+```python
+from src.processors.chunking_strategy import ChunkingStrategy
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+strategy = ChunkingStrategy(
+    chunk_size=settings.chunk_size,  # Default: 1000
+    chunk_overlap=settings.chunk_overlap,  # Default: 200
+    file_extension=file_ext
+)
+chunks = await strategy.process_document(content, metadata)
+```
+
+**2. Metadata Enrichment** - Always include context:
+```python
+metadata = {
+    "source": file_path,
+    "repository": repo_name,
+    "file_type": file_extension,
+    "chunk_index": chunk_idx,
+    "timestamp": datetime.utcnow().isoformat(),
+    "language": detect_language(file_extension),
+    "symbols": extract_code_symbols(content)  # For code files
+}
+```
+
+### Testing Patterns
+
+**CRITICAL:** Always set PYTHONPATH when running tests:
+```bash
+PYTHONPATH=. pytest tests/unit/test_my_feature.py -v
+```
+
+**1. Async Test Pattern**:
+```python
+import pytest
+from unittest.mock import AsyncMock, patch
+
+@pytest.mark.asyncio
+async def test_workflow_execution():
+    # Mock external dependencies
+    with patch('src.vectorstores.store_factory.VectorStoreFactory.create_store') as mock_store:
+        mock_store.return_value = AsyncMock()
+        
+        workflow = MyWorkflow()
+        result = await workflow.execute({"test": "data"})
+        
+        assert result["status"] == "completed"
+        mock_store.assert_called_once()
+```
+
+**2. Integration Test Pattern**:
+```python
+@pytest.mark.integration
+async def test_end_to_end_workflow():
+    # These tests require Docker services running: make docker-up
+    settings = get_settings()
+    vector_store = VectorStoreFactory.create_store(settings.database_type)
+    
+    # Test with real vector store
+    result = await index_document("test content", {"source": "test.py"})
+    assert result is not None
+```
+
+### Performance & Scalability Patterns
+
+**1. Batch Processing** - Use project's batch patterns:
+```python
+from src.loaders.enhanced_github_loader import EnhancedGitHubLoader
+
+# Process in configurable batches
+batch_size = settings.embedding_batch_size  # Default: 50
+for batch in chunk_list(documents, batch_size):
+    embeddings = await embedding_provider.embed_batch(batch)
+    await vector_store.add_documents(batch, embeddings)
+```
+
+**2. Workflow State Management**:
+```python
+from src.workflows.state_manager import WorkflowStateManager
+
+# Always persist state for long-running operations
+state_manager = WorkflowStateManager(backend=settings.workflow_state_backend)
+workflow_id = str(uuid.uuid4())
+
+await state_manager.save_state(workflow_id, {
+    "step": "processing",
+    "progress": {"completed": 10, "total": 100},
+    "last_updated": datetime.utcnow()
+})
+```
+
+## Common Implementation Patterns
+
+### Adding New API Endpoints
+1. Define request/response models in `src/api/models.py`
+2. Implement route in appropriate router file
+3. Add workflow if complex processing needed
+4. Include proper error handling and logging
+5. Add tests with PYTHONPATH set
+
+### Adding New Workflow Steps
+1. Extend `BaseWorkflow` class
+2. Implement required abstract methods
+3. Add proper state transitions
+4. Include retry logic with tenacity
+5. Add comprehensive error handling
+
+### Integrating New Vector Stores
+1. Implement `BaseVectorStore` interface
+2. Add to `VectorStoreFactory`
+3. Update settings configuration
+4. Add environment variables to `.env.example`
+5. Update Docker compose if needed
+
+## Critical Development Rules
+
+1. **Always use async/await** - This is an async-first codebase
+2. **Type hints everywhere** - Use Python 3.11+ type annotations
+3. **Environment-driven config** - No hardcoded values
+4. **Structured logging** - Use loguru with context
+5. **Error resilience** - Include retry logic and proper error handling
+6. **Test with PYTHONPATH** - Set `PYTHONPATH=.` for all pytest runs
+7. **Docker for integration** - Use `make docker-up` for external services
+8. **Format before commit** - Run `make format` before any commit
+
+## Quick Reference
+
+**Running tests:** `PYTHONPATH=. pytest tests/unit/ -v`
+**Code formatting:** `make format && make lint`
+**Start services:** `make docker-up`
+**Environment setup:** `cp .env.example .env` then edit
+**Workflow debugging:** Set `LOG_LEVEL=DEBUG` in `.env`
