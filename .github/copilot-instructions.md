@@ -266,4 +266,4 @@ PYTHONPATH=. pytest tests/ --cov=src --cov-fail-under=80
 7. **Structured logging** - Use `loguru` logger, not print statements
 8. **LangGraph workflows** - Stateful execution with proper error handling and retries
 
-This project follows modern Python development practices with comprehensive tooling. When in doubt, refer to the `Makefile` for the definitive list of available commands and their proper usage.
+- Full quality checks: ~1-2 minutes
