@@ -5,7 +5,7 @@
 **Updated:** August 11, 2025  
 
 ## Original Request
-Create a new implementation to enable the AI Agent to answer generic questions that were mentioned in `generic-project-qa-template.md` document. The implementation should provide all information needed for implementation for generic questions for GitHub Copilot coding agent, outline step-by-step requirements, be well-structured and cleaner, and ensure the output after implementation is completed as expected.
+Create a new implementation that enables the AI Agent to answer generic questions listed in the `generic-project-qa-template.md` document. The implementation must provide all necessary information required to answer these generic questions. It should outline step-by-step requirements for each question. The solution must be well-structured and easy to follow. After implementation, the output should meet the expected results for each generic question.
 
 ## Thought Process
 The current Knowledge Graph Agent excels at answering specific technical questions about indexed codebases but lacks the ability to provide structured responses to common architectural and implementation questions that developers frequently ask about projects. This enhancement bridges the gap between code analysis and business context understanding.
