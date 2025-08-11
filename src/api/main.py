@@ -18,6 +18,8 @@ from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
+from src.workflows.generic_qa_workflow import GenericQAWorkflow
+from src.agents.generic_qa_agent import GenericQAAgent
 from src.vectorstores.store_factory import VectorStoreFactory
 from src.utils.feature_flags import is_graph_enabled
 
@@ -46,6 +48,11 @@ async def lifespan(app: FastAPI):
         workflow_instances["indexing"] = IndexingWorkflow()
         
         workflow_instances["query"] = QueryWorkflow()
+        
+        # Initialize Generic Q&A workflow and agent
+        generic_qa_workflow = GenericQAWorkflow()
+        workflow_instances["generic_qa_workflow"] = generic_qa_workflow
+        workflow_instances["generic_qa_agent"] = GenericQAAgent(workflow=generic_qa_workflow)
         
         # Validate configurations
         # logger.info("Validating component configurations...")
@@ -226,6 +233,24 @@ def get_query_workflow() -> QueryWorkflow:
             detail="Query workflow not available"
         )
     return workflow_instances["query"]
+
+
+def get_generic_qa_agent() -> GenericQAAgent:
+    """
+    Dependency to get the Generic Q&A agent instance.
+    
+    Returns:
+        GenericQAAgent: The global Generic Q&A agent instance
+        
+    Raises:
+        HTTPException: If agent instance is not available
+    """
+    if "generic_qa_agent" not in workflow_instances:
+        raise HTTPException(
+            status_code=503,
+            detail="Generic Q&A agent not available"
+        )
+    return workflow_instances["generic_qa_agent"]
 
 
 def get_vector_store():
