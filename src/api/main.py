@@ -47,6 +47,10 @@ async def lifespan(app: FastAPI):
         
         workflow_instances["query"] = QueryWorkflow()
         
+        # Initialize Generic Q&A Agent
+        from src.agents.generic_qa_agent import GenericQAAgent
+        workflow_instances["generic_qa"] = GenericQAAgent()
+        
         # Validate configurations
         # logger.info("Validating component configurations...")
         # await _validate_components()
@@ -303,6 +307,24 @@ def get_graph_store():
             status_code=503,
             detail=f"Graph store not available: {error_msg}"
         )
+
+
+def get_generic_qa_agent():
+    """
+    Dependency to get the Generic Q&A agent instance.
+    
+    Returns:
+        GenericQAAgent: The global Generic Q&A agent instance
+        
+    Raises:
+        HTTPException: If agent instance is not available
+    """
+    if "generic_qa" not in workflow_instances:
+        raise HTTPException(
+            status_code=503,
+            detail="Generic Q&A agent not available"
+        )
+    return workflow_instances["generic_qa"]
 
 
 # Create the FastAPI app instance

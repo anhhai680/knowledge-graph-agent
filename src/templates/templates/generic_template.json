@@ -1,0 +1,56 @@
+{
+  "template_name": "generic_template",
+  "version": "1.0",
+  "description": "Generic template for general project questions",
+  "architecture_patterns": ["Generic", "Modular", "Layered"],
+  "response_structure": {
+    "overview": "Provides general information about the project",
+    "key_features": "Lists main functionality and capabilities",
+    "technical_details": "Contains technical implementation information",
+    "recommendations": "Suggests best practices and improvements"
+  },
+  "sections": [
+    "overview",
+    "key_features", 
+    "technical_details",
+    "recommendations"
+  ],
+  "include_metadata": true,
+  "question_categories": {
+    "general": {
+      "analysis_requirements": ["basic_structure", "functionality_overview"],
+      "response_focus": {
+        "scope": "General project understanding",
+        "purpose": "High-level system overview",
+        "audience": "All stakeholders",
+        "detail_level": "moderate"
+      }
+    }
+  },
+  "default_sections": {
+    "overview": {
+      "project_description": "Software application providing automated functionality",
+      "primary_purpose": "System designed for efficient operations and data management",
+      "target_users": ["End Users", "Administrators", "Developers"]
+    },
+    "key_features": [
+      "Data Processing and Management",
+      "User Interface and Interaction",
+      "Integration Capabilities", 
+      "Security and Authentication",
+      "Monitoring and Logging"
+    ],
+    "technical_details": {
+      "architecture": "Modular design with clear separation of concerns",
+      "technology_stack": ["Modern frameworks", "Database integration", "API services"],
+      "deployment": "Containerized deployment with CI/CD pipeline"
+    },
+    "recommendations": [
+      "Follow established coding standards",
+      "Maintain comprehensive testing coverage",
+      "Keep documentation up to date",
+      "Monitor system performance regularly",
+      "Implement proper security practices"
+    ]
+  }
+}
