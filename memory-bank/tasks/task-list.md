@@ -9,6 +9,7 @@
 *No tasks currently in progress - system is production ready with active PR awaiting merge*
 
 ## Pending
+- [TASK014] AI Agent for Generic Project Q&A Implementation - Implement AI Agent to answer generic architectural and implementation questions using template-based responses - August 11, 2025
 - [TASK010] MemGraph MVP Implementation - Phase 1: MVP implementation of LangGraph-MemGraph integration with feature flags and backward compatibility
 - [TASK008] Final Integration Testing - End-to-end system validation with real repositories (LOW PRIORITY)
 - [TASK009] Production Deployment Configuration - Final optimization and documentation for production (LOW PRIORITY)
