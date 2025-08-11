@@ -290,6 +290,7 @@ class GenericQAWorkflow(BaseWorkflow):  # INHERIT from proven BaseWorkflow
 # src/analyzers/project_analyzers/architecture_detector.py
 from enum import Enum
 from dataclasses import dataclass
+from typing import List
 from src.utils.logging import get_logger  # REUSE logging
 from src.utils.defensive_programming import safe_len, ensure_list  # REUSE utilities
 
