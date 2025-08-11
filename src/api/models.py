@@ -347,6 +347,134 @@ class GraphInfoResponse(BaseModel):
     performance_metrics: Optional[Dict[str, Any]] = Field(None, description="Performance metrics")
 
 
+# Generic Q&A Models
+
+class QuestionCategory(str, Enum):
+    """Question categories for generic project Q&A."""
+    
+    BUSINESS_CAPABILITY = "business_capability"
+    API_ENDPOINTS = "api_endpoints"
+    DATA_MODELING = "data_modeling"
+    WORKFLOWS = "workflows"
+    ARCHITECTURE = "architecture"
+
+
+class GenericQARequest(BaseModel):
+    """Request model for generic Q&A operations."""
+    
+    question: str = Field(
+        ...,
+        description="Question about project architecture or implementation",
+        min_length=1,
+        max_length=1000,
+        json_schema_extra={"example": "What business capability does this service own?"}
+    )
+    category: Optional[QuestionCategory] = Field(
+        default=None,
+        description="Question category (auto-detected if not provided)"
+    )
+    template: Optional[str] = Field(
+        default=None,
+        description="Project template type (e.g., 'python_fastapi', 'dotnet_clean_architecture')",
+        json_schema_extra={"example": "python_fastapi"}
+    )
+    include_analysis: bool = Field(
+        default=True,
+        description="Include project analysis in response"
+    )
+    
+    @field_validator('question')
+    @classmethod
+    def validate_question(cls, v):
+        """Validate question content."""
+        if not v.strip():
+            raise ValueError('Question cannot be empty')
+        return v.strip()
+
+
+class ProjectTemplate(BaseModel):
+    """Project template configuration model."""
+    
+    name: str = Field(..., description="Template name")
+    description: str = Field(..., description="Template description")
+    supported_categories: List[QuestionCategory] = Field(..., description="Supported question categories")
+    architecture_patterns: List[str] = Field(..., description="Architecture patterns")
+    examples: Optional[Dict[str, List[str]]] = Field(None, description="Example questions by category")
+
+
+class ProjectAnalysisRequest(BaseModel):
+    """Request model for project analysis operations."""
+    
+    project_path: Optional[str] = Field(
+        default=None,
+        description="Local path to project directory"
+    )
+    repository_url: Optional[str] = Field(
+        default=None,
+        description="URL to project repository"
+    )
+    template_hint: Optional[str] = Field(
+        default=None,
+        description="Hint about project template type"
+    )
+    analysis_depth: str = Field(
+        default="standard",
+        description="Analysis depth: 'basic', 'standard', or 'comprehensive'",
+        json_schema_extra={"example": "standard"}
+    )
+    
+    @field_validator('analysis_depth')
+    @classmethod
+    def validate_analysis_depth(cls, v):
+        """Validate analysis depth."""
+        if v not in ["basic", "standard", "comprehensive"]:
+            raise ValueError('Analysis depth must be "basic", "standard", or "comprehensive"')
+        return v
+
+
+class GenericQAResponse(BaseModel):
+    """Response model for generic Q&A operations."""
+    
+    question: str = Field(..., description="Original question")
+    answer: str = Field(..., description="Generated answer")
+    category: QuestionCategory = Field(..., description="Detected or provided question category")
+    template: str = Field(..., description="Project template used")
+    confidence_score: float = Field(..., description="Answer confidence score", ge=0.0, le=1.0)
+    project_analysis: Optional[Dict[str, Any]] = Field(None, description="Project analysis results")
+    processing_time: float = Field(..., description="Processing time in seconds")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class TemplateListResponse(BaseModel):
+    """Response model for template listing."""
+    
+    templates: List[ProjectTemplate] = Field(..., description="Available project templates")
+    total_count: int = Field(..., description="Total number of templates")
+    default_template: str = Field(..., description="Default template name")
+
+
+class CategoryListResponse(BaseModel):
+    """Response model for category listing."""
+    
+    categories: List[Dict[str, Any]] = Field(..., description="Supported question categories")
+    examples: Dict[str, List[str]] = Field(..., description="Example questions by category")
+
+
+class ProjectAnalysisResponse(BaseModel):
+    """Response model for project analysis operations."""
+    
+    success: bool = Field(..., description="Analysis success status")
+    detected_template: Optional[str] = Field(None, description="Detected project template")
+    architecture_patterns: List[str] = Field(default_factory=list, description="Detected architecture patterns")
+    business_capabilities: List[str] = Field(default_factory=list, description="Identified business capabilities")
+    api_endpoints: List[Dict[str, Any]] = Field(default_factory=list, description="Discovered API endpoints")
+    data_models: List[Dict[str, Any]] = Field(default_factory=list, description="Analyzed data models")
+    operational_patterns: Dict[str, Any] = Field(default_factory=dict, description="Operational patterns")
+    confidence: float = Field(..., description="Analysis confidence score", ge=0.0, le=1.0)
+    analysis_timestamp: float = Field(..., description="Analysis timestamp")
+    error: Optional[str] = Field(None, description="Error message if analysis failed")
+
+
 # Configuration Models
 
 class APIConfig(BaseModel):

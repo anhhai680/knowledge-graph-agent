@@ -6,6 +6,7 @@ workflow management, and system monitoring with full LangGraph workflow integrat
 """
 
 import json
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -31,7 +32,16 @@ from src.api.models import (
     SearchStrategy,
     GraphQueryRequest,
     GraphQueryResponse,
-    GraphInfoResponse
+    GraphInfoResponse,
+    # Generic Q&A Models
+    GenericQARequest,
+    GenericQAResponse,
+    ProjectAnalysisRequest,
+    ProjectAnalysisResponse,
+    TemplateListResponse,
+    CategoryListResponse,
+    QuestionCategory,
+    ProjectTemplate
 )
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
@@ -109,6 +119,13 @@ router = APIRouter(
         500: {"description": "Internal server error"}
     }
 )
+
+
+def get_generic_qa_agent():
+    """Dependency injection for generic Q&A agent."""
+    # This will be implemented in main.py as a dependency
+    from src.api.main import get_generic_qa_agent
+    return get_generic_qa_agent()
 
 
 def get_indexing_workflow() -> IndexingWorkflow:
@@ -1408,6 +1425,228 @@ async def preview_incremental_changes(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to preview incremental changes: {str(e)}"
+        )
+
+
+# Generic Q&A Endpoints
+
+@router.post("/generic-qa/ask", response_model=GenericQAResponse)
+async def ask_generic_question(
+    request: GenericQARequest,
+    generic_qa_agent = Depends(get_generic_qa_agent)
+):
+    """
+    Process generic project questions using template-based responses.
+    
+    This endpoint accepts structured questions about project architecture,
+    business capabilities, API endpoints, data modeling, workflows, and
+    operational concerns, returning template-based answers.
+    """
+    try:
+        start_time = datetime.now()
+        logger.info(f"Processing generic Q&A question: {request.question[:100]}...")
+        
+        # Process question through Generic Q&A Agent
+        agent_input = {
+            "question": request.question,
+            "category": request.category.value if request.category else None,
+            "template": request.template,
+            "include_analysis": request.include_analysis
+        }
+        
+        result = await generic_qa_agent.ainvoke(agent_input)
+        
+        if not result.get("success", False):
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "Failed to process question")
+            )
+        
+        processing_time = (datetime.now() - start_time).total_seconds()
+        
+        return GenericQAResponse(
+            question=result["question"],
+            answer=result["answer"],
+            category=QuestionCategory(result["category"]),
+            template=result["template"],
+            confidence_score=result["confidence_score"],
+            project_analysis=result.get("project_analysis") if request.include_analysis else None,
+            processing_time=processing_time,
+            metadata=result.get("metadata", {})
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Generic Q&A processing failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process question: {str(e)}"
+        )
+
+
+@router.get("/generic-qa/templates", response_model=TemplateListResponse)
+async def list_project_templates(
+    generic_qa_agent = Depends(get_generic_qa_agent)
+):
+    """
+    List available project templates for Q&A.
+    
+    Returns information about supported project templates including
+    their descriptions, supported categories, and example questions.
+    """
+    try:
+        logger.info("Retrieving available project templates")
+        
+        # Get available templates from agent
+        template_names = generic_qa_agent.get_available_templates()
+        supported_categories = generic_qa_agent.get_supported_categories()
+        question_examples = generic_qa_agent.get_question_examples()
+        
+        # Build template information
+        templates = []
+        template_configs = {
+            "python_fastapi": {
+                "description": "Python FastAPI service with async processing and modern architecture",
+                "patterns": ["Layered Architecture", "Dependency Injection", "Async Processing"]
+            },
+            "dotnet_clean_architecture": {
+                "description": ".NET Clean Architecture with Domain-Driven Design and CQRS",
+                "patterns": ["Clean Architecture", "Domain-Driven Design", "CQRS", "Dependency Inversion"]
+            },
+            "react_spa": {
+                "description": "React Single Page Application with modern frontend architecture",
+                "patterns": ["Component-Based", "Unidirectional Data Flow", "Virtual DOM"]
+            }
+        }
+        
+        for template_name in template_names:
+            config = template_configs.get(template_name, {})
+            templates.append(ProjectTemplate(
+                name=template_name,
+                description=config.get("description", f"{template_name} project template"),
+                supported_categories=[QuestionCategory(cat) for cat in supported_categories],
+                architecture_patterns=config.get("patterns", []),
+                examples=question_examples
+            ))
+        
+        return TemplateListResponse(
+            templates=templates,
+            total_count=len(templates),
+            default_template=template_names[0] if template_names else "python_fastapi"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to list project templates: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list templates: {str(e)}"
+        )
+
+
+@router.post("/generic-qa/analyze-project", response_model=ProjectAnalysisResponse)
+async def analyze_project_structure(
+    request: ProjectAnalysisRequest,
+    generic_qa_agent = Depends(get_generic_qa_agent)
+):
+    """
+    Analyze project structure to determine architecture patterns.
+    
+    This endpoint analyzes a project's structure (either from a local path
+    or repository URL) to detect architecture patterns, business capabilities,
+    API endpoints, data models, and operational concerns.
+    """
+    try:
+        logger.info(f"Analyzing project structure: {request.project_path or request.repository_url}")
+        
+        # Validate that at least one source is provided
+        if not request.project_path and not request.repository_url:
+            raise HTTPException(
+                status_code=400,
+                detail="Either project_path or repository_url must be provided"
+            )
+        
+        # Perform project analysis through agent
+        analysis_result = await generic_qa_agent.analyze_project_structure(
+            project_path=request.project_path,
+            repository_url=request.repository_url,
+            template_hint=request.template_hint
+        )
+        
+        if not analysis_result.get("success", False):
+            return ProjectAnalysisResponse(
+                success=False,
+                confidence=0.0,
+                analysis_timestamp=time.time(),
+                error=analysis_result.get("error", "Analysis failed")
+            )
+        
+        return ProjectAnalysisResponse(
+            success=True,
+            detected_template=analysis_result.get("detected_template"),
+            architecture_patterns=ensure_list(analysis_result.get("architecture_patterns", [])),
+            business_capabilities=ensure_list(analysis_result.get("business_capabilities", [])),
+            api_endpoints=ensure_list(analysis_result.get("api_endpoints", [])),
+            data_models=ensure_list(analysis_result.get("data_models", [])),
+            operational_patterns=analysis_result.get("operational_patterns", {}),
+            confidence=analysis_result.get("confidence", 0.5),
+            analysis_timestamp=analysis_result.get("analysis_timestamp", time.time())
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Project analysis failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Project analysis failed: {str(e)}"
+        )
+
+
+@router.get("/generic-qa/categories", response_model=CategoryListResponse)
+async def list_question_categories(
+    generic_qa_agent = Depends(get_generic_qa_agent)
+):
+    """
+    Get supported question categories and examples.
+    
+    Returns information about supported question categories with
+    descriptions and example questions for each category.
+    """
+    try:
+        logger.info("Retrieving supported question categories")
+        
+        # Get supported categories and examples
+        supported_categories = generic_qa_agent.get_supported_categories()
+        question_examples = generic_qa_agent.get_question_examples()
+        
+        # Build category information
+        category_descriptions = {
+            "business_capability": "Questions about business scope, domain entities, ownership, and SLAs",
+            "api_endpoints": "Questions about REST endpoints, status codes, pagination, and API patterns",
+            "data_modeling": "Questions about persistence patterns, repositories, transactions, and data validation",
+            "workflows": "Questions about end-to-end operations, create/update flows, and process handling",
+            "architecture": "Questions about system layers, security, observability, and deployment patterns"
+        }
+        
+        categories = []
+        for category in supported_categories:
+            categories.append({
+                "name": category,
+                "description": category_descriptions.get(category, f"{category} related questions"),
+                "examples": question_examples.get(category, [])
+            })
+        
+        return CategoryListResponse(
+            categories=categories,
+            examples=question_examples
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to list question categories: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list categories: {str(e)}"
         )
 
 

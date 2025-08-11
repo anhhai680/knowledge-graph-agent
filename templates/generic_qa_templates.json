@@ -1,0 +1,268 @@
+{
+  "templates": {
+    "python_fastapi": {
+      "name": "Python FastAPI",
+      "description": "Modern Python API service with FastAPI, async processing, and clean architecture",
+      "architecture_patterns": [
+        "layered_architecture",
+        "dependency_injection",
+        "async_processing",
+        "api_first"
+      ],
+      "categories": {
+        "business_capability": {
+          "structure": "RESTful API service with specific business functionality and clear domain boundaries",
+          "patterns": [
+            "Single responsibility principle per service",
+            "Domain-driven design with bounded contexts",
+            "Clear API contracts and documentation",
+            "Async processing for scalability"
+          ],
+          "examples": [
+            "User management service with authentication and profiles",
+            "Order processing service with payment integration",
+            "Notification service with multiple delivery channels"
+          ],
+          "sla_requirements": {
+            "response_time": "< 200ms for simple queries, < 2s for complex operations",
+            "availability": "99.9% uptime with graceful degradation",
+            "throughput": "Handle 1000+ requests per second",
+            "consistency": "Strong consistency for critical operations"
+          }
+        },
+        "api_endpoints": {
+          "structure": "RESTful endpoints following OpenAPI specifications with comprehensive error handling",
+          "patterns": [
+            "GET /resources - List with pagination (?page=1&size=20)",
+            "GET /resources/{id} - Retrieve specific resource",
+            "POST /resources - Create new resource (return 201 with Location)",
+            "PUT /resources/{id} - Full update (return 204)",
+            "PATCH /resources/{id} - Partial update",
+            "DELETE /resources/{id} - Remove resource (return 204)",
+            "GET /health - Health check endpoint"
+          ],
+          "status_codes": {
+            "200": "OK - Successful GET, PUT, PATCH",
+            "201": "Created - Successful POST with Location header",
+            "204": "No Content - Successful DELETE or PUT without body",
+            "400": "Bad Request - Invalid input or validation errors",
+            "401": "Unauthorized - Authentication required",
+            "404": "Not Found - Resource does not exist",
+            "422": "Unprocessable Entity - Business rule validation failed",
+            "500": "Internal Server Error - Unexpected server error"
+          },
+          "features": [
+            "Automatic request/response validation with Pydantic",
+            "Interactive API documentation with Swagger UI",
+            "Rate limiting and request throttling",
+            "CORS handling for web client integration",
+            "API versioning strategy (/api/v1/...)"
+          ]
+        },
+        "data_modeling": {
+          "structure": "SQLAlchemy ORM with Pydantic schemas for clean data layer separation",
+          "patterns": [
+            "Repository pattern with interface abstractions",
+            "Unit of Work for transaction management",
+            "Domain models separate from database models",
+            "Pydantic schemas for API serialization"
+          ],
+          "persistence": {
+            "orm": "SQLAlchemy with declarative models and relationship management",
+            "migrations": "Alembic for database schema versioning",
+            "transactions": "Session-based transactions with automatic rollback",
+            "validation": "Pydantic models for input validation and serialization"
+          },
+          "examples": [
+            "User(id, email, profile) with UserProfile relationship",
+            "Order(id, user_id, items, status) with OrderItem collection",
+            "Repository pattern: UserRepository with get_by_email, create, update methods"
+          ]
+        },
+        "workflows": {
+          "structure": "Async workflow processing with FastAPI background tasks and dependency injection",
+          "patterns": [
+            "Request → Validation → Business Logic → Persistence → Response",
+            "Background task processing for long-running operations",
+            "Event-driven workflows with domain events",
+            "Dependency injection for service orchestration"
+          ],
+          "examples": [
+            "User Registration: validate input → create user → send welcome email → return success",
+            "Order Processing: validate order → check inventory → process payment → update status",
+            "File Upload: validate file → store to S3 → process async → notify completion"
+          ],
+          "error_handling": [
+            "Graceful error handling with proper HTTP status codes",
+            "Retry logic for transient failures",
+            "Circuit breaker pattern for external service calls",
+            "Comprehensive logging for debugging and monitoring"
+          ]
+        },
+        "architecture": {
+          "structure": "Clean layered architecture with clear separation of concerns and dependency inversion",
+          "layers": [
+            "API Layer: FastAPI routes and request/response handling",
+            "Service Layer: Business logic and workflow orchestration",
+            "Repository Layer: Data access and persistence abstraction",
+            "Model Layer: Domain models and data structures"
+          ],
+          "cross_cutting_concerns": [
+            "Dependency injection container for service registration",
+            "Middleware for logging, authentication, and error handling",
+            "Configuration management with environment variables",
+            "Background task processing with Celery or FastAPI tasks"
+          ],
+          "security": [
+            "JWT token-based authentication with refresh tokens",
+            "Role-based access control (RBAC) with scopes",
+            "Input validation and sanitization",
+            "HTTPS enforcement and security headers"
+          ],
+          "observability": [
+            "Structured logging with correlation IDs",
+            "Health check endpoints for monitoring",
+            "Metrics collection with Prometheus",
+            "Distributed tracing with OpenTelemetry"
+          ]
+        }
+      }
+    },
+    "dotnet_clean_architecture": {
+      "name": ".NET Clean Architecture",
+      "description": "Enterprise .NET application with Clean Architecture, Domain-Driven Design, and CQRS patterns",
+      "architecture_patterns": [
+        "clean_architecture",
+        "domain_driven_design",
+        "cqrs",
+        "dependency_inversion"
+      ],
+      "categories": {
+        "business_capability": {
+          "structure": "Domain-driven design with bounded contexts and aggregate roots defining clear business boundaries",
+          "patterns": [
+            "Bounded contexts for domain separation",
+            "Aggregate roots for consistency boundaries",
+            "Domain services for complex business rules",
+            "Value objects for immutable data"
+          ],
+          "examples": [
+            "Order Management: OrderAggregate with OrderItems and business rules",
+            "Customer Management: Customer entity with contact information and preferences",
+            "Inventory Management: Product catalog with stock tracking and availability"
+          ]
+        },
+        "api_endpoints": {
+          "structure": "ASP.NET Core Web API with controllers following RESTful conventions and Problem Details responses",
+          "patterns": [
+            "GET /api/v1/entities - List entities with OData querying",
+            "GET /api/v1/entities/{id} - Get entity by ID",
+            "POST /api/v1/entities - Create entity (return 201 with Location)",
+            "PUT /api/v1/entities/{id} - Update entity (return 204)",
+            "DELETE /api/v1/entities/{id} - Delete entity (return 204)"
+          ],
+          "features": [
+            "Swagger/OpenAPI documentation with XML comments",
+            "Model validation with Data Annotations",
+            "Problem Details (RFC 7807) for error responses",
+            "API versioning with Microsoft.AspNetCore.Mvc.Versioning"
+          ]
+        },
+        "data_modeling": {
+          "structure": "Entity Framework Core with Code First approach and domain model separation",
+          "patterns": [
+            "Repository pattern with IRepository<T> interfaces",
+            "Unit of Work pattern with DbContext as UoW",
+            "Domain entities separate from database entities",
+            "Value objects and complex types"
+          ]
+        },
+        "workflows": {
+          "structure": "CQRS with MediatR for command/query separation and clean request handling",
+          "patterns": [
+            "Commands for state-changing operations",
+            "Queries for data retrieval operations",
+            "Handlers for processing commands and queries",
+            "Pipeline behaviors for cross-cutting concerns"
+          ]
+        },
+        "architecture": {
+          "structure": "Clean Architecture with dependency inversion and clear layer boundaries",
+          "layers": [
+            "Presentation Layer: ASP.NET Core controllers and API endpoints",
+            "Application Layer: Use cases, commands, queries, and interfaces",
+            "Domain Layer: Entities, value objects, domain services, and events",
+            "Infrastructure Layer: Database, external services, and framework concerns"
+          ]
+        }
+      }
+    },
+    "react_spa": {
+      "name": "React Single Page Application",
+      "description": "Modern React SPA with TypeScript, state management, and component-based architecture",
+      "architecture_patterns": [
+        "component_based",
+        "unidirectional_data_flow",
+        "virtual_dom",
+        "single_page_application"
+      ],
+      "categories": {
+        "business_capability": {
+          "structure": "Component-based UI managing user workflows and business interactions",
+          "patterns": [
+            "Feature-based component organization",
+            "Custom hooks for business logic",
+            "Context providers for domain state",
+            "Higher-order components for cross-cutting concerns"
+          ]
+        },
+        "api_endpoints": {
+          "structure": "HTTP client integration with backend APIs using axios or fetch",
+          "patterns": [
+            "API service layer for backend communication",
+            "Request/response interceptors for common logic",
+            "Error handling and retry logic for failed requests",
+            "Caching strategies for API responses"
+          ]
+        },
+        "data_modeling": {
+          "structure": "Frontend data models with TypeScript interfaces and state management",
+          "patterns": [
+            "TypeScript interfaces for type safety",
+            "Redux or Context API for application state",
+            "Local storage for client-side persistence",
+            "Normalized state structure for complex data"
+          ]
+        },
+        "workflows": {
+          "structure": "User interaction flows with React Router navigation and form handling",
+          "patterns": [
+            "Route-based navigation with React Router",
+            "Form handling with controlled components",
+            "Async operations with useEffect and custom hooks",
+            "Error boundaries for graceful error handling"
+          ]
+        },
+        "architecture": {
+          "structure": "Component-based architecture with hooks, context, and modern React patterns",
+          "organization": [
+            "Feature-based folder structure",
+            "Shared components and utilities",
+            "Custom hooks for reusable logic",
+            "Service layer for external integrations"
+          ]
+        }
+      }
+    }
+  },
+  "default_template": "python_fastapi",
+  "supported_categories": [
+    "business_capability",
+    "api_endpoints", 
+    "data_modeling",
+    "workflows",
+    "architecture"
+  ],
+  "version": "1.0.0",
+  "last_updated": "2025-01-11"
+}
