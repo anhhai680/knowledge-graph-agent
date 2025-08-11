@@ -2,7 +2,8 @@
 
 Generated: 2025-08-11
 
-Note: This template is database-agnostic. It fits .NET services using Clean Architecture (Domain, Application, Infrastructure, Presentation) regardless of persistence choice (EF Core, Dapper, Mongo, Cosmos, etc.). Replace examples with your domain.
+> [!NOTE]
+> This template is database-agnostic. It fits .NET services using Clean Architecture (Domain, Application, Infrastructure, Presentation) regardless of persistence choice (EF Core, Dapper, Mongo, Cosmos, etc.). Replace examples with your domain.
 
 ## 1) What business capability does the service own and what are the core entities?
 
