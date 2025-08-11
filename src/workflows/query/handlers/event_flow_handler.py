@@ -241,29 +241,21 @@ sequenceDiagram
                 file_path = ref.file_path
                 repository = ref.repository
                 
-                # Only create GitHub URL if we have real repository data and it's a recognizable service
-                github_url = None
-                if repository and repository != 'unknown' and repository.strip():
-                    # Create proper GitHub URL without duplication
-                    clean_repo = repository
+                # Create clean display path in format: repository-name/file-path
+                display_path = None
+                if repository and repository != 'unknown' and repository.strip() and file_path:
+                    # Extract repository name (remove owner prefix if present)
+                    repo_name = repository.split('/')[-1] if '/' in repository else repository
                     
-                    # Handle duplicate repository paths that might exist in vector database
-                    if 'anhhai680/anhhai680' in clean_repo:
-                        clean_repo = clean_repo.replace('anhhai680/anhhai680/', 'anhhai680/')
-                    elif clean_repo.startswith('anhhai680/') or 'anhhai680' not in clean_repo:
-                        # Repository is already clean or doesn't contain owner
-                        if not clean_repo.startswith('anhhai680/'):
-                            clean_repo = f"anhhai680/{clean_repo}"
-                    
-                    # Use actual file path in GitHub URL
-                    github_url = f"https://github.com/{clean_repo}/blob/main/{file_path}"
+                    # Create clean path format like "car-order-service/Order.cs"
+                    display_path = f"`{repo_name}/{file_path}`"
                 
-                # Display the code reference
-                if github_url:
-                    explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in `{github_url}`")
+                # Display the code reference in the expected format
+                if display_path:
+                    explanation_parts.append(f"{i}. **{ref.method_name}**: Implemented in {display_path}")
                 else:
-                    # If no valid GitHub URL can be created, just show the file path
-                    explanation_parts.append(f"{i}. **{ref.method_name}**: Found in `{file_path}`")
+                    # Fallback if no valid path can be created
+                    explanation_parts.append(f"{i}. **{ref.method_name}**: Found in `{file_path or 'unknown location'}`")
                 
                 # Add location info only if we have real line numbers
                 if ref.line_numbers and len(ref.line_numbers) > 0:
