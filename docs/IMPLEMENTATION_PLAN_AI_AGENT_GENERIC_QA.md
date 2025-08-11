@@ -1169,8 +1169,9 @@ async def lifespan(app: FastAPI):
 # ADD to existing src/api/main.py - follow exact pattern:
 def get_generic_qa_agent() -> GenericQAAgent:
     """REQUIRED: Follow exact same pattern as get_query_workflow"""
-    if "generic_qa" not in workflow_instances:
-        workflow_instances["generic_qa"] = GenericQAAgent()
+    with threading.Lock():
+        if "generic_qa" not in workflow_instances:
+            workflow_instances["generic_qa"] = GenericQAAgent()
     return workflow_instances["generic_qa"]
 
 # EXTEND existing dependency injection in routes.py:
