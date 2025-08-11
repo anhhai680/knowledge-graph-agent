@@ -215,6 +215,17 @@ class LangChainSettings(BaseModel):
     project: str = Field("knowledge-graph-agent", description="LangSmith project name")
 
 
+class EventFlowSettings(BaseModel):
+    """Event flow analysis settings."""
+    
+    enable_event_flow: bool = Field(True, description="Enable event flow analysis")
+    max_sequence_steps: int = Field(20, description="Maximum sequence steps in diagrams")
+    diagram_complexity_limit: int = Field(15, description="Diagram complexity limit")
+    confidence_threshold: float = Field(0.7, description="Confidence threshold for responses")
+    max_actors: int = Field(10, description="Maximum number of actors in sequence diagrams")
+    include_code_references: bool = Field(True, description="Include code references in explanations")
+
+
 class RepositoryConfig(BaseModel):
     """GitHub repository configuration."""
 
@@ -251,6 +262,7 @@ class AppSettings(BaseModel):
     document_processing: DocumentProcessingSettings
     workflow: WorkflowSettings
     langchain: LangChainSettings
+    event_flow: EventFlowSettings = EventFlowSettings()
 
     # Configuration flags
     use_git_loader: bool = Field(
@@ -413,6 +425,15 @@ def get_settings() -> AppSettings:
                 "tracing": os.getenv("LANGCHAIN_TRACING", "false").lower() == "true",
                 "api_key": os.getenv("LANGCHAIN_API_KEY"),
                 "project": os.getenv("LANGCHAIN_PROJECT", "knowledge-graph-agent"),
+            },
+            # Event flow analysis settings  
+            "event_flow": {
+                "enable_event_flow": os.getenv("ENABLE_EVENT_FLOW_ANALYSIS", "true").lower() == "true",
+                "max_sequence_steps": int(os.getenv("EVENT_FLOW_MAX_SEQUENCE_STEPS", "20")),
+                "diagram_complexity_limit": int(os.getenv("EVENT_FLOW_DIAGRAM_COMPLEXITY_LIMIT", "15")),
+                "confidence_threshold": float(os.getenv("EVENT_FLOW_CONFIDENCE_THRESHOLD", "0.7")),
+                "max_actors": int(os.getenv("EVENT_FLOW_MAX_ACTORS", "10")),
+                "include_code_references": os.getenv("EVENT_FLOW_INCLUDE_CODE_REFERENCES", "true").lower() == "true",
             },
         }
 

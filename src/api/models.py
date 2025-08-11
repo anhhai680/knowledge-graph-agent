@@ -23,6 +23,7 @@ class QueryIntent(str, Enum):
     EXPLANATION = "explanation"
     ARCHITECTURE = "architecture"
     IMPLEMENTATION = "implementation"
+    EVENT_FLOW = "event_flow"
     GENERAL = "general"
 
 

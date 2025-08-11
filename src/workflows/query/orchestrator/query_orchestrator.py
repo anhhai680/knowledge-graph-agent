@@ -14,12 +14,14 @@ from src.workflows.workflow_states import (
     ProcessingStatus,
     SearchStrategy,
     create_query_state, 
-    update_workflow_progress
+    update_workflow_progress,
+    QueryIntent
 )
 from ..handlers.query_parsing_handler import QueryParsingHandler
 from ..handlers.vector_search_handler import VectorSearchHandler
 from ..handlers.llm_generation_handler import LLMGenerationHandler
 from ..handlers.context_processing_handler import ContextProcessingHandler
+from ..handlers.event_flow_handler import EventFlowHandler
 
 
 class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
@@ -88,6 +90,7 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
             **kwargs
         )
         self.llm_handler = LLMGenerationHandler(**kwargs)
+        self.event_flow_handler = EventFlowHandler(**kwargs)
         
     def _validate_confidence_constants(self) -> None:
         """
@@ -226,22 +229,39 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
                 self.logger.warning(f"ORCHESTRATOR: No query_intent found after parsing!")
             
         elif step == "search_documents":
-            # Use search handler's invoke method
-            state = self.search_handler.invoke(state)
+            # Check if this is an event flow query - handle differently
+            query_intent = state.get("query_intent")
+            if query_intent == QueryIntent.EVENT_FLOW:
+                # Use event flow handler for complete processing
+                self.logger.info("Using event flow handler for EVENT_FLOW query")
+                state = self.event_flow_handler.invoke(state)
+                # Mark as processed to skip other steps
+                state["metadata"]["event_flow_processed"] = True
+            else:
+                # Use standard search handler for other query types
+                state = self.search_handler.invoke(state)
             
         elif step == "process_context":
-            # Use context handler's invoke method
-            state = self.context_handler.invoke(state)
-            
-            # Check if context is sufficient, expand search if needed
-            if not state.get("context_sufficient", True):
-                state = self._expand_search(state)
-                # Re-process context after expansion
+            # Skip context processing for event flow queries (already handled)
+            if state.get("metadata", {}).get("event_flow_processed"):
+                self.logger.debug("Skipping context processing for event flow query")
+            else:
+                # Use context handler's invoke method
                 state = self.context_handler.invoke(state)
+                
+                # Check if context is sufficient, expand search if needed
+                if not state.get("context_sufficient", True):
+                    state = self._expand_search(state)
+                    # Re-process context after expansion
+                    state = self.context_handler.invoke(state)
             
         elif step == "generate_response":
-            # Use LLM handler's invoke method
-            state = self.llm_handler.invoke(state)
+            # Skip LLM generation for event flow queries (already handled)
+            if state.get("metadata", {}).get("event_flow_processed"):
+                self.logger.debug("Skipping LLM generation for event flow query")
+            else:
+                # Use LLM handler's invoke method
+                state = self.llm_handler.invoke(state)
             
         elif step == "finalize_response":
             # Finalize response with sources and metadata
@@ -312,9 +332,6 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
         Returns:
             Optimal search strategy
         """
-        # Import here to avoid circular imports
-        from src.workflows.workflow_states import QueryIntent
-
         # Use hybrid search for complex queries
         if len(query.split()) > 10:
             return SearchStrategy.HYBRID
@@ -326,6 +343,8 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
             return SearchStrategy.HYBRID  # Combine semantic and keyword for debugging
         elif query_intent == QueryIntent.DOCUMENTATION:
             return SearchStrategy.KEYWORD  # Documentation often has specific terms
+        elif query_intent == QueryIntent.EVENT_FLOW:
+            return SearchStrategy.HYBRID  # Event flow needs comprehensive search
         else:
             return SearchStrategy.SEMANTIC  # Default to semantic
 

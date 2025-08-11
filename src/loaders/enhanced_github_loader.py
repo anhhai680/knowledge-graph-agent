@@ -247,7 +247,7 @@ class EnhancedGitHubLoader(BaseLoader):
                 "repository": f"{self.repo_owner}/{self.repo_name}",
                 "file_path": relative_path,
                 "branch": self.branch,
-                "source": "github_git",
+                "source": relative_path,
                 "loader_type": "enhanced_git"
             })
             
@@ -285,7 +285,7 @@ class EnhancedGitHubLoader(BaseLoader):
                 "repository": f"{self.repo_owner}/{self.repo_name}",
                 "file_path": relative_path,
                 "branch": self.branch,
-                "source": "github_git",
+                "source": relative_path,
                 "error": str(e)
             }
 

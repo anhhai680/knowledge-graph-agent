@@ -110,8 +110,12 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         """
         query_lower = query.lower()
 
-        # Explanation patterns (check first to avoid conflicts with code search)
-        if any(keyword in query_lower for keyword in [
+        # Event flow patterns (check first as they are specific)
+        if self._is_event_flow_query(query):
+            return QueryIntent.EVENT_FLOW
+
+        # Explanation patterns (check after event flow to avoid conflicts)
+        elif any(keyword in query_lower for keyword in [
             "explain", "what is", "what does", "how does", "why",
             "understand", "clarify", "meaning"
         ]):
@@ -149,6 +153,42 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         # Default to code search
         else:
             return QueryIntent.CODE_SEARCH
+
+    def _is_event_flow_query(self, query: str) -> bool:
+        """
+        Detect if a query is asking for event flow analysis.
+        
+        This method checks for event flow patterns like "walk me through",
+        "what happens when", etc. that indicate the user wants a step-by-step
+        process explanation with sequence diagrams.
+        
+        Args:
+            query: User query string
+            
+        Returns:
+            bool: True if this is an event flow query, False otherwise
+        """
+        from src.analyzers.event_flow_analyzer import EventFlowAnalyzer
+        
+        try:
+            analyzer = EventFlowAnalyzer()
+            return analyzer.is_event_flow_query(query)
+        except Exception as e:
+            self.logger.error(f"Error in event flow detection: {e}")
+            
+            # Fallback to simple pattern matching
+            query_lower = query.lower().strip()
+            event_flow_indicators = [
+                "walk me through",
+                "walk through", 
+                "what happens when",
+                "show me the flow",
+                "step by step",
+                "process flow",
+                "sequence of events"
+            ]
+            
+            return any(indicator in query_lower for indicator in event_flow_indicators)
 
     def _extract_key_terms(self, query: str) -> str:
         """
