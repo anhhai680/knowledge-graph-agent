@@ -256,7 +256,7 @@ class GenericQAAgent(BaseAgent):
             Workflow state dictionary
         """
         # Import here to avoid circular imports
-        from src.workflows.workflow_states import WorkflowStatus
+        from src.workflows.base_workflow import WorkflowStatus
         
         return {
             "workflow_id": f"generic_qa_{hash(question)}",
