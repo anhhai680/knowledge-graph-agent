@@ -114,7 +114,43 @@ flowchart TD
     C --> P
     G --> Q
     H --> R
-    E --> S
+  A[Generic Q&A Request] --> B[Existing FastAPI Router]
+  B --> C[GenericQAAgent extends BaseAgent]
+  C --> D[GenericQAWorkflow extends BaseWorkflow]
+  
+  D --> E[Question Classification Handler]
+  E --> F[Existing Vector Store Factory]
+  F --> G[Project Analysis Engine]
+  G --> H[Template-Based Response Generator]
+  H --> I[Existing Pydantic Response Models]
+  
+  subgraph "Reused Components"
+    J[BaseWorkflow]
+    K[BaseAgent] 
+    L[State Manager]
+    M[Defensive Programming Utils]
+    N[Logging Utils]
+    O[API Models]
+  end
+  
+  subgraph "New Components (Minimal)"
+    P[GenericQAAgent]
+    Q[ProjectAnalyzers]
+    R[TemplateEngine]
+    S[QuestionClassifier]
+  end
+  
+  D --> J
+  C --> K
+  D --> L
+  G --> M
+  E --> N
+  I --> O
+  
+  C --> P
+  G --> Q
+  H --> R
+  E --> S
 ```
 
 ### Component Structure (Maximizing Reuse)
