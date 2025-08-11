@@ -9,6 +9,7 @@ data modeling, workflows, and operational concerns.
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 from dataclasses import dataclass
+from datetime import datetime
 
 from langchain.schema.runnable import RunnableConfig
 from loguru import logger
@@ -398,8 +399,10 @@ to get detailed, project-specific answers."""
         try:
             self.logger.info(f"Analyzing project structure at: {repository_path}")
             
-            # This would integrate with the project analysis components
-            # For now, return basic structure analysis
+            # Import analyzers
+            from src.analyzers.architecture_detector import ArchitectureDetector
+            from src.analyzers.business_capability_analyzer import BusinessCapabilityAnalyzer
+            
             analysis = {
                 "repository_path": repository_path,
                 "analysis_depth": analysis_depth,
@@ -407,11 +410,76 @@ to get detailed, project-specific answers."""
                 "supported_categories": [cat.value for cat in QuestionCategory],
                 "recommended_templates": [],
                 "analysis_timestamp": None,
-                "readiness_score": 0.0
+                "readiness_score": 0.0,
+                "architecture_analysis": None,
+                "business_analysis": None
             }
             
-            # TODO: Implement actual project analysis using the analysis components
-            # This will be implemented in Phase 2
+            try:
+                # Perform architecture analysis
+                arch_detector = ArchitectureDetector()
+                arch_analysis = arch_detector.detect_architecture(repository_path)
+                
+                analysis["architecture_analysis"] = {
+                    "primary_pattern": arch_analysis.primary_pattern.value,
+                    "secondary_patterns": [p.value for p in arch_analysis.secondary_patterns],
+                    "confidence_score": arch_analysis.confidence_score,
+                    "detected_layers": arch_analysis.detected_layers,
+                    "technologies": arch_analysis.technologies
+                }
+                
+                analysis["detected_patterns"].append(arch_analysis.primary_pattern.value)
+                analysis["detected_patterns"].extend([p.value for p in arch_analysis.secondary_patterns])
+                
+                # Recommend templates based on architecture
+                if arch_analysis.primary_pattern.value == "clean_architecture":
+                    analysis["recommended_templates"].append("dotnet_clean_architecture")
+                elif "python" in arch_analysis.technologies:
+                    analysis["recommended_templates"].append("python_fastapi")
+                elif any(tech in arch_analysis.technologies for tech in ["javascript", "react", "nodejs"]):
+                    analysis["recommended_templates"].append("react_spa")
+                else:
+                    analysis["recommended_templates"].append("generic")
+                
+                self.logger.info(f"Architecture analysis completed: {arch_analysis.primary_pattern}")
+                
+            except Exception as e:
+                self.logger.warning(f"Architecture analysis failed: {e}")
+            
+            try:
+                # Perform business capability analysis if depth allows
+                if analysis_depth in ["standard", "comprehensive"]:
+                    business_analyzer = BusinessCapabilityAnalyzer()
+                    business_analysis = business_analyzer.analyze_business_capability(repository_path)
+                    
+                    analysis["business_analysis"] = {
+                        "primary_capability": business_analysis.primary_capability.name,
+                        "domain_complexity": business_analysis.domain_complexity.value,
+                        "bounded_contexts": business_analysis.bounded_contexts,
+                        "confidence_score": business_analysis.confidence_score,
+                        "entities_count": len(business_analysis.primary_capability.entities)
+                    }
+                    
+                    self.logger.info(f"Business analysis completed: {business_analysis.primary_capability.name}")
+                
+            except Exception as e:
+                self.logger.warning(f"Business capability analysis failed: {e}")
+            
+            # Calculate overall readiness score
+            readiness_factors = []
+            
+            if analysis.get("architecture_analysis"):
+                readiness_factors.append(analysis["architecture_analysis"]["confidence_score"])
+            
+            if analysis.get("business_analysis"):
+                readiness_factors.append(analysis["business_analysis"]["confidence_score"])
+            
+            if readiness_factors:
+                analysis["readiness_score"] = sum(readiness_factors) / len(readiness_factors)
+            else:
+                analysis["readiness_score"] = 0.1  # Minimal readiness
+            
+            analysis["analysis_timestamp"] = datetime.now().isoformat()
             
             return {
                 "success": True,
