@@ -31,7 +31,13 @@ from src.api.models import (
     SearchStrategy,
     GraphQueryRequest,
     GraphQueryResponse,
-    GraphInfoResponse
+    GraphInfoResponse,
+    GenericQARequest,
+    GenericQAResponse,
+    GenericQAAnalysisRequest,
+    GenericQAAnalysisResponse,
+    GenericQACategoriesResponse,
+    GenericQATemplatesResponse
 )
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
@@ -1410,4 +1416,189 @@ async def preview_incremental_changes(
             detail=f"Failed to preview incremental changes: {str(e)}"
         )
 
+
+def get_generic_qa_agent():
+    """Dependency injection for Generic Q&A agent."""
+    from src.api.main import get_generic_qa_agent
+    return get_generic_qa_agent()
+
+
+@router.post("/generic-qa/ask", response_model=GenericQAResponse)
+async def ask_generic_qa_question(
+    request: GenericQARequest,
+    generic_qa_agent = Depends(get_generic_qa_agent)
+):
+    """
+    Process generic project Q&A questions using AI agent.
+    
+    This endpoint processes structured questions about project architecture,
+    business capabilities, API endpoints, data modeling, workflows, and
+    operational concerns using template-based response generation.
+    """
+    try:
+        start_time = datetime.now()
+        
+        logger.info(f"Processing Generic Q&A question: {request.question[:100]}...")
+        
+        # Prepare input for agent
+        agent_input = {
+            "question": request.question,
+            "category": request.category,
+            "repository_context": request.repository_context
+        }
+        
+        # Process through Generic Q&A agent
+        result = await generic_qa_agent.ainvoke(agent_input)
+        
+        if not result.get("success", False):
+            error_msg = result.get("error", "Unknown error occurred")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Generic Q&A processing failed: {error_msg}"
+            )
+        
+        # Calculate processing time
+        processing_time = (datetime.now() - start_time).total_seconds()
+        
+        # Create response
+        response = GenericQAResponse(
+            question=request.question,
+            category=result.get("category", "architecture"),
+            answer=result.get("answer", ""),
+            analysis_components=result.get("analysis_components", []),
+            confidence_score=result.get("confidence_score", 0.0),
+            template_used=result.get("template_used"),
+            processing_time=processing_time,
+            metadata=result.get("metadata", {})
+        )
+        
+        logger.info(f"Generic Q&A question processed successfully in {processing_time:.2f}s")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Generic Q&A processing failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Generic Q&A processing failed: {str(e)}"
+        )
+
+
+@router.get("/generic-qa/categories", response_model=GenericQACategoriesResponse)
+async def get_generic_qa_categories(
+    generic_qa_agent = Depends(get_generic_qa_agent)
+):
+    """
+    Get supported question categories for Generic Project Q&A.
+    
+    Returns information about available question categories including
+    descriptions, examples, and usage guidelines.
+    """
+    try:
+        logger.info("Retrieving Generic Q&A categories")
+        
+        categories = generic_qa_agent.get_supported_categories()
+        
+        return GenericQACategoriesResponse(
+            categories=categories,
+            total_categories=len(categories),
+            last_updated=datetime.now()
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get Generic Q&A categories: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get Generic Q&A categories: {str(e)}"
+        )
+
+
+@router.get("/generic-qa/templates", response_model=GenericQATemplatesResponse)
+async def get_generic_qa_templates(
+    generic_qa_agent = Depends(get_generic_qa_agent)
+):
+    """
+    Get available templates for different project types.
+    
+    Returns information about available templates for different
+    architecture patterns and project types.
+    """
+    try:
+        logger.info("Retrieving Generic Q&A templates")
+        
+        templates = generic_qa_agent.get_available_templates()
+        
+        return GenericQATemplatesResponse(
+            templates=templates,
+            total_templates=len(templates),
+            last_updated=datetime.now()
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to get Generic Q&A templates: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get Generic Q&A templates: {str(e)}"
+        )
+
+
+@router.post("/generic-qa/analyze-project", response_model=GenericQAAnalysisResponse)
+async def analyze_project_structure(
+    request: GenericQAAnalysisRequest,
+    generic_qa_agent = Depends(get_generic_qa_agent)
+):
+    """
+    Analyze project structure for Generic Q&A preparation.
+    
+    This endpoint analyzes the project structure to prepare it for
+    Generic Q&A processing, including pattern detection and template
+    recommendation.
+    """
+    try:
+        start_time = datetime.now()
+        
+        logger.info(f"Analyzing project structure: {request.repository_path}")
+        
+        # Perform project analysis
+        result = await generic_qa_agent.analyze_project_structure(
+            repository_path=request.repository_path,
+            analysis_depth=request.analysis_depth
+        )
+        
+        if not result.get("success", False):
+            error_msg = result.get("error", "Analysis failed")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Project analysis failed: {error_msg}"
+            )
+        
+        # Calculate processing time
+        processing_time = (datetime.now() - start_time).total_seconds()
+        
+        analysis = result.get("analysis", {})
+        
+        response = GenericQAAnalysisResponse(
+            repository_path=request.repository_path,
+            analysis_depth=request.analysis_depth,
+            detected_patterns=analysis.get("detected_patterns", []),
+            supported_categories=analysis.get("supported_categories", []),
+            recommended_templates=analysis.get("recommended_templates", []),
+            readiness_score=analysis.get("readiness_score", 0.0),
+            processing_time=processing_time,
+            analysis_timestamp=datetime.now(),
+            metadata=analysis.get("metadata", {})
+        )
+        
+        logger.info(f"Project analysis completed in {processing_time:.2f}s")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Project analysis failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Project analysis failed: {str(e)}"
+        )
 

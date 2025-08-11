@@ -358,3 +358,125 @@ class APIConfig(BaseModel):
     default_timeout: int = Field(default=30, description="Default request timeout in seconds")
     rate_limit_requests: int = Field(default=100, description="Rate limit requests per minute")
     max_parallel_workflows: int = Field(default=10, description="Maximum parallel workflows")
+
+
+# Generic Q&A Models
+
+class GenericQARequest(BaseModel):
+    """Request model for Generic Project Q&A operations."""
+    
+    question: str = Field(
+        ...,
+        description="Project question to answer",
+        min_length=5,
+        max_length=1000,
+        json_schema_extra={"example": "What business capability does this service own?"}
+    )
+    category: Optional[str] = Field(
+        default=None,
+        description="Question category (auto-detected if not provided)",
+        json_schema_extra={"example": "business_capability"}
+    )
+    repository_context: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Repository context for analysis"
+    )
+    
+    @field_validator('category')
+    @classmethod
+    def validate_category(cls, v):
+        """Validate question category."""
+        if v is not None:
+            valid_categories = [
+                "business_capability", "api_endpoints", "data_modeling", 
+                "workflows", "architecture"
+            ]
+            if v not in valid_categories:
+                raise ValueError(f'Category must be one of: {", ".join(valid_categories)}')
+        return v
+
+
+class GenericQAResponse(BaseModel):
+    """Response model for Generic Project Q&A operations."""
+    
+    question: str = Field(..., description="Original question")
+    category: str = Field(..., description="Detected or provided question category")
+    answer: str = Field(..., description="Generated answer")
+    analysis_components: List[str] = Field(..., description="Components analyzed")
+    confidence_score: float = Field(..., description="Response confidence score", ge=0.0, le=1.0)
+    template_used: Optional[str] = Field(None, description="Template used for response generation")
+    processing_time: float = Field(..., description="Processing time in seconds")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class GenericQACategoryInfo(BaseModel):
+    """Information about a Generic Q&A category."""
+    
+    id: str = Field(..., description="Category identifier")
+    name: str = Field(..., description="Category display name")
+    description: str = Field(..., description="Category description")
+    examples: List[str] = Field(..., description="Example questions")
+
+
+class GenericQACategoriesResponse(BaseModel):
+    """Response model for Generic Q&A categories."""
+    
+    categories: List[GenericQACategoryInfo] = Field(..., description="Available categories")
+    total_categories: int = Field(..., description="Total number of categories")
+    last_updated: datetime = Field(..., description="Last update time")
+
+
+class GenericQATemplateInfo(BaseModel):
+    """Information about a Generic Q&A template."""
+    
+    id: str = Field(..., description="Template identifier")
+    name: str = Field(..., description="Template display name")
+    description: str = Field(..., description="Template description")
+    categories: List[str] = Field(..., description="Supported categories")
+    file_patterns: List[str] = Field(..., description="Supported file patterns")
+
+
+class GenericQATemplatesResponse(BaseModel):
+    """Response model for Generic Q&A templates."""
+    
+    templates: List[GenericQATemplateInfo] = Field(..., description="Available templates")
+    total_templates: int = Field(..., description="Total number of templates")
+    last_updated: datetime = Field(..., description="Last update time")
+
+
+class GenericQAAnalysisRequest(BaseModel):
+    """Request model for project structure analysis."""
+    
+    repository_path: str = Field(
+        ...,
+        description="Path to repository for analysis",
+        json_schema_extra={"example": "/path/to/repository"}
+    )
+    analysis_depth: str = Field(
+        default="standard",
+        description="Analysis depth level",
+        json_schema_extra={"example": "standard"}
+    )
+    
+    @field_validator('analysis_depth')
+    @classmethod
+    def validate_analysis_depth(cls, v):
+        """Validate analysis depth."""
+        valid_depths = ["basic", "standard", "comprehensive"]
+        if v not in valid_depths:
+            raise ValueError(f'Analysis depth must be one of: {", ".join(valid_depths)}')
+        return v
+
+
+class GenericQAAnalysisResponse(BaseModel):
+    """Response model for project structure analysis."""
+    
+    repository_path: str = Field(..., description="Analyzed repository path")
+    analysis_depth: str = Field(..., description="Analysis depth used")
+    detected_patterns: List[str] = Field(..., description="Detected architecture patterns")
+    supported_categories: List[str] = Field(..., description="Supported question categories")
+    recommended_templates: List[str] = Field(..., description="Recommended templates")
+    readiness_score: float = Field(..., description="Q&A readiness score", ge=0.0, le=1.0)
+    processing_time: float = Field(..., description="Analysis processing time in seconds")
+    analysis_timestamp: datetime = Field(..., description="Analysis completion time")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional analysis metadata")
