@@ -5,6 +5,7 @@ This module provides the foundation for stateful workflows using LangGraph with
 LangChain Runnable interface integration.
 """
 
+import copy
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -310,7 +311,7 @@ class BaseWorkflow(Runnable[StateType, StateType], ABC):
         """
         current_state = state
         if hasattr(state, 'copy'):
-            current_state = state.copy()  # type: ignore
+            current_state = copy.deepcopy(state)  # Use deep copy to preserve nested state
         steps = self.define_steps()
         total_steps = len(steps)
 
