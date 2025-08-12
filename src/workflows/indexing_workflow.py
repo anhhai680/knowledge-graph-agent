@@ -1124,7 +1124,12 @@ class IndexingWorkflow(BaseWorkflow[IndexingState]):
                 
                 vector_store.add_documents(batch)
                 
-                self.logger.info(f"STORAGE DEBUG: Successfully called add_documents for {len(batch)} documents")
+                self.logger.debug(f"STORAGE DEBUG: About to store batch of {len(batch)} documents")
+                self.logger.debug(f"STORAGE DEBUG: First document metadata: {batch[0].metadata if batch else 'No documents'}")
+                
+                vector_store.add_documents(batch)
+                
+                self.logger.debug(f"STORAGE DEBUG: Successfully called add_documents for {len(batch)} documents")
 
                 storage_stats["stored_documents"] += len(batch)
                 storage_stats["batch_count"] += 1
