@@ -89,6 +89,7 @@ def _map_workflow_intent_to_api(workflow_intent: str) -> QueryIntent:
         "architecture": QueryIntent.ARCHITECTURE,  # Now available in API enum
         "implementation": QueryIntent.IMPLEMENTATION,
         "event_flow": QueryIntent.EVENT_FLOW,  # Add missing event_flow mapping
+        "generic_qa": QueryIntent.GENERIC_QA,  # Add Generic Q&A mapping
         "general": QueryIntent.GENERAL,
     }
     return mapping.get(workflow_intent, QueryIntent.GENERAL)
@@ -496,12 +497,14 @@ This architecture provides flexibility and maintainability by organizing functio
         logger.debug(f"API ROUTE DEBUG: Is event flow: {is_event_flow_response}, Is Q2: {is_q2_response}")
         
         # Determine response type and content based on query type
-        if is_event_flow_response or is_q2_response:
-            # For event flow or Q2 queries, return the generated response
+        if is_event_flow_response or is_q2_response or intent_value == "generic_qa":
+            # For event flow, Q2, or Generic Q&A queries, return the generated response
             response_type = "generated"
             generated_response = generated_answer
             if is_event_flow_response:
                 logger.info(f"Returning generated response for EVENT_FLOW query: {len(generated_response)} characters")
+            elif intent_value == "generic_qa":
+                logger.info(f"Returning generated response for GENERIC_QA query: {len(generated_response)} characters")
             else:
                 logger.info(f"Returning generated response for Q2 query: {len(generated_response)} characters")
         else:

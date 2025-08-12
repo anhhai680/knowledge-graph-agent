@@ -110,8 +110,12 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         """
         query_lower = query.lower()
 
-        # Event flow patterns (check first as they are specific)
-        if self._is_event_flow_query(query):
+        # Generic Q&A patterns (check first for project-level questions)
+        if self._is_generic_qa_query(query):
+            return QueryIntent.GENERIC_QA
+
+        # Event flow patterns (check second as they are specific)
+        elif self._is_event_flow_query(query):
             return QueryIntent.EVENT_FLOW
 
         # Explanation patterns (check after event flow to avoid conflicts)
@@ -329,3 +333,41 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
             return True
             
         return False
+
+    def _is_generic_qa_query(self, query: str) -> bool:
+        """
+        Detect if a query is asking for generic project information.
+        
+        Generic Q&A queries are about high-level project characteristics like:
+        - Business domain and purpose
+        - API endpoints and behaviors
+        - Architecture and frameworks
+        - Data models and authentication
+        - Project overview and capabilities
+        
+        Args:
+            query: User query string
+            
+        Returns:
+            bool: True if this is a generic Q&A query, False otherwise
+        """
+        query_lower = query.lower().strip()
+        
+        # Generic project information keywords
+        generic_keywords = [
+            "business domain", "business purpose", "project purpose", "what is this project",
+            "project overview", "project description", "project capabilities",
+            "api endpoints", "endpoints", "api routes", "available apis",
+            "expected behaviors", "expected behavior", "api behavior", "endpoint behavior",
+            "architecture", "system architecture", "project architecture", "system design",
+            "frameworks", "technologies", "tech stack", "technology stack",
+            "data models", "data model", "database schema", "database models",
+            "authentication", "auth", "authorization", "login system",
+            "deployment", "infrastructure", "hosting",
+            "business capabilities", "features", "functionality",
+            "what does this project do", "what does this system do",
+            "what are the main features", "main components"
+        ]
+        
+        # Check for generic question patterns
+        return any(keyword in query_lower for keyword in generic_keywords)

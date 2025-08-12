@@ -24,6 +24,7 @@ class QueryIntent(str, Enum):
     ARCHITECTURE = "architecture"
     IMPLEMENTATION = "implementation"
     EVENT_FLOW = "event_flow"
+    GENERIC_QA = "generic_qa"
     GENERAL = "general"
 
 

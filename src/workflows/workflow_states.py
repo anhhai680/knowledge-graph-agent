@@ -74,6 +74,7 @@ class QueryIntent(str, Enum):
     DEBUGGING = "debugging"
     ARCHITECTURE = "architecture"
     EVENT_FLOW = "event_flow"
+    GENERIC_QA = "generic_qa"
 
 
 class SearchStrategy(str, Enum):
