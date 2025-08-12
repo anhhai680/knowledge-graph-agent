@@ -353,7 +353,7 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         """
         query_lower = query.lower().strip()
         
-        # Generic project information keywords
+        # Enhanced generic project information keywords with better purpose/function detection
         generic_keywords = [
             "business domain", "business purpose", "project purpose", "what is this project",
             "project overview", "project description", "project capabilities",
@@ -366,8 +366,20 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
             "deployment", "infrastructure", "hosting",
             "business capabilities", "features", "functionality",
             "what does this project do", "what does this system do",
-            "what are the main features", "main components"
+            "what are the main features", "main components",
+            # Enhanced purpose detection patterns
+            "purpose of", "what is the purpose", "what does the", "what is the",
+            "role of", "responsibility of", "function of", "job of",
+            "used for", "designed for", "meant for"
         ]
         
         # Check for generic question patterns
-        return any(keyword in query_lower for keyword in generic_keywords)
+        if any(keyword in query_lower for keyword in generic_keywords):
+            return True
+            
+        # Additional pattern: "What is [service/component/project name]?" 
+        # This catches queries like "What is the purpose of car-notification-service?"
+        if query_lower.startswith("what is") and any(word in query_lower for word in ["service", "component", "module", "system", "project", "application", "app"]):
+            return True
+            
+        return False

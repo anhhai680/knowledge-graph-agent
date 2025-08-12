@@ -373,9 +373,9 @@ class GenericQARequest(BaseModel):
         max_length=2000,
         json_schema_extra={"example": "What is the business domain of this project?"}
     )
-    repository_identifier: str = Field(
-        ...,
-        description="Repository to analyze",
+    repository_identifier: Optional[str] = Field(
+        None,
+        description="Repository to analyze (can be parsed from question if not provided)",
         json_schema_extra={"example": "owner/repository-name"}
     )
     preferred_template: Optional[str] = Field(

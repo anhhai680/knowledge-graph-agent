@@ -194,7 +194,7 @@ class GenericQAAgent(BaseAgent):
 
     def _extract_repository_identifier(self, input_data: Union[str, Dict[str, Any]]) -> Optional[str]:
         """
-        Extract repository identifier from input data.
+        Extract repository identifier from input data or parse from query text.
         
         Args:
             input_data: Input data
@@ -202,8 +202,82 @@ class GenericQAAgent(BaseAgent):
         Returns:
             Repository identifier if available
         """
+        # Check if explicitly provided in dict input
         if isinstance(input_data, dict):
-            return input_data.get("repository_identifier")
+            explicit_repo = input_data.get("repository_identifier")
+            if explicit_repo:
+                return explicit_repo
+                
+        # Extract repository name from query text
+        question = self._extract_question(input_data)
+        if question:
+            return self._parse_repository_from_query(question)
+            
+        return None
+
+    def _parse_repository_from_query(self, query: str) -> Optional[str]:
+        """
+        Parse repository name from query text.
+        
+        This method looks for patterns like:
+        - "What is the purpose of car-notification-service?"
+        - "How does the car-listing-service work?"
+        - "Explain user-management-api endpoints"
+        
+        Args:
+            query: User query text
+            
+        Returns:
+            Repository name if found, None otherwise
+        """
+        import re
+        
+        query_lower = query.lower()
+        
+        # Common repository/service name patterns
+        # Pattern 1: service/api/app names with hyphens (most common in microservices)
+        service_pattern = r'\b([a-z]+(?:-[a-z]+)*(?:-(?:service|api|app|client|server|web|backend|frontend))?)\b'
+        
+        # Look for service-like names in the query
+        matches = re.findall(service_pattern, query_lower)
+        
+        # Filter to find the most likely repository name
+        for match in matches:
+            # Skip common words that aren't repository names
+            if match in ['the', 'of', 'is', 'what', 'how', 'why', 'when', 'where', 'this', 'that', 'can', 'will', 'would', 'should']:
+                continue
+                
+            # Look for typical service/repo patterns
+            if any(suffix in match for suffix in ['-service', '-api', '-app', '-client', '-web', '-server', '-backend', '-frontend']):
+                self.logger.debug(f"Found repository identifier in query: '{match}'")
+                return match
+            
+            # If it's a multi-word hyphenated name (likely a service name)
+            if '-' in match and len(match) > 8:  # Reasonable minimum length for service names
+                self.logger.debug(f"Found potential repository identifier: '{match}'")
+                return match
+        
+        # Pattern 2: Look for specific project names mentioned
+        # This could be enhanced with a config file of known repositories
+        known_repo_patterns = [
+            r'\bcar-notification-service\b',
+            r'\bcar-listing-service\b', 
+            r'\bcar-order-service\b',
+            r'\bcar-web-client\b',
+            r'\buser-management\b',
+            r'\bnotification-service\b',
+            r'\blisting-service\b',
+            r'\border-service\b'
+        ]
+        
+        for pattern in known_repo_patterns:
+            match = re.search(pattern, query_lower)
+            if match:
+                repo_name = match.group(0)
+                self.logger.debug(f"Found known repository pattern: '{repo_name}'")
+                return repo_name
+        
+        self.logger.debug("No repository identifier found in query")
         return None
 
     def _extract_include_code_examples(self, input_data: Union[str, Dict[str, Any]]) -> bool:

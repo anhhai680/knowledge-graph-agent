@@ -69,7 +69,11 @@ class QuestionClassifier:
             GenericQuestionCategory.BUSINESS_CAPABILITY: [
                 "business", "domain", "entities", "scope", "capability",
                 "requirements", "functional", "use case", "user story",
-                "business logic", "business rules", "domain model"
+                "business logic", "business rules", "domain model",
+                "purpose", "function", "role", "responsibility", "job",
+                "designed for", "used for", "meant for", "what does",
+                "what is", "main function", "primary purpose", "core purpose",
+                "business purpose", "business value", "value proposition"
             ],
             GenericQuestionCategory.ARCHITECTURE: [
                 "architecture", "design", "pattern", "structure", "component",
@@ -198,7 +202,7 @@ class QuestionClassifier:
                     suggested_analyzers=["general_analyzer"]
                 )
 
-            best_category = max(category_scores, key=category_scores.get)
+            best_category = max(category_scores.keys(), key=lambda k: category_scores[k])
             best_score = category_scores[best_category]
             
             # Get suggested analyzers based on category
@@ -339,7 +343,17 @@ class QuestionClassifier:
 
         except Exception as e:
             self.logger.error(f"Error analyzing question context: {e}", exc_info=True)
-            return {"classification": classification, "error": str(e)}
+            # Return basic classification result on error
+            return {
+                "classification": QuestionClassificationResult(
+                    category=GenericQuestionCategory.BUSINESS_CAPABILITY,
+                    confidence=0.0,
+                    keywords_matched=[],
+                    context_indicators=[],
+                    suggested_analyzers=["general_analyzer"]
+                ), 
+                "error": str(e)
+            }
 
     def _assess_question_complexity(self, question: str) -> str:
         """
