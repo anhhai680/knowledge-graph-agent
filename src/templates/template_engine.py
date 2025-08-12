@@ -226,11 +226,46 @@ class TemplateEngine:
     ) -> Dict[str, Any]:
         """Generate business capability response using actual repository data."""
         
-        # Extract repository information
+        # Check if repository was found in vector database
         repository_name = repository_context.get("repository", "Unknown Repository")
+        context_type = repository_context.get("type", "analyzed")
+        
+        if context_type == "not_found":
+            # Repository not found in vector database - return clear message
+            return {
+                "overview": {
+                    "repository": repository_name,
+                    "status": "Repository not found in vector database",
+                    "message": repository_context.get("message", f"The repository '{repository_name}' has not been indexed yet."),
+                    "suggestion": repository_context.get("suggestion", f"Please ensure the repository '{repository_name}' is indexed before asking questions about it.")
+                },
+                "error_info": {
+                    "error_type": "repository_not_indexed",
+                    "repository_requested": repository_name,
+                    "available_action": "Index the repository first using the indexing workflow"
+                }
+            }
+        
+        # Extract repository information from actual vector database results
         documents = repository_context.get("raw_documents", [])
         frameworks = list(repository_context.get("frameworks", set()))
         languages = list(repository_context.get("languages", set()))
+        
+        if not documents:
+            # No documents found - return appropriate message
+            return {
+                "overview": {
+                    "repository": repository_name,
+                    "status": "No documents found",
+                    "message": f"No code documents were found for repository '{repository_name}' in the vector database.",
+                    "suggestion": "The repository may need to be indexed first, or the repository name may be incorrect."
+                },
+                "analysis_summary": {
+                    "documents_analyzed": 0,
+                    "vector_search_performed": True,
+                    "result": "No matching documents found"
+                }
+            }
         
         # Analyze actual business capabilities from documents
         business_capabilities = []
@@ -283,13 +318,23 @@ class TemplateEngine:
                 if "delete" in content:
                     api_features.append("Data Deletion")
         
-        # Remove duplicates and clean up
-        business_capabilities = list(set(business_capabilities)) or ["General Business Operations"]
-        business_entities = list(set(business_entities)) or ["Business Data"]
-        api_features = list(set(api_features)) or ["Basic CRUD Operations"]
+        # Remove duplicates
+        business_capabilities = list(set(business_capabilities))
+        business_entities = list(set(business_entities))
+        api_features = list(set(api_features))
         
-        # Determine business domain based on repository name and capabilities
-        business_domain = "General Business System"
+        # If no capabilities found from actual code, indicate this clearly
+        if not business_capabilities:
+            business_capabilities = [f"Analysis incomplete - no clear business capabilities detected in {len(documents)} documents"]
+        
+        if not business_entities:
+            business_entities = [f"No business entities detected in code analysis"]
+        
+        if not api_features:
+            api_features = [f"No API features detected in code analysis"]
+        
+        # Determine business domain based on repository name and actual capabilities found
+        business_domain = "Unknown Domain"
         if "car" in repository_name.lower():
             business_domain = "Automotive Services"
         elif "notification" in repository_name.lower():
@@ -300,35 +345,41 @@ class TemplateEngine:
             business_domain = "User Management System"
         elif "order" in repository_name.lower():
             business_domain = "Order Management System"
+        else:
+            # Try to infer from detected capabilities
+            if any("notification" in cap.lower() for cap in business_capabilities):
+                business_domain = "Communication Services"
+            elif any("user" in cap.lower() for cap in business_capabilities):
+                business_domain = "User Management Services"
+            elif any("transaction" in cap.lower() for cap in business_capabilities):
+                business_domain = "Transaction Processing Services"
         
-        # Determine core purpose based on actual capabilities
-        core_purpose = f"Provides {business_domain.lower()} functionality"
-        if "notification" in ' '.join(business_capabilities).lower():
-            core_purpose += " with notification and communication features"
-        if "listing" in ' '.join(business_capabilities).lower():
-            core_purpose += " with catalog and listing management"
-        if "auth" in ' '.join(business_capabilities).lower():
-            core_purpose += " with secure authentication"
+        # Determine core purpose based on actual capabilities found
+        if len(business_capabilities) > 0 and "Analysis incomplete" not in business_capabilities[0]:
+            core_purpose = f"Provides {business_domain.lower()} with focus on {', '.join(business_capabilities[:2]).lower()}"
+        else:
+            core_purpose = f"Repository analysis found {len(documents)} documents but business capabilities require manual review"
         
         return {
             "overview": {
                 "repository": repository_name,
                 "business_domain": business_domain,
                 "core_purpose": core_purpose,
-                "scope": f"Handles {', '.join(business_capabilities[:3]).lower()} and related operations",
+                "scope": f"Based on analysis of {len(documents)} documents: {', '.join(business_capabilities[:3]).lower() if business_capabilities else 'capabilities unclear'}",
                 "technology_stack": languages + frameworks
             },
             "core_capabilities": business_capabilities,
             "business_entities": business_entities,
             "api_functionality": api_features,
-            "value_proposition": f"Streamlines {business_domain.lower()} through automated {', '.join(business_capabilities[:2]).lower()}",
-            "target_users": analysis_results.get("target_users", ["End Users", "System Administrators", "API Consumers"]),
+            "value_proposition": f"Repository analysis suggests focus on {business_domain.lower()}" if business_domain != "Unknown Domain" else "Value proposition requires manual review of repository content",
+            "target_users": analysis_results.get("target_users", ["Unable to determine from available code analysis"]),
             "key_processes": business_capabilities,
             "analysis_summary": {
                 "documents_analyzed": len(documents),
                 "source_files": len(repository_context.get("source_files", [])),
                 "languages_detected": languages,
-                "frameworks_detected": frameworks
+                "frameworks_detected": frameworks,
+                "analysis_confidence": "High" if len(business_capabilities) > 2 and "Analysis incomplete" not in business_capabilities[0] else "Low - manual review recommended"
             }
         }
 
@@ -857,12 +908,47 @@ class TemplateEngine:
     ) -> Dict[str, Any]:
         """Generate general response using actual repository data."""
         
-        # Extract repository information
+        # Check if repository was found in vector database
         repository_name = repository_context.get("repository", "Unknown Repository")
+        context_type = repository_context.get("type", "analyzed")
+        
+        if context_type == "not_found":
+            # Repository not found in vector database - return clear message
+            return {
+                "overview": {
+                    "repository": repository_name,
+                    "status": "Repository not found in vector database",
+                    "message": repository_context.get("message", f"The repository '{repository_name}' has not been indexed yet."),
+                    "suggestion": repository_context.get("suggestion", f"Please ensure the repository '{repository_name}' is indexed before asking questions about it.")
+                },
+                "error_info": {
+                    "error_type": "repository_not_indexed",
+                    "repository_requested": repository_name,
+                    "available_action": "Index the repository first using the indexing workflow"
+                }
+            }
+        
+        # Extract repository information from actual vector database results
         documents = repository_context.get("raw_documents", [])
         languages = list(repository_context.get("languages", set()))
         frameworks = list(repository_context.get("frameworks", set()))
         source_files = repository_context.get("source_files", [])
+        
+        if not documents:
+            # No documents found - return appropriate message
+            return {
+                "overview": {
+                    "repository": repository_name,
+                    "status": "No documents found",
+                    "message": f"No code documents were found for repository '{repository_name}' in the vector database.",
+                    "suggestion": "The repository may need to be indexed first, or the repository name may be incorrect."
+                },
+                "analysis_summary": {
+                    "documents_analyzed": 0,
+                    "vector_search_performed": True,
+                    "result": "No matching documents found"
+                }
+            }
         
         # Analyze project characteristics from actual content
         project_features = []
@@ -915,7 +1001,7 @@ class TemplateEngine:
             project_type = "Communication Platform"
         
         # Generate primary purpose based on repository name and features
-        primary_purpose = f"Provides {project_type.lower()} functionality"
+        primary_purpose = f"Analysis of {len(documents)} documents suggests this is a {project_type.lower()}"
         if "car" in repository_name.lower():
             primary_purpose = "Automotive service management platform"
         elif "notification" in repository_name.lower():
@@ -923,25 +1009,25 @@ class TemplateEngine:
         elif "listing" in repository_name.lower():
             primary_purpose = "Catalog and listing management system"
         
-        # Set defaults if nothing detected
+        # Don't set defaults if nothing detected - be honest about what we found
         if not project_features:
-            project_features = ["Core Application Logic", "Data Processing", "User Interface"]
+            project_features = [f"Unable to determine clear features from {len(documents)} documents analyzed"]
         if not technical_highlights:
-            technical_highlights = ["Clean Code Architecture", "Maintainable Structure"]
+            technical_highlights = [f"No specific technical patterns detected in code analysis"]
         
         return {
             "overview": {
                 "repository": repository_name,
                 "project_type": project_type,
                 "primary_purpose": primary_purpose,
-                "technology_focus": f"{', '.join(languages)} development" if languages else "Modern software development",
+                "technology_focus": f"{', '.join(languages)} development" if languages else "Technology stack unclear from analysis",
                 "file_count": len(source_files)
             },
             "key_features": project_features,
             "technical_highlights": {
-                "architecture": "Structured and maintainable codebase",
-                "scalability": "Designed for growth and performance" if technical_highlights else "Standard application structure",
-                "maintainability": "Clean code practices" if technical_highlights else "Organized code structure",
+                "architecture": f"Based on {len(documents)} documents: structured codebase" if len(documents) > 5 else f"Limited analysis from {len(documents)} documents",
+                "scalability": "Patterns suggest scalable design" if technical_highlights else "Scalability patterns not clearly evident",
+                "maintainability": "Clean code practices evident" if technical_highlights else "Code organization requires further analysis",
                 "specific_features": technical_highlights
             },
             "technology_stack": {
@@ -950,15 +1036,15 @@ class TemplateEngine:
                 "total_technologies": len(languages) + len(frameworks)
             },
             "recommendations": [
-                "Continue following established patterns",
-                "Maintain comprehensive testing" if "Automated Testing" in project_features else "Consider adding automated testing",
-                "Keep documentation updated",
-                "Monitor performance and security" if "Security Features" in project_features else "Consider enhancing security features"
+                "Analysis based on actual repository content" if project_features else "Repository analysis incomplete",
+                "Consider adding more comprehensive documentation" if len(documents) < 10 else "Well-documented repository",
+                "Maintain current development patterns" if technical_highlights else "Consider enhancing code documentation and structure"
             ],
             "analysis_summary": {
                 "documents_analyzed": len(documents),
-                "features_detected": len(project_features),
-                "technical_patterns": len(technical_highlights)
+                "features_detected": len([f for f in project_features if "Unable to determine" not in f]),
+                "technical_patterns": len([h for h in technical_highlights if "No specific" not in h]),
+                "confidence_level": "High" if len(documents) > 10 and len(project_features) > 3 else "Low - limited data available"
             }
         }
 

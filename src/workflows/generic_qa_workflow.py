@@ -424,7 +424,9 @@ class GenericQAWorkflow(BaseWorkflow):
                     return {
                         "repository": repository_identifier,
                         "type": "not_found",
-                        "error": f"No documents found for repository '{repository_identifier}'"
+                        "error": f"No documents found for repository '{repository_identifier}'",
+                        "message": f"The repository '{repository_identifier}' has not been indexed yet or does not exist in the vector database.",
+                        "suggestion": f"Please ensure the repository '{repository_identifier}' is indexed before asking questions about it."
                     }
             
             # Analyze documents to extract repository context
@@ -911,17 +913,51 @@ class GenericQAWorkflow(BaseWorkflow):
         # Overview section
         overview = sections.get("overview", {})
         if overview:
+            status = overview.get('status')
+            
+            # Handle repository not found case
+            if status == "Repository not found in vector database":
+                repository = overview.get('repository', 'Unknown Repository')
+                message = overview.get('message', 'Repository not found')
+                suggestion = overview.get('suggestion', 'Please index the repository first')
+                
+                lines.append(f"I cannot provide business capability information for '{repository}' because it has not been indexed in the vector database.")
+                lines.append("")
+                lines.append(message)
+                lines.append("")
+                lines.append(f"Suggestion: {suggestion}")
+                return "\n".join(lines)
+            
+            # Handle no documents found case
+            if status == "No documents found":
+                repository = overview.get('repository', 'Unknown Repository')
+                message = overview.get('message', 'No documents found')
+                suggestion = overview.get('suggestion', 'Repository may need to be indexed')
+                
+                lines.append(f"I searched for business capability information about '{repository}' but found no relevant documents.")
+                lines.append("")
+                lines.append(message)
+                lines.append("")
+                lines.append(f"Suggestion: {suggestion}")
+                return "\n".join(lines)
+            
+            # Normal case with actual repository data
+            repository = overview.get('repository', 'this project')
+            business_domain = overview.get('business_domain', 'Unknown Domain')
             core_purpose = overview.get('core_purpose', 'Not specified')
             scope = overview.get('scope', 'Not specified')
             
-            lines.append(f"This project serves as a {core_purpose.lower()}.")
-            lines.append(f"Its scope includes: {scope.lower()}.")
+            lines.append(f"Based on my analysis of the '{repository}' repository, here are the business capabilities:")
+            lines.append("")
+            lines.append(f"Business Domain: {business_domain}")
+            lines.append(f"Core Purpose: {core_purpose}")
+            lines.append(f"Scope: {scope}")
             lines.append("")
         
         # Core capabilities
         capabilities = sections.get("core_capabilities", [])
         if capabilities:
-            lines.append("The main capabilities include:")
+            lines.append("Main capabilities include:")
             for capability in capabilities:
                 lines.append(f"  • {capability}")
             lines.append("")
@@ -945,11 +981,20 @@ class GenericQAWorkflow(BaseWorkflow):
         
         # Key processes
         processes = sections.get("key_processes", [])
-        if processes:
+        if processes and processes != capabilities:  # Avoid duplication
             lines.append("")
             lines.append("Key processes:")
             for process in processes:
                 lines.append(f"  • {process}")
+        
+        # Analysis summary
+        analysis_summary = sections.get("analysis_summary", {})
+        if analysis_summary:
+            docs_analyzed = analysis_summary.get("documents_analyzed", 0)
+            confidence = analysis_summary.get("analysis_confidence", "Unknown")
+            
+            lines.append("")
+            lines.append(f"Analysis Summary: {docs_analyzed} documents analyzed, confidence level: {confidence}")
         
         return "\n".join(lines)
 
@@ -974,7 +1019,39 @@ class GenericQAWorkflow(BaseWorkflow):
         """Format general response for unknown categories in a conversational way."""
         lines = []
         
-        lines.append("Based on my analysis, here's what I found:")
+        # Check if this is a repository not found case
+        overview = sections.get("overview", {})
+        if overview:
+            status = overview.get('status')
+            
+            # Handle repository not found case
+            if status == "Repository not found in vector database":
+                repository = overview.get('repository', 'Unknown Repository')
+                message = overview.get('message', 'Repository not found')
+                suggestion = overview.get('suggestion', 'Please index the repository first')
+                
+                lines.append(f"I cannot provide information about '{repository}' because it has not been indexed in the vector database.")
+                lines.append("")
+                lines.append(message)
+                lines.append("")
+                lines.append(f"Suggestion: {suggestion}")
+                return "\n".join(lines)
+            
+            # Handle no documents found case
+            if status == "No documents found":
+                repository = overview.get('repository', 'Unknown Repository')
+                message = overview.get('message', 'No documents found')
+                suggestion = overview.get('suggestion', 'Repository may need to be indexed')
+                
+                lines.append(f"I searched for information about '{repository}' but found no relevant documents.")
+                lines.append("")
+                lines.append(message)
+                lines.append("")
+                lines.append(f"Suggestion: {suggestion}")
+                return "\n".join(lines)
+        
+        # Normal case - format analysis results
+        lines.append("Based on my analysis of the repository, here's what I found:")
         lines.append("")
         
         for section_name, section_content in sections.items():
