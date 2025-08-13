@@ -234,10 +234,20 @@ class RAGAgent(BaseAgent):
                     generated_answer = q2_answer
                 else:
                     logger.warning("RAGAgent: Q2 template detected but no prompt available, using workflow response")
-                    generated_answer = result.get("llm_generation", {}).get("generated_response", "No answer generated")
+                    # Check for response in multiple locations
+                    generated_answer = (
+                        result.get("generated_response") or  # Generic Q&A stores here
+                        result.get("llm_generation", {}).get("generated_response") or  # Standard workflow stores here
+                        "No answer generated"
+                    )
             else:
                 # Use standard workflow response for non-Q2 queries
-                generated_answer = result.get("llm_generation", {}).get("generated_response", "No answer generated")
+                # Check for response in multiple locations
+                generated_answer = (
+                    result.get("generated_response") or  # Generic Q&A stores here
+                    result.get("llm_generation", {}).get("generated_response") or  # Standard workflow stores here
+                    "No answer generated"
+                )
 
             # Format response with enhanced context
             formatted_response = {

@@ -97,7 +97,7 @@ class EventFlowAnalyzer:
         """
         query_lower = query.lower().strip()
         
-        # Direct event flow indicators
+        # Direct event flow indicators - these are strong signals for event flow
         event_flow_indicators = [
             "walk me through",
             "walk through",
@@ -107,33 +107,55 @@ class EventFlowAnalyzer:
             "process flow",
             "workflow",
             "sequence of events",
-            "how does it work",
             "explain the process",
             "flow of",
             "chain of events"
         ]
         
-        # Check for direct indicators
+        # Check for direct indicators first (these are sufficient on their own)
         for indicator in event_flow_indicators:
             if indicator in query_lower:
                 self.logger.debug(f"Event flow query detected with indicator: '{indicator}'")
                 return True
         
-        # Check for action + entity patterns that suggest workflow
+        # More restrictive secondary detection - require stronger evidence
+        # Only check for patterns if the query clearly asks about processes/workflows
+        
+        # Strong process/workflow question patterns that suggest event flow
+        strong_workflow_patterns = [
+            "how does it work",
+            "how does this work", 
+            "how do they work",
+            "how does the process",
+            "what is the process",
+            "describe the process",
+            "explain how",
+            "walk through",
+            "trace through"
+        ]
+        
+        # Check for strong workflow patterns
+        for pattern in strong_workflow_patterns:
+            if pattern in query_lower:
+                self.logger.debug(f"Event flow query detected with workflow pattern: '{pattern}'")
+                return True
+        
+        # More restrictive entity + action detection
+        # Only trigger if there are clear action verbs AND multiple entities AND workflow context
         has_action = any(action in query_lower for action in self._action_keywords)
-        has_entity = any(entity in query_lower for entity in self._entity_keywords)
+        has_multiple_entities = sum(1 for entity in self._entity_keywords if entity in query_lower) >= 2
         has_workflow_context = any(
             pattern_word in query_lower 
             for patterns in self._workflow_patterns.values() 
             for pattern_word in patterns
         )
         
-        # Require at least action + entity or workflow context for detection
-        if (has_action and has_entity) or has_workflow_context:
-            # Additional check for process-oriented language
-            process_indicators = ["when", "how", "what", "process", "flow", "step"]
-            if any(indicator in query_lower for indicator in process_indicators):
-                self.logger.debug(f"Event flow query detected with pattern matching")
+        # Require ALL THREE conditions for secondary detection to avoid false positives
+        if has_action and has_multiple_entities and has_workflow_context:
+            # Additional check for process-oriented language (more restrictive)
+            strong_process_indicators = ["when", "process", "flow", "step", "sequence"]
+            if any(indicator in query_lower for indicator in strong_process_indicators):
+                self.logger.debug(f"Event flow query detected with pattern matching (action + entities + workflow)")
                 return True
         
         return False
@@ -253,7 +275,7 @@ class EventFlowAnalyzer:
         
         if pattern_scores:
             # Return pattern with highest score
-            best_pattern = max(pattern_scores, key=pattern_scores.get)
+            best_pattern = max(pattern_scores.keys(), key=lambda k: pattern_scores[k])
             self.logger.debug(f"Detected workflow pattern: {best_pattern} (score: {pattern_scores[best_pattern]})")
             return best_pattern
         

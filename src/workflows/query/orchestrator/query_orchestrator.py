@@ -17,6 +17,7 @@ from src.workflows.workflow_states import (
     update_workflow_progress,
     QueryIntent
 )
+from src.workflows.generic_qa_workflow import GenericQAWorkflow
 from ..handlers.query_parsing_handler import QueryParsingHandler
 from ..handlers.vector_search_handler import VectorSearchHandler
 from ..handlers.llm_generation_handler import LLMGenerationHandler
@@ -91,6 +92,7 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
         )
         self.llm_handler = LLMGenerationHandler(**kwargs)
         self.event_flow_handler = EventFlowHandler(**kwargs)
+        self.generic_qa_handler = GenericQAWorkflow(**kwargs)
         
     def _validate_confidence_constants(self) -> None:
         """
@@ -237,14 +239,60 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
                 state = self.event_flow_handler.invoke(state)
                 # Mark as processed to skip other steps
                 state["metadata"]["event_flow_processed"] = True
+            elif query_intent == QueryIntent.GENERIC_QA:
+                # Use Generic Q&A handler for complete processing
+                self.logger.info("Using Generic Q&A handler for GENERIC_QA query")
+                
+                # Extract repository identifier from the original query if possible
+                original_query = state.get("original_query", "")
+                repository_identifier = self._extract_repository_from_query(original_query)
+                
+                # Create Generic Q&A state with required fields
+                generic_qa_state = {
+                    "workflow_id": f"generic-qa-{int(time.time())}",
+                    "question": original_query,
+                    "repository_identifier": repository_identifier or "unknown",
+                    "include_code_examples": True,
+                    "preferred_template": None,
+                    "current_step": "initialize",
+                    "metadata": {},
+                    "sources": [],
+                    "errors": []
+                }
+                
+                # Invoke Generic Q&A workflow
+                try:
+                    generic_qa_result = self.generic_qa_handler.invoke(generic_qa_state)
+                    
+                    # Debug logging to understand the result structure
+                    self.logger.debug(f"Generic Q&A result keys: {list(generic_qa_result.keys()) if isinstance(generic_qa_result, dict) else type(generic_qa_result)}")
+                    if isinstance(generic_qa_result, dict):
+                        template_response = generic_qa_result.get('template_response', 'NOT_FOUND')
+                        if isinstance(template_response, str):
+                            self.logger.debug(f"Generic Q&A result template_response: {template_response[:100]}...")
+                        else:
+                            self.logger.debug(f"Generic Q&A result template_response type: {type(template_response)}")
+                    
+                    # Convert Generic Q&A response to Query workflow format
+                    state = self._convert_generic_qa_to_query_response(state, generic_qa_result)
+                    
+                    # Mark as processed to skip other steps
+                    state["metadata"]["generic_qa_processed"] = True
+                    
+                except Exception as e:
+                    self.logger.error(f"Generic Q&A processing failed: {e}")
+                    # Fallback to regular search
+                    state = self.search_handler.invoke(state)
             else:
                 # Use standard search handler for other query types
                 state = self.search_handler.invoke(state)
             
         elif step == "process_context":
-            # Skip context processing for event flow queries (already handled)
+            # Skip context processing for event flow and generic Q&A queries (already handled)
             if state.get("metadata", {}).get("event_flow_processed"):
                 self.logger.debug("Skipping context processing for event flow query")
+            elif state.get("metadata", {}).get("generic_qa_processed"):
+                self.logger.debug("Skipping context processing for generic Q&A query")
             else:
                 # Use context handler's invoke method
                 state = self.context_handler.invoke(state)
@@ -256,9 +304,11 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
                     state = self.context_handler.invoke(state)
             
         elif step == "generate_response":
-            # Skip LLM generation for event flow queries (already handled)
+            # Skip LLM generation for event flow and generic Q&A queries (already handled)
             if state.get("metadata", {}).get("event_flow_processed"):
                 self.logger.debug("Skipping LLM generation for event flow query")
+            elif state.get("metadata", {}).get("generic_qa_processed"):
+                self.logger.debug("Skipping LLM generation for generic Q&A query")
             else:
                 # Use LLM handler's invoke method
                 state = self.llm_handler.invoke(state)
@@ -345,6 +395,8 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
             return SearchStrategy.KEYWORD  # Documentation often has specific terms
         elif query_intent == QueryIntent.EVENT_FLOW:
             return SearchStrategy.HYBRID  # Event flow needs comprehensive search
+        elif query_intent == QueryIntent.GENERIC_QA:
+            return SearchStrategy.SEMANTIC  # Generic Q&A uses semantic analysis
         else:
             return SearchStrategy.SEMANTIC  # Default to semantic
 
@@ -491,3 +543,154 @@ class QueryWorkflowOrchestrator(BaseWorkflow[QueryState]):
         
         # Ensure confidence never exceeds 1.0
         return min(confidence, 1.0)
+
+    def _extract_repository_from_query(self, query: str) -> Optional[str]:
+        """
+        Extract repository identifier from the query text.
+        
+        Args:
+            query: User query string
+            
+        Returns:
+            Repository identifier if found, None otherwise
+        """
+        query_lower = query.lower()
+        
+        # Common repository name patterns
+        repository_patterns = [
+            "car-listing-service", "car-order-service", "car-notification-service", "car-web-client"
+        ]
+        
+        for repo in repository_patterns:
+            if repo in query_lower:
+                return repo
+                
+        return None
+
+    def _convert_generic_qa_to_query_response(self, query_state: Dict[str, Any], generic_qa_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert Generic Q&A workflow result to Query workflow response format.
+        
+        Args:
+            query_state: Original query workflow state
+            generic_qa_result: Result from Generic Q&A workflow
+            
+        Returns:
+            Updated query state with Generic Q&A response converted to query format
+        """
+        try:
+            # Extract the generated response from Generic Q&A result
+            # First check for template_response (the actual key used by Generic Q&A workflow)
+            template_response = generic_qa_result.get("template_response", "")
+            
+            # If template_response is a dict, extract the actual response content
+            if isinstance(template_response, dict):
+                # Try common keys that might contain the response
+                response_content = (
+                    template_response.get("response", "") or
+                    template_response.get("content", "") or
+                    template_response.get("answer", "") or
+                    template_response.get("text", "") or
+                    str(template_response)  # Convert entire dict to string as fallback
+                )
+            elif isinstance(template_response, str):
+                response_content = template_response
+            else:
+                response_content = str(template_response) if template_response else ""
+            
+            # If still not found, check other possible keys
+            if not response_content:
+                response_content = generic_qa_result.get("response", "")
+            
+            # If not found, check in structured response
+            if not response_content:
+                structured_response = generic_qa_result.get("structured_response", {})
+                response_content = structured_response.get("response", "")
+            
+            # If not found, check in LLM generation section
+            if not response_content:
+                llm_generation = generic_qa_result.get("llm_generation", {})
+                response_content = llm_generation.get("generated_response", "")
+            
+            # If still empty, use a fallback message
+            if not response_content:
+                response_content = "Generic Q&A analysis completed but no response content found."
+                self.logger.warning(f"No response content found in Generic Q&A result keys: {list(generic_qa_result.keys())}")
+            
+            # Update query state with Generic Q&A results
+            query_state["results"] = []  # No traditional search results
+            query_state["total_results"] = 1  # One structured response
+            query_state["generated_response"] = response_content
+            query_state["response_type"] = "generated"  # Mark as generated response
+            query_state["confidence_score"] = generic_qa_result.get("confidence_score", 0.5)
+            query_state["intent"] = "generic_qa"
+            query_state["strategy"] = "structured_analysis"
+            
+            # Add processing metadata
+            query_state["processing_time"] = generic_qa_result.get("processing_time_ms", 0) / 1000.0
+            query_state["template_used"] = generic_qa_result.get("template_used", "generic_template")
+            
+            self.logger.info(f"Converted Generic Q&A result to query response format with response length: {len(response_content)}")
+            
+        except Exception as e:
+            self.logger.error(f"Error converting Generic Q&A result: {e}")
+            # Fallback to simple response
+            query_state["generated_response"] = "Generic Q&A analysis completed but response formatting failed."
+            query_state["response_type"] = "generated"
+            query_state["confidence_score"] = 0.1
+            
+        return query_state
+
+    def _format_generic_qa_for_query_response(self, structured_response: Dict[str, Any]) -> str:
+        """
+        Format Generic Q&A structured response for display in query workflow.
+        
+        Args:
+            structured_response: Structured response from Generic Q&A workflow
+            
+        Returns:
+            Formatted response string
+        """
+        sections = structured_response.get("sections", {})
+        overview = sections.get("overview", {})
+        endpoints = sections.get("endpoints", [])
+        
+        # Build formatted response
+        response = []
+        
+        # Project Overview
+        if overview:
+            response.append("## Project Analysis")
+            response.append(f"**Repository:** {overview.get('repository', 'Unknown')}")
+            response.append(f"**Business Domain:** {overview.get('business_domain', 'Not specified')}")
+            response.append(f"**Total Endpoints:** {overview.get('total_endpoints', 0)}")
+            
+            frameworks = overview.get('frameworks', [])
+            if frameworks:
+                response.append(f"**Frameworks:** {', '.join(frameworks)}")
+            
+            response.append("")
+        
+        # API Endpoints
+        if endpoints:
+            response.append("## API Endpoints")
+            for endpoint in endpoints[:10]:  # Show top 10
+                method = endpoint.get('method', 'GET')
+                path = endpoint.get('path', '')
+                description = endpoint.get('description', '')
+                response.append(f"- **{method}** `{path}` - {description}")
+            
+            if len(endpoints) > 10:
+                response.append(f"... and {len(endpoints) - 10} more endpoints")
+            
+            response.append("")
+        
+        # Authentication
+        auth = sections.get("authentication", {})
+        if auth and auth.get("methods"):
+            response.append("## Authentication")
+            methods = auth.get("methods", [])
+            response.append(f"**Methods:** {', '.join(methods)}")
+            response.append("")
+        
+        return "\n".join(response)

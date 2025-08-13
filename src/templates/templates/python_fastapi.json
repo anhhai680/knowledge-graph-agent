@@ -1,0 +1,63 @@
+{
+  "template_name": "python_fastapi",
+  "version": "1.0", 
+  "description": "Template for Python FastAPI projects",
+  "architecture_patterns": ["Clean Architecture", "FastAPI", "Async"],
+  "response_structure": {
+    "overview": "Python FastAPI application analysis",
+    "api_structure": "REST API endpoints and routing",
+    "business_logic": "Service layer and domain models",
+    "infrastructure": "Database, deployment, and operations"
+  },
+  "sections": [
+    "overview",
+    "api_structure",
+    "business_logic", 
+    "infrastructure"
+  ],
+  "include_metadata": true,
+  "question_categories": {
+    "architecture": {
+      "analysis_requirements": ["fastapi_structure", "async_patterns", "dependency_injection"],
+      "response_focus": {
+        "scope": "FastAPI application architecture",
+        "patterns": ["Clean Architecture", "Dependency Injection", "Async/Await"],
+        "components": ["Routers", "Services", "Models", "Dependencies"]
+      }
+    },
+    "api_endpoints": {
+      "analysis_requirements": ["route_definitions", "request_models", "response_schemas"],
+      "response_focus": {
+        "scope": "REST API design and implementation",
+        "documentation": "Automatic OpenAPI/Swagger documentation",
+        "validation": "Pydantic model validation"
+      }
+    }
+  },
+  "default_sections": {
+    "overview": {
+      "framework": "FastAPI - Modern, fast Python web framework",
+      "async_support": "Built-in async/await support for high performance",
+      "automatic_docs": "Automatic interactive API documentation",
+      "type_safety": "Full type hints and validation support"
+    },
+    "api_structure": {
+      "routing": "APIRouter for modular endpoint organization",
+      "validation": "Pydantic models for request/response validation", 
+      "middleware": "CORS, authentication, and custom middleware",
+      "documentation": "Automatic OpenAPI schema generation"
+    },
+    "business_logic": {
+      "services": "Business logic in service layer",
+      "models": "Pydantic models for data validation",
+      "dependencies": "Dependency injection for loose coupling",
+      "error_handling": "Comprehensive exception handling"
+    },
+    "infrastructure": {
+      "database": "SQL/NoSQL database integration with ORMs",
+      "deployment": "ASGI server deployment (Uvicorn/Gunicorn)",
+      "containers": "Docker containerization support",
+      "monitoring": "Health checks and metrics endpoints"
+    }
+  }
+}

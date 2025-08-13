@@ -9,7 +9,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
 
@@ -31,7 +31,12 @@ from src.api.models import (
     SearchStrategy,
     GraphQueryRequest,
     GraphQueryResponse,
-    GraphInfoResponse
+    GraphInfoResponse,
+    # New Generic Q&A models
+    GenericQARequest,
+    GenericQAResponse, 
+    GenericQAStatusResponse,
+    GenericQuestionCategory
 )
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
@@ -84,6 +89,7 @@ def _map_workflow_intent_to_api(workflow_intent: str) -> QueryIntent:
         "architecture": QueryIntent.ARCHITECTURE,  # Now available in API enum
         "implementation": QueryIntent.IMPLEMENTATION,
         "event_flow": QueryIntent.EVENT_FLOW,  # Add missing event_flow mapping
+        "generic_qa": QueryIntent.GENERIC_QA,  # Add Generic Q&A mapping
         "general": QueryIntent.GENERAL,
     }
     return mapping.get(workflow_intent, QueryIntent.GENERAL)
@@ -137,6 +143,13 @@ def get_graph_store():
     # This will be implemented in main.py as a dependency
     from src.api.main import get_graph_store
     return get_graph_store()
+
+
+def get_generic_qa_agent():
+    """Dependency injection for generic Q&A agent."""
+    # This will be implemented in main.py as a dependency
+    from src.api.main import get_generic_qa_agent
+    return get_generic_qa_agent()
 
 
 @router.get("/")
@@ -484,12 +497,14 @@ This architecture provides flexibility and maintainability by organizing functio
         logger.debug(f"API ROUTE DEBUG: Is event flow: {is_event_flow_response}, Is Q2: {is_q2_response}")
         
         # Determine response type and content based on query type
-        if is_event_flow_response or is_q2_response:
-            # For event flow or Q2 queries, return the generated response
+        if is_event_flow_response or is_q2_response or intent_value == "generic_qa":
+            # For event flow, Q2, or Generic Q&A queries, return the generated response
             response_type = "generated"
             generated_response = generated_answer
             if is_event_flow_response:
                 logger.info(f"Returning generated response for EVENT_FLOW query: {len(generated_response)} characters")
+            elif intent_value == "generic_qa":
+                logger.info(f"Returning generated response for GENERIC_QA query: {len(generated_response)} characters")
             else:
                 logger.info(f"Returning generated response for Q2 query: {len(generated_response)} characters")
         else:
@@ -1408,6 +1423,215 @@ async def preview_incremental_changes(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to preview incremental changes: {str(e)}"
+        )
+
+
+# Generic Q&A Endpoints
+
+@router.post("/generic-qa/ask", response_model=GenericQAResponse)
+async def ask_generic_question(
+    request: GenericQARequest,
+    generic_qa_agent = Depends(get_generic_qa_agent),
+) -> GenericQAResponse:
+    """
+    Process generic project questions using the Generic Q&A Agent.
+    
+    This endpoint provides structured responses to generic project questions
+    about business capabilities, architecture, API endpoints, data modeling,
+    and operational aspects using template-based generation.
+    """
+    try:
+        start_time = datetime.now()
+        
+        logger.info(f"Processing generic question: {request.question[:100]}...")
+        
+        # Process question through Generic Q&A Agent
+        agent_result = await generic_qa_agent.ainvoke({
+            "question": request.question,
+            "repository_identifier": request.repository_identifier,
+            "preferred_template": request.preferred_template,
+            "include_code_examples": request.include_code_examples
+        })
+        
+        # Calculate processing time
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+        
+        # Check if agent processing was successful
+        if not agent_result.get("success", False):
+            error_message = agent_result.get("error", "Unknown error occurred")
+            logger.error(f"Generic Q&A agent failed: {error_message}")
+            raise HTTPException(status_code=500, detail=f"Agent processing failed: {error_message}")
+        
+        # Extract response data
+        response = GenericQAResponse(
+            question=agent_result.get("question", request.question),
+            question_category=GenericQuestionCategory(agent_result.get("question_category", "general")),
+            structured_response=agent_result.get("structured_response", {}),
+            confidence_score=agent_result.get("confidence_score", 0.0),
+            sources=agent_result.get("sources", []),
+            processing_time_ms=int(processing_time),
+            template_used=agent_result.get("template_used", "generic_template"),
+            classification=agent_result.get("classification"),
+            warnings=agent_result.get("warnings")
+        )
+        
+        logger.info(f"Generic Q&A processed successfully in {processing_time:.2f}ms")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Generic Q&A processing failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Generic Q&A processing failed: {str(e)}"
+        )
+
+
+@router.get("/generic-qa/status", response_model=GenericQAStatusResponse)
+async def get_generic_qa_status(
+    generic_qa_agent = Depends(get_generic_qa_agent),
+) -> GenericQAStatusResponse:
+    """
+    Get Generic Q&A Agent status and capabilities.
+    
+    Returns information about the agent's current status, supported categories,
+    available templates, and capabilities.
+    """
+    try:
+        logger.info("Retrieving Generic Q&A agent status")
+        
+        # Get agent capabilities
+        capabilities = generic_qa_agent.get_agent_capabilities()
+        
+        # Get supported categories
+        supported_categories = await generic_qa_agent.get_supported_categories()
+        
+        # Get available templates
+        from src.templates.template_engine import TemplateEngine
+        template_engine = TemplateEngine()
+        available_templates = template_engine.get_available_templates()
+        
+        response = GenericQAStatusResponse(
+            agent_name=capabilities.get("agent_name", "GenericQAAgent"),
+            agent_type=capabilities.get("agent_type", "GenericQAAgent"),
+            status="healthy",
+            supported_categories=supported_categories,
+            available_templates=available_templates,
+            capabilities=capabilities.get("features", {}),
+            last_updated=datetime.now()
+        )
+        
+        logger.info("Generic Q&A agent status retrieved successfully")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Failed to get Generic Q&A agent status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get agent status: {str(e)}"
+        )
+
+
+@router.get("/generic-qa/categories", response_model=List[Dict[str, str]])
+async def get_supported_categories(
+    generic_qa_agent = Depends(get_generic_qa_agent),
+) -> List[Dict[str, str]]:
+    """
+    Get list of supported question categories with descriptions.
+    
+    Returns detailed information about each supported question category
+    including category name and description.
+    """
+    try:
+        logger.info("Retrieving supported question categories")
+        
+        # Get supported categories
+        categories = await generic_qa_agent.get_supported_categories()
+        
+        # Get descriptions for each category
+        category_info = []
+        for category in categories:
+            description = await generic_qa_agent.get_category_description(category)
+            category_info.append({
+                "category": category,
+                "description": description
+            })
+        
+        logger.info(f"Retrieved {len(category_info)} supported categories")
+        return category_info
+        
+    except Exception as e:
+        logger.error(f"Failed to get supported categories: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get supported categories: {str(e)}"
+        )
+
+
+@router.post("/generic-qa/analyze-question", response_model=Dict[str, Any])
+async def analyze_question_only(
+    question: str,
+    generic_qa_agent = Depends(get_generic_qa_agent),
+) -> Dict[str, Any]:
+    """
+    Analyze and classify a question without full processing.
+    
+    This endpoint performs question classification and analysis without
+    generating a full response, useful for understanding question types
+    and getting classification confidence.
+    """
+    try:
+        logger.info(f"Analyzing question classification: {question[:100]}...")
+        
+        # Analyze question only
+        classification_result = await generic_qa_agent.analyze_question_only(question)
+        
+        # Convert to response format
+        response = {
+            "question": question,
+            "category": classification_result.category.value,
+            "confidence": classification_result.confidence,
+            "keywords_matched": classification_result.keywords_matched,
+            "context_indicators": classification_result.context_indicators,
+            "suggested_analyzers": classification_result.suggested_analyzers,
+            "is_reliable": classification_result.confidence >= 0.2
+        }
+        
+        logger.info(f"Question analysis completed: category={classification_result.category.value}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Question analysis failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Question analysis failed: {str(e)}"
+        )
+
+
+@router.get("/generic-qa/templates", response_model=List[str])
+async def get_available_templates() -> List[str]:
+    """
+    Get list of available response templates.
+    
+    Returns a list of available template names that can be used
+    with the preferred_template parameter in question requests.
+    """
+    try:
+        logger.info("Retrieving available response templates")
+        
+        from src.templates.template_engine import TemplateEngine
+        template_engine = TemplateEngine()
+        templates = template_engine.get_available_templates()
+        
+        logger.info(f"Retrieved {len(templates)} available templates")
+        return templates
+        
+    except Exception as e:
+        logger.error(f"Failed to get available templates: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get available templates: {str(e)}"
         )
 
 

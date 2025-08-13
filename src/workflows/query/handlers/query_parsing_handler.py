@@ -110,8 +110,12 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         """
         query_lower = query.lower()
 
-        # Event flow patterns (check first as they are specific)
-        if self._is_event_flow_query(query):
+        # Generic Q&A patterns (check first for project-level questions)
+        if self._is_generic_qa_query(query):
+            return QueryIntent.GENERIC_QA
+
+        # Event flow patterns (check second as they are specific)
+        elif self._is_event_flow_query(query):
             return QueryIntent.EVENT_FLOW
 
         # Explanation patterns (check after event flow to avoid conflicts)
@@ -136,11 +140,18 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
             return QueryIntent.DOCUMENTATION
 
         # Architecture patterns - enhanced to detect Q2 system relationship visualization
+        # Made more specific to avoid catching operational "how to" queries
         elif any(keyword in query_lower for keyword in [
             "architecture", "structure", "design", "pattern", "flow",
             "component", "module", "system", "overview", "connected", "connect",
-            "relationship", "services", "how", "explain what"
-        ]):
+            "relationship", "services", "explain what"
+        ]) or (
+            # Only catch "how" queries that are clearly about system architecture, not operational usage
+            "how" in query_lower and any(arch_term in query_lower for arch_term in [
+                "system works", "architecture works", "services connect", "components interact",
+                "data flows", "system designed", "services communicate"
+            ])
+        ):
             return QueryIntent.ARCHITECTURE
 
         # Code search patterns (moved to end to avoid conflicts)
@@ -326,6 +337,79 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         
         # If query has all three elements, it's likely a Q2-style query
         if has_services and has_connection and has_visualization:
+            return True
+            
+        return False
+
+    def _is_generic_qa_query(self, query: str) -> bool:
+        """
+        Detect if a query is asking for generic project information.
+        
+        Generic Q&A queries are about high-level project characteristics like:
+        - Business domain and purpose
+        - API endpoints and behaviors
+        - Architecture and frameworks
+        - Data models and authentication
+        - Project overview and capabilities
+        - Operational usage patterns ("how to" questions about using services/APIs)
+        
+        Args:
+            query: User query string
+            
+        Returns:
+            bool: True if this is a generic Q&A query, False otherwise
+        """
+        query_lower = query.lower().strip()
+        
+        # Enhanced generic project information keywords with better purpose/function detection
+        generic_keywords = [
+            "business domain", "business purpose", "project purpose", "what is this project",
+            "project overview", "project description", "project capabilities",
+            "api endpoints", "endpoints", "api routes", "available apis",
+            "expected behaviors", "expected behavior", "api behavior", "endpoint behavior",
+            "architecture", "system architecture", "project architecture", "system design",
+            "frameworks", "technologies", "tech stack", "technology stack",
+            "data models", "data model", "database schema", "database models",
+            "authentication", "auth", "authorization", "login system",
+            "deployment", "infrastructure", "hosting",
+            "business capabilities", "features", "functionality",
+            "what does this project do", "what does this system do",
+            "what are the main features", "main components",
+            # Enhanced purpose detection patterns
+            "purpose of", "what is the purpose", "what does the", "what is the",
+            "role of", "responsibility of", "function of", "job of",
+            "used for", "designed for", "meant for"
+        ]
+        
+        # Check for generic question patterns
+        if any(keyword in query_lower for keyword in generic_keywords):
+            return True
+            
+        # Additional pattern: "What is [service/component/project name]?" 
+        # This catches queries like "What is the purpose of car-notification-service?"
+        if query_lower.startswith("what is") and any(word in query_lower for word in ["service", "component", "module", "system", "project", "application", "app"]):
+            return True
+            
+        # Check for "how to" operational patterns - these should go to Generic Q&A for better structured responses
+        # These queries ask about how to use or interact with services/APIs
+        how_to_patterns = [
+            "how to get", "how to retrieve", "how to fetch", "how to access",
+            "how to use", "how to call", "how to invoke", "how to query",
+            "how do i get", "how do i retrieve", "how do i fetch", "how do i access",
+            "how can i get", "how can i retrieve", "how can i fetch", "how can i access"
+        ]
+        
+        # Check if this is a "how to" operational query about a specific service/API
+        has_how_to_pattern = any(pattern in query_lower for pattern in how_to_patterns)
+        has_service_context = any(word in query_lower for word in ["service", "api", "endpoint", "notifications", "data", "users", "events"])
+        
+        # Exclude architectural "how does" questions - these should go to architecture intent
+        is_architectural_how = any(arch_pattern in query_lower for arch_pattern in [
+            "how does the system", "how does the architecture", "how do the services connect",
+            "how do the components", "how does the flow"
+        ])
+        
+        if has_how_to_pattern and has_service_context and not is_architectural_how:
             return True
             
         return False

@@ -24,6 +24,7 @@ class QueryIntent(str, Enum):
     ARCHITECTURE = "architecture"
     IMPLEMENTATION = "implementation"
     EVENT_FLOW = "event_flow"
+    GENERIC_QA = "generic_qa"
     GENERAL = "general"
 
 
@@ -358,3 +359,99 @@ class APIConfig(BaseModel):
     default_timeout: int = Field(default=30, description="Default request timeout in seconds")
     rate_limit_requests: int = Field(default=100, description="Rate limit requests per minute")
     max_parallel_workflows: int = Field(default=10, description="Maximum parallel workflows")
+
+
+# Generic Q&A Models
+
+class GenericQARequest(BaseModel):
+    """Request model for generic Q&A operations."""
+    
+    question: str = Field(
+        ...,
+        description="Generic project question",
+        min_length=1,
+        max_length=2000,
+        json_schema_extra={"example": "What is the business domain of this project?"}
+    )
+    repository_identifier: Optional[str] = Field(
+        None,
+        description="Repository to analyze (can be parsed from question if not provided)",
+        json_schema_extra={"example": "owner/repository-name"}
+    )
+    preferred_template: Optional[str] = Field(
+        None,
+        description="Preferred response template",
+        json_schema_extra={"example": "python_fastapi"}
+    )
+    include_code_examples: bool = Field(
+        True,
+        description="Include code examples in response"
+    )
+    
+    @field_validator('question')
+    @classmethod
+    def validate_question(cls, v):
+        """Validate question content and format."""
+        if not v or not v.strip():
+            raise ValueError("Question cannot be empty")
+        # Basic sanitization
+        sanitized = v.strip()
+        if len(sanitized) < 5:
+            raise ValueError("Question must be at least 5 characters long")
+        return sanitized
+    
+    @field_validator('repository_identifier')
+    @classmethod
+    def validate_repository_identifier(cls, v):
+        """Validate repository identifier format."""
+        if not v or not v.strip():
+            raise ValueError("Repository identifier cannot be empty")
+        # Basic format validation (owner/repo or similar)
+        sanitized = v.strip()
+        if len(sanitized) < 3:
+            raise ValueError("Repository identifier too short")
+        return sanitized
+
+
+class GenericQuestionCategory(str, Enum):
+    """Generic question category enumeration for API responses."""
+    BUSINESS_CAPABILITY = "business_capability"
+    ARCHITECTURE = "architecture"
+    API_ENDPOINTS = "api_endpoints"
+    DATA_MODELING = "data_modeling"
+    OPERATIONAL = "operational"
+    WORKFLOWS = "workflows"
+    GENERAL = "general"
+
+
+class GenericQAResponse(BaseModel):
+    """Response model for generic Q&A operations."""
+    
+    question: str = Field(..., description="Original question text")
+    question_category: GenericQuestionCategory = Field(..., description="Detected question category")
+    structured_response: Dict[str, Any] = Field(..., description="Structured response content")
+    confidence_score: float = Field(..., description="Analysis confidence score", ge=0.0, le=1.0)
+    sources: List[str] = Field(..., description="Information sources used")
+    processing_time_ms: int = Field(..., description="Processing time in milliseconds")
+    template_used: str = Field(..., description="Template used for response generation")
+    
+    classification: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Detailed classification information"
+    )
+    warnings: Optional[List[str]] = Field(
+        None,
+        description="Warning messages if any issues occurred"
+    )
+
+
+class GenericQAStatusResponse(BaseModel):
+    """Response model for generic Q&A agent status."""
+    
+    agent_name: str = Field(..., description="Agent name")
+    agent_type: str = Field(..., description="Agent type")
+    status: str = Field(..., description="Agent status")
+    supported_categories: List[str] = Field(..., description="Supported question categories")
+    available_templates: List[str] = Field(..., description="Available response templates")
+    capabilities: Dict[str, Any] = Field(..., description="Agent capabilities")
+    last_updated: datetime = Field(default_factory=datetime.now, description="Last status update")
