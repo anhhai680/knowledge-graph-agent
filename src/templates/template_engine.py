@@ -534,72 +534,24 @@ class TemplateEngine:
         auth_info = analysis_results.get("authentication", {})
         business_domain = analysis_results.get("business_domain", "")
         
-        # Build comprehensive response based on real data
-        sections = {
-            "overview": {
-                "repository": repository,
-                "total_endpoints": total_endpoints,
-                "business_domain": business_domain,
-                "frameworks": frameworks,
-                "api_patterns": api_patterns,
-                "response_format": "JSON"
-            }
-        }
+        # Extract the original question to check for specific requests
+        original_question = repository_context.get("question", "")
         
-        if endpoints:
-            # Use real endpoints data
-            sections["endpoints"] = detailed_endpoints if detailed_endpoints else endpoints
-            
-            # Group endpoints by method for summary
-            method_summary = analysis_results.get("methods_summary", {})
-            if method_summary:
-                sections["methods_summary"] = method_summary
-            
-            # Add authentication information if detected
-            if auth_info:
-                auth_methods = []
-                if auth_info.get("api_key"):
-                    auth_methods.append("API Key")
-                if auth_info.get("jwt_token"):
-                    auth_methods.append("JWT Token")
-                if auth_info.get("oauth"):
-                    auth_methods.append("OAuth")
-                if auth_info.get("basic_auth"):
-                    auth_methods.append("Basic Authentication")
-                
-                sections["authentication"] = {
-                    "methods": auth_methods,
-                    "detected_patterns": auth_info
-                }
-            
-            # Add integration details
-            sections["integration"] = {
-                "source_files": analysis_results.get("source_files", []),
-                "frameworks_detected": frameworks,
-                "design_patterns": api_patterns
-            }
-            
-            # Add usage examples based on real endpoints
-            if include_code_examples and endpoints:
-                sections["examples"] = self._generate_real_api_examples(endpoints, repository)
-                
-        else:
-            # Handle case where no endpoints were found
-            sections["no_endpoints_found"] = {
-                "status": "No API endpoints detected",
-                "analysis": {
-                    "possible_reasons": analysis_results.get("possible_reasons", []),
-                    "suggestions": analysis_results.get("suggestions", []),
-                    "frameworks_detected": frameworks
-                }
-            }
-            
-            # Include README endpoints if available
-            readme_endpoints = analysis_results.get("readme_endpoints", [])
-            if readme_endpoints:
-                sections["documentation_endpoints"] = readme_endpoints
+        # Check if this is a specific "how to" query for a particular operation
+        specific_operation = self._extract_specific_operation(original_question)
         
-        return sections
+        if specific_operation and endpoints:
+            # Generate targeted response for specific operation
+            return self._generate_targeted_api_response(
+                specific_operation, endpoints, repository, auth_info, 
+                include_code_examples, business_domain
+            )
+        
+        # Generate comprehensive response for general API questions
+        return self._generate_comprehensive_api_response(
+            repository, total_endpoints, frameworks, endpoints, detailed_endpoints,
+            api_patterns, auth_info, business_domain, analysis_results, include_code_examples
+        )
 
     def _generate_real_api_examples(self, endpoints: List[Dict], repository: str) -> Dict[str, str]:
         """Generate realistic API examples based on actual endpoints."""
@@ -1120,3 +1072,328 @@ class TemplateEngine:
             validation_result["errors"].append(f"Validation error: {e}")
         
         return validation_result
+
+    def _extract_specific_operation(self, question: str) -> Optional[str]:
+        """
+        Extract specific operation from question for targeted API responses.
+        
+        Args:
+            question: User question
+            
+        Returns:
+            Specific operation keyword or None if general question
+        """
+        question_lower = question.lower()
+        
+        # Define specific operation patterns
+        operation_patterns = {
+            "notifications": ["notification", "notifications", "notify", "alert", "alerts"],
+            "users": ["user", "users", "account", "accounts", "profile", "profiles"],
+            "events": ["event", "events", "activity", "activities", "log", "logs"],
+            "data": ["data", "information", "record", "records", "entry", "entries"],
+            "messages": ["message", "messages", "msg", "communication"],
+            "files": ["file", "files", "document", "documents", "upload", "download"],
+            "auth": ["auth", "authentication", "login", "logout", "token", "authorize"],
+            "search": ["search", "find", "query", "lookup", "filter"],
+            "create": ["create", "add", "new", "insert", "post"],
+            "update": ["update", "edit", "modify", "change", "put", "patch"],
+            "delete": ["delete", "remove", "destroy"],
+            "list": ["list", "get all", "retrieve all", "fetch all", "show all"]
+        }
+        
+        # Look for "how to" + operation patterns
+        if "how to" in question_lower:
+            for operation, keywords in operation_patterns.items():
+                if any(keyword in question_lower for keyword in keywords):
+                    return operation
+        
+        return None
+
+    def _generate_targeted_api_response(
+        self,
+        operation: str,
+        endpoints: List[Dict[str, Any]],
+        repository: str,
+        auth_info: Dict[str, Any],
+        include_code_examples: bool,
+        business_domain: str
+    ) -> Dict[str, Any]:
+        """
+        Generate targeted response for specific API operation.
+        
+        Args:
+            operation: Specific operation (e.g., "notifications", "users")
+            endpoints: List of available endpoints
+            repository: Repository name
+            auth_info: Authentication information
+            include_code_examples: Whether to include examples
+            business_domain: Business domain
+            
+        Returns:
+            Targeted response focusing on the specific operation
+        """
+        # Filter endpoints related to the specific operation
+        relevant_endpoints = self._filter_endpoints_by_operation(endpoints, operation)
+        
+        if not relevant_endpoints:
+            # No specific endpoints found, provide general guidance
+            return {
+                "operation_specific": {
+                    "requested_operation": operation,
+                    "status": f"No specific endpoints found for {operation}",
+                    "suggestion": f"The {repository} service may not have dedicated {operation} endpoints, or they may be part of a more general API.",
+                    "available_endpoints": len(endpoints),
+                    "recommendation": f"Check the general API documentation or contact the service maintainers for {operation} functionality."
+                }
+            }
+        
+        # Build targeted response
+        sections = {
+            "targeted_guidance": {
+                "operation": operation.title(),
+                "repository": repository,
+                "summary": f"Here's how to work with {operation} in {repository}:",
+                "relevant_endpoints": len(relevant_endpoints)
+            },
+            "specific_endpoints": []
+        }
+        
+        # Add specific endpoint details
+        for endpoint in relevant_endpoints:
+            endpoint_info = {
+                "method": endpoint.get("method", "GET"),
+                "path": endpoint.get("path", endpoint.get("endpoint", "/")),
+                "description": endpoint.get("description", f"{operation.title()} endpoint"),
+                "purpose": self._generate_endpoint_purpose(endpoint, operation)
+            }
+            
+            # Add parameters if available
+            if endpoint.get("parameters"):
+                endpoint_info["parameters"] = endpoint["parameters"]
+            
+            sections["specific_endpoints"].append(endpoint_info)
+        
+        # Add authentication if available
+        if auth_info:
+            sections["authentication"] = {
+                "required": True,
+                "methods": self._extract_auth_methods(auth_info),
+                "example": self._generate_auth_example(auth_info)
+            }
+        
+        # Add usage examples
+        if include_code_examples and relevant_endpoints:
+            sections["usage_examples"] = self._generate_operation_examples(relevant_endpoints, operation, auth_info)
+        
+        return sections
+
+    def _generate_comprehensive_api_response(
+        self,
+        repository: str,
+        total_endpoints: int,
+        frameworks: List[str],
+        endpoints: List[Dict[str, Any]],
+        detailed_endpoints: List[Dict[str, Any]],
+        api_patterns: List[str],
+        auth_info: Dict[str, Any],
+        business_domain: str,
+        analysis_results: Dict[str, Any],
+        include_code_examples: bool
+    ) -> Dict[str, Any]:
+        """Generate comprehensive API response with all endpoints."""
+        
+        # Build comprehensive response based on real data
+        sections = {
+            "overview": {
+                "repository": repository,
+                "total_endpoints": total_endpoints,
+                "business_domain": business_domain,
+                "frameworks": frameworks,
+                "api_patterns": api_patterns,
+                "response_format": "JSON"
+            }
+        }
+        
+        if endpoints:
+            # Use real endpoints data
+            sections["endpoints"] = {
+                "list": detailed_endpoints if detailed_endpoints else endpoints,
+                "count": len(detailed_endpoints if detailed_endpoints else endpoints)
+            }
+            
+            # Group endpoints by method for summary
+            method_summary = analysis_results.get("methods_summary", {})
+            if method_summary:
+                sections["methods_summary"] = method_summary
+            
+            # Add authentication information if detected
+            if auth_info:
+                auth_methods = []
+                if auth_info.get("api_key"):
+                    auth_methods.append("API Key")
+                if auth_info.get("jwt_token"):
+                    auth_methods.append("JWT Token")
+                if auth_info.get("oauth"):
+                    auth_methods.append("OAuth")
+                if auth_info.get("basic_auth"):
+                    auth_methods.append("Basic Authentication")
+                
+                sections["authentication"] = {
+                    "methods": auth_methods,
+                    "detected_patterns": auth_info
+                }
+            
+            # Add integration details
+            sections["integration"] = {
+                "source_files": analysis_results.get("source_files", []),
+                "frameworks_detected": frameworks,
+                "design_patterns": api_patterns
+            }
+            
+            # Add usage examples based on real endpoints
+            if include_code_examples and endpoints:
+                sections["examples"] = self._generate_real_api_examples(endpoints, repository)
+                
+        else:
+            # Handle case where no endpoints were found
+            sections["no_endpoints_found"] = {
+                "status": "No API endpoints detected",
+                "analysis": {
+                    "possible_reasons": analysis_results.get("possible_reasons", []),
+                    "suggestions": analysis_results.get("suggestions", []),
+                    "frameworks_detected": frameworks
+                }
+            }
+            
+            # Include README endpoints if available
+            readme_endpoints = analysis_results.get("readme_endpoints", [])
+            if readme_endpoints:
+                sections["documentation_endpoints"] = readme_endpoints
+        
+        return sections
+
+    def _filter_endpoints_by_operation(self, endpoints: List[Dict[str, Any]], operation: str) -> List[Dict[str, Any]]:
+        """Filter endpoints that are relevant to the specific operation."""
+        if not endpoints:
+            return []
+        
+        operation_keywords = {
+            "notifications": ["notification", "notify", "alert"],
+            "users": ["user", "account", "profile"],
+            "events": ["event", "activity", "log"],
+            "data": ["data", "information", "record"],
+            "messages": ["message", "msg", "communication"],
+            "files": ["file", "document", "upload", "download"],
+            "auth": ["auth", "authentication", "login", "token"],
+            "search": ["search", "find", "query", "filter"],
+            "create": ["create", "add", "new", "post"],
+            "update": ["update", "edit", "modify", "put", "patch"],
+            "delete": ["delete", "remove", "destroy"],
+            "list": ["get", "list", "retrieve", "fetch"]
+        }
+        
+        keywords = operation_keywords.get(operation, [operation])
+        relevant_endpoints = []
+        
+        for endpoint in endpoints:
+            endpoint_text = str(endpoint).lower()
+            if any(keyword in endpoint_text for keyword in keywords):
+                relevant_endpoints.append(endpoint)
+        
+        return relevant_endpoints
+
+    def _generate_endpoint_purpose(self, endpoint: Dict[str, Any], operation: str) -> str:
+        """Generate purpose description for an endpoint based on operation."""
+        method = endpoint.get("method", "GET")
+        path = endpoint.get("path", endpoint.get("endpoint", "/"))
+        
+        if method == "GET" and operation == "notifications":
+            if "{id}" in path or "{Id}" in path:
+                return "Retrieve a specific notification by its ID"
+            else:
+                return "Get all notifications for the user or system"
+        elif method == "POST" and operation == "notifications":
+            return "Create a new notification"
+        elif method == "PUT" and operation == "notifications":
+            return "Update an existing notification (e.g., mark as read)"
+        elif method == "DELETE" and operation == "notifications":
+            return "Delete a notification"
+        
+        return f"{method} operation for {operation}"
+
+    def _extract_auth_methods(self, auth_info: Dict[str, Any]) -> List[str]:
+        """Extract authentication methods from auth info."""
+        methods = []
+        if auth_info.get("api_key"):
+            methods.append("API Key")
+        if auth_info.get("jwt_token"):
+            methods.append("JWT Token")
+        if auth_info.get("oauth"):
+            methods.append("OAuth")
+        if auth_info.get("basic_auth"):
+            methods.append("Basic Authentication")
+        return methods or ["API Key"]
+
+    def _generate_auth_example(self, auth_info: Dict[str, Any]) -> str:
+        """Generate authentication example."""
+        if auth_info.get("api_key"):
+            return "Authorization: Bearer <your-api-key> or X-API-Key: <your-api-key>"
+        elif auth_info.get("jwt_token"):
+            return "Authorization: Bearer <jwt-token>"
+        else:
+            return "Authorization: Bearer <your-api-key>"
+
+    def _generate_operation_examples(
+        self, 
+        endpoints: List[Dict[str, Any]], 
+        operation: str, 
+        auth_info: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Generate specific examples for the operation."""
+        examples = []
+        
+        for endpoint in endpoints[:2]:  # Limit to 2 most relevant examples
+            method = endpoint.get("method", "GET")
+            path = endpoint.get("path", endpoint.get("endpoint", "/"))
+            
+            example = {
+                "purpose": self._generate_endpoint_purpose(endpoint, operation),
+                "request": {
+                    "method": method,
+                    "url": path,
+                    "headers": {
+                        "Accept": "application/json"
+                    }
+                }
+            }
+            
+            # Add auth header
+            if auth_info:
+                example["request"]["headers"]["Authorization"] = self._generate_auth_example(auth_info).split(": ")[1]
+            
+            # Add sample response
+            if operation == "notifications" and method == "GET":
+                if "{id}" in path.lower():
+                    example["response"] = {
+                        "id": "guid-123",
+                        "message": "Your notification message",
+                        "status": "unread",
+                        "timestamp": "2025-08-13T10:00:00Z"
+                    }
+                else:
+                    example["response"] = {
+                        "success": True,
+                        "data": [
+                            {
+                                "id": "guid-123",
+                                "message": "Notification 1",
+                                "status": "unread",
+                                "timestamp": "2025-08-13T10:00:00Z"
+                            }
+                        ],
+                        "total": 1
+                    }
+            
+            examples.append(example)
+        
+        return examples

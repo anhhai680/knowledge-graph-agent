@@ -140,11 +140,18 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
             return QueryIntent.DOCUMENTATION
 
         # Architecture patterns - enhanced to detect Q2 system relationship visualization
+        # Made more specific to avoid catching operational "how to" queries
         elif any(keyword in query_lower for keyword in [
             "architecture", "structure", "design", "pattern", "flow",
             "component", "module", "system", "overview", "connected", "connect",
-            "relationship", "services", "how", "explain what"
-        ]):
+            "relationship", "services", "explain what"
+        ]) or (
+            # Only catch "how" queries that are clearly about system architecture, not operational usage
+            "how" in query_lower and any(arch_term in query_lower for arch_term in [
+                "system works", "architecture works", "services connect", "components interact",
+                "data flows", "system designed", "services communicate"
+            ])
+        ):
             return QueryIntent.ARCHITECTURE
 
         # Code search patterns (moved to end to avoid conflicts)
@@ -344,6 +351,7 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         - Architecture and frameworks
         - Data models and authentication
         - Project overview and capabilities
+        - Operational usage patterns ("how to" questions about using services/APIs)
         
         Args:
             query: User query string
@@ -380,6 +388,28 @@ class QueryParsingHandler(BaseWorkflow[QueryState]):
         # Additional pattern: "What is [service/component/project name]?" 
         # This catches queries like "What is the purpose of car-notification-service?"
         if query_lower.startswith("what is") and any(word in query_lower for word in ["service", "component", "module", "system", "project", "application", "app"]):
+            return True
+            
+        # Check for "how to" operational patterns - these should go to Generic Q&A for better structured responses
+        # These queries ask about how to use or interact with services/APIs
+        how_to_patterns = [
+            "how to get", "how to retrieve", "how to fetch", "how to access",
+            "how to use", "how to call", "how to invoke", "how to query",
+            "how do i get", "how do i retrieve", "how do i fetch", "how do i access",
+            "how can i get", "how can i retrieve", "how can i fetch", "how can i access"
+        ]
+        
+        # Check if this is a "how to" operational query about a specific service/API
+        has_how_to_pattern = any(pattern in query_lower for pattern in how_to_patterns)
+        has_service_context = any(word in query_lower for word in ["service", "api", "endpoint", "notifications", "data", "users", "events"])
+        
+        # Exclude architectural "how does" questions - these should go to architecture intent
+        is_architectural_how = any(arch_pattern in query_lower for arch_pattern in [
+            "how does the system", "how does the architecture", "how do the services connect",
+            "how do the components", "how does the flow"
+        ])
+        
+        if has_how_to_pattern and has_service_context and not is_architectural_how:
             return True
             
         return False

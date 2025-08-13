@@ -255,14 +255,39 @@ class GenericQAWorkflow(BaseWorkflow):
             
             # Otherwise, perform classification
             from src.analyzers.question_classifier import QuestionClassifier
+            import asyncio
             
             classifier = QuestionClassifier()
-            # Note: This is a sync method call in an async context
-            # In a real implementation, we'd need async support or run in executor
-            self.logger.warning("Running async classifier in sync context - consider refactoring")
             
-            # For now, use a simple keyword-based classification as fallback
-            classification_result = self._simple_classify_question(question)
+            # Run the async classifier properly
+            try:
+                # Try to run in existing event loop
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Create a new task
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, classifier.classify_question(question))
+                        classification_result_obj = future.result()
+                else:
+                    # No running loop, we can use asyncio.run directly
+                    classification_result_obj = asyncio.run(classifier.classify_question(question))
+                
+                # Convert QuestionClassificationResult to dict
+                classification_result = {
+                    "category": classification_result_obj.category.value,
+                    "confidence": classification_result_obj.confidence,
+                    "keywords_matched": classification_result_obj.keywords_matched,
+                    "context_indicators": classification_result_obj.context_indicators,
+                    "suggested_analyzers": classification_result_obj.suggested_analyzers
+                }
+                
+                self.logger.info(f"Successfully used enhanced classifier")
+                
+            except Exception as async_error:
+                self.logger.warning(f"Enhanced classifier failed: {async_error}, using fallback")
+                # For now, use a simple keyword-based classification as fallback
+                classification_result = self._simple_classify_question(question)
             
             # Update state with classification
             state["question_category"] = classification_result["category"]
@@ -753,10 +778,24 @@ class GenericQAWorkflow(BaseWorkflow):
                 preferred_template=state.get("preferred_template", "generic_template")
             )
             
-            # Format the structured response into human-readable text
-            formatted_response = self._format_structured_response(template_response, state)
+            # Store the structured response for clients that want it
+            state["structured_response"] = template_response
             
-            state["template_response"] = formatted_response
+            # Check if this is a targeted response (has targeted_guidance section)
+            sections = template_response.get("sections", {})
+            is_targeted_response = "targeted_guidance" in sections
+            
+            if is_targeted_response:
+                # For targeted responses, keep the structured format as the main response
+                state["template_response"] = template_response
+                # Also store as generated_response for RAG agent compatibility
+                state["generated_response"] = str(template_response)
+            else:
+                # For comprehensive responses, format into human-readable text for backward compatibility
+                formatted_response = self._format_structured_response(template_response, state)
+                state["template_response"] = formatted_response
+                # Store the formatted response as generated_response for RAG agent compatibility
+                state["generated_response"] = formatted_response
             
             # Extract sources from analysis
             sources = self._extract_sources(state)
@@ -768,7 +807,9 @@ class GenericQAWorkflow(BaseWorkflow):
         except Exception as e:
             self.logger.error(f"Response generation failed: {e}")
             # Provide fallback response
-            state["template_response"] = self._create_fallback_response(state, str(e))
+            fallback_response = self._create_fallback_response(state, str(e))
+            state["template_response"] = fallback_response
+            state["generated_response"] = fallback_response
             state["sources"] = []
             return state
 
@@ -796,8 +837,13 @@ class GenericQAWorkflow(BaseWorkflow):
             # Get sections from template response
             sections = template_response.get("sections", {})
             
+            self.logger.debug(f"Formatting response for category: {category}")
+            self.logger.debug(f"Available sections: {list(sections.keys())}")
+            
             if category == "api_endpoints":
-                return self._format_api_endpoints_response(sections)
+                formatted = self._format_api_endpoints_response(sections)
+                self.logger.debug(f"API endpoints formatting successful: {formatted[:100]}...")
+                return formatted
             elif category == "business_capability":
                 return self._format_business_capability_response(sections)
             elif category == "architecture":
@@ -806,12 +852,59 @@ class GenericQAWorkflow(BaseWorkflow):
                 return self._format_general_response(sections)
             
         except Exception as e:
-            self.logger.error(f"Error formatting structured response: {e}")
+            self.logger.error(f"Error formatting structured response: {e}", exc_info=True)
+            self.logger.error(f"Template response causing error: {template_response}")
+            self.logger.error(f"State causing error: {state}")
             return "I was able to analyze the project but encountered an issue formatting the response. The analysis found relevant information but the display formatting failed. Please try rephrasing your question."
 
     def _format_api_endpoints_response(self, sections: Dict[str, Any]) -> str:
         """Format API endpoints response in a conversational way."""
         lines = []
+        
+        # Check if no endpoints were found
+        no_endpoints = sections.get("no_endpoints_found", {})
+        if no_endpoints:
+            status = no_endpoints.get("status", "No API endpoints detected")
+            lines.append(status)
+            
+            analysis = no_endpoints.get("analysis", {})
+            if analysis:
+                possible_reasons = analysis.get("possible_reasons", [])
+                suggestions = analysis.get("suggestions", [])
+                frameworks = analysis.get("frameworks_detected", [])
+                
+                if possible_reasons:
+                    lines.append("")
+                    lines.append("Possible reasons:")
+                    for reason in possible_reasons:
+                        lines.append(f"  • {reason}")
+                
+                if suggestions:
+                    lines.append("")
+                    lines.append("Suggestions:")
+                    for suggestion in suggestions:
+                        lines.append(f"  • {suggestion}")
+                
+                if frameworks:
+                    lines.append("")
+                    lines.append(f"Detected frameworks: {', '.join(frameworks)}")
+            
+            # Check for documentation endpoints
+            doc_endpoints = sections.get("documentation_endpoints", [])
+            if doc_endpoints:
+                lines.append("")
+                lines.append("Found in documentation:")
+                for endpoint in doc_endpoints:
+                    if isinstance(endpoint, dict):
+                        method = endpoint.get("method", "")
+                        path = endpoint.get("path", "")
+                        desc = endpoint.get("description", "")
+                        if method and path:
+                            lines.append(f"  • {method} {path} - {desc}")
+                    else:
+                        lines.append(f"  • {endpoint}")
+            
+            return "\n".join(lines)
         
         # Overview section
         overview = sections.get("overview", {})
@@ -834,37 +927,44 @@ class GenericQAWorkflow(BaseWorkflow):
             lines.append("")
         
         # Endpoints section organized by method
-        endpoints = sections.get("endpoints", [])
-        if endpoints:
-            lines.append("Here are the available endpoints organized by HTTP method:")
-            lines.append("")
+        endpoints_section = sections.get("endpoints", {})
+        if endpoints_section:
+            # Handle both old format (direct list) and new format (dict with 'list' key)
+            if isinstance(endpoints_section, list):
+                endpoints = endpoints_section
+            else:
+                endpoints = endpoints_section.get("list", [])
             
-            # Group by method
-            method_groups = {}
-            for endpoint in endpoints:
-                method = endpoint.get("method", "UNKNOWN")
-                if method not in method_groups:
-                    method_groups[method] = []
-                method_groups[method].append(endpoint)
-            
-            for method, method_endpoints in method_groups.items():
-                lines.append(f"{method} Endpoints:")
-                
-                # Remove duplicates by path
-                seen_paths = set()
-                unique_endpoints = []
-                for endpoint in method_endpoints:
-                    path = endpoint.get("path", "")
-                    if path not in seen_paths:
-                        seen_paths.add(path)
-                        unique_endpoints.append(endpoint)
-                
-                for endpoint in unique_endpoints:
-                    path = endpoint.get("path", "")
-                    description = endpoint.get("description", "")
-                    if path and description:
-                        lines.append(f"  • {path} - {description}")
+            if endpoints:
+                lines.append("Here are the available endpoints organized by HTTP method:")
                 lines.append("")
+                
+                # Group by method
+                method_groups = {}
+                for endpoint in endpoints:
+                    method = endpoint.get("method", "UNKNOWN")
+                    if method not in method_groups:
+                        method_groups[method] = []
+                    method_groups[method].append(endpoint)
+                
+                for method, method_endpoints in method_groups.items():
+                    lines.append(f"{method} Endpoints:")
+                    
+                    # Remove duplicates by path
+                    seen_paths = set()
+                    unique_endpoints = []
+                    for endpoint in method_endpoints:
+                        path = endpoint.get("path", "")
+                        if path not in seen_paths:
+                            seen_paths.add(path)
+                            unique_endpoints.append(endpoint)
+                    
+                    for endpoint in unique_endpoints:
+                        path = endpoint.get("path", "")
+                        description = endpoint.get("description", "")
+                        if path and description:
+                            lines.append(f"  • {path} - {description}")
+                    lines.append("")
         
         # Methods summary
         methods_summary = sections.get("methods_summary", {})

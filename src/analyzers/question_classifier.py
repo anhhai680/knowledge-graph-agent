@@ -83,7 +83,14 @@ class QuestionClassifier:
             GenericQuestionCategory.API_ENDPOINTS: [
                 "api", "endpoint", "route", "controller", "rest", "graphql",
                 "http", "request", "response", "method", "post", "get",
-                "put", "delete", "patch", "webhook", "swagger", "openapi"
+                "put", "delete", "patch", "webhook", "swagger", "openapi",
+                # Enhanced operational "how to" patterns for API usage
+                "how to get", "how to retrieve", "how to fetch", "how to access",
+                "how to use", "how to call", "how to invoke", "how to query",
+                "how do i get", "how do i retrieve", "how do i fetch", "how do i access",
+                "how can i get", "how can i retrieve", "how can i fetch", "how can i access",
+                "get all", "retrieve all", "fetch all", "access all",
+                "notifications", "data", "users", "events", "messages"
             ],
             GenericQuestionCategory.DATA_MODELING: [
                 "data", "model", "entity", "schema", "database", "table",
