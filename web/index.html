@@ -1105,7 +1105,7 @@
                                             <i class="fas fa-file-code"></i>
                                             ${metadata.source} (${metadata.repository})
                                         </div>
-                                        <button class="copy-btn" onclick="copyToClipboard('code-${index}')">
+                                        <button class="copy-btn" onclick="copyToClipboard('code-${index}', event)">
                                             <i class="fas fa-copy"></i>
                                         </button>
                                     </div>
@@ -1269,7 +1269,7 @@
                                 <i class="fas fa-project-diagram"></i>
                                 System Architecture Diagram
                             </div>
-                            <button class="copy-btn" onclick="copyToClipboard('${codeId}')">
+                            <button class="copy-btn" onclick="copyToClipboard('${codeId}', event)">
                                 <i class="fas fa-copy"></i>
                             </button>
                         </div>
@@ -1797,32 +1797,101 @@
             }
         }
 
-        function copyToClipboard(elementId) {
+        // Global state to track copy button states
+        const copyButtonStates = new Map();
+        
+        function copyToClipboard(elementId, event) {
             const element = document.getElementById(elementId);
-            if (element) {
-                const text = element.textContent;
-                navigator.clipboard.writeText(text).then(() => {
-                    // Find the copy button that was clicked
-                    const copyBtn = document.querySelector(`button[onclick*="${elementId}"]`);
-                    if (copyBtn) {
-                        const originalIcon = copyBtn.innerHTML;
-                        copyBtn.innerHTML = '<i class="fas fa-check"></i>';
-                        setTimeout(() => {
-                            copyBtn.innerHTML = originalIcon;
-                        }, 1000);
-                    }
-                }).catch(err => {
-                    console.error('Failed to copy text: ', err);
-                });
+            if (!element) {
+                return;
             }
+            
+            const text = element.textContent;
+            
+            // Use the event target (the button that was clicked)
+            let copyBtn = event ? event.target : null;
+            
+            // If event.target is not the button itself, try to find the button
+            if (!copyBtn || !copyBtn.classList.contains('copy-btn')) {
+                // Try to find the button by looking for the one that called this function
+                copyBtn = document.querySelector(`button[onclick*="copyToClipboard('${elementId}"]`);
+            }
+            
+            if (!copyBtn || !copyBtn.classList.contains('copy-btn')) {
+                return;
+            }
+            
+            // Create unique ID for this button to track its state
+            const buttonId = `${elementId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            
+            // Check if this button is already in copying state
+            if (copyButtonStates.has(buttonId)) {
+                return;
+            }
+            
+            // Store original button state
+            const originalState = {
+                icon: copyBtn.innerHTML,
+                disabled: copyBtn.disabled,
+                cursor: copyBtn.style.cursor
+            };
+            
+            // Mark button as copying
+            copyButtonStates.set(buttonId, originalState);
+            
+            navigator.clipboard.writeText(text).then(() => {
+                // Change to check icon and disable button
+                copyBtn.innerHTML = '<i class="fas fa-check" style="color: #10b981;"></i>';
+                copyBtn.disabled = true;
+                copyBtn.style.cursor = 'not-allowed';
+                
+                // Add success animation
+                copyBtn.style.transform = 'scale(1.1)';
+                copyBtn.style.transition = 'transform 0.2s ease';
+                
+                // Reset after 0.8 seconds
+                setTimeout(() => {
+                    if (copyButtonStates.has(buttonId)) {
+                        const state = copyButtonStates.get(buttonId);
+                        copyBtn.innerHTML = state.icon;
+                        copyBtn.disabled = state.disabled;
+                        copyBtn.style.cursor = state.cursor || 'pointer';
+                        copyBtn.style.transform = 'scale(1)';
+                        
+                        // Remove from tracking
+                        copyButtonStates.delete(buttonId);
+                    }
+                }, 800);
+                
+            }).catch(err => {
+                // Show error state briefly
+                copyBtn.innerHTML = '<i class="fas fa-exclamation-triangle" style="color: #ef4444;"></i>';
+                
+                setTimeout(() => {
+                    if (copyButtonStates.has(buttonId)) {
+                        const state = copyButtonStates.get(buttonId);
+                        copyBtn.innerHTML = state.icon;
+                        copyBtn.disabled = state.disabled;
+                        copyBtn.style.cursor = state.cursor || 'pointer';
+                        copyBtn.style.transform = 'scale(1)';
+                        
+                        // Remove from tracking
+                        copyButtonStates.delete(buttonId);
+                    }
+                }, 600);
+            });
         }
 
         function toggleMermaidCode(codeId) {
             const codeElement = document.getElementById(codeId);
-            const button = document.querySelector(`button[onclick*="${codeId}"]`);
+            
+            // Find the button that was clicked by looking for the one with this onclick
+            const button = document.querySelector(`button[onclick*="toggleMermaidCode('${codeId}')"]`);
             
             if (codeElement && button) {
-                if (codeElement.classList.contains('show')) {
+                const isCurrentlyShown = codeElement.classList.contains('show');
+                
+                if (isCurrentlyShown) {
                     codeElement.classList.remove('show');
                     button.textContent = 'Show Code';
                 } else {
