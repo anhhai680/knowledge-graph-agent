@@ -8,6 +8,7 @@ workflow management, and system monitoring with full LangGraph workflow integrat
 import json
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
@@ -35,14 +36,42 @@ from src.api.models import (
 from src.config.settings import get_settings
 from src.utils.logging import get_logger
 from src.utils.feature_flags import is_graph_enabled
+from src.utils.defensive_programming import safe_len, ensure_list
 from src.workflows.indexing_workflow import IndexingWorkflow
 from src.workflows.query_workflow import QueryWorkflow
+from src.workflows.workflow_states import create_indexing_state
 
 
 logger = get_logger(__name__)
 
 # Global workflow tracking
 active_workflows: Dict[str, Dict] = {}
+
+def cleanup_completed_workflows(max_age_hours: int = 24):
+    """
+    Remove completed, failed, or cancelled workflows older than max_age_hours.
+    This prevents the active_workflows dictionary from growing indefinitely.
+    """
+    import time
+    current_time = datetime.now()
+    workflows_to_remove = []
+    
+    for workflow_id, workflow_data in active_workflows.items():
+        # Only clean up completed, failed, or cancelled workflows
+        if workflow_data["status"] in [WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED]:
+            completed_at = workflow_data.get("completed_at")
+            if completed_at:
+                age_hours = (current_time - completed_at).total_seconds() / 3600
+                if age_hours > max_age_hours:
+                    workflows_to_remove.append(workflow_id)
+    
+    # Remove old workflows
+    for workflow_id in workflows_to_remove:
+        logger.info(f"Cleaning up old workflow: {workflow_id}")
+        del active_workflows[workflow_id]
+    
+    if workflows_to_remove:
+        logger.info(f"Cleaned up {len(workflows_to_remove)} old workflows")
 
 
 def _map_workflow_intent_to_api(workflow_intent: str) -> QueryIntent:
@@ -54,6 +83,7 @@ def _map_workflow_intent_to_api(workflow_intent: str) -> QueryIntent:
         "debugging": QueryIntent.DEBUGGING,
         "architecture": QueryIntent.ARCHITECTURE,  # Now available in API enum
         "implementation": QueryIntent.IMPLEMENTATION,
+        "event_flow": QueryIntent.EVENT_FLOW,  # Add missing event_flow mapping
         "general": QueryIntent.GENERAL,
     }
     return mapping.get(workflow_intent, QueryIntent.GENERAL)
@@ -165,7 +195,10 @@ async def index_all_repositories(
                 _run_indexing_workflow,
                 workflow_id,
                 repo_name,  # Pass repository name instead of request object
-                indexing_workflow
+                indexing_workflow,
+                False,  # incremental
+                False,  # dry_run
+                repo_config["url"]  # repository_url
             )
             
             # Track workflow
@@ -178,12 +211,15 @@ async def index_all_repositories(
                 "batch_id": batch_id
             }
             
+            logger.info(f"Created workflow {workflow_id} with status {WorkflowStatus.PENDING}. Total workflows: {len(active_workflows)}")
+            
             workflows.append(IndexingResponse(
                 workflow_id=workflow_id,
                 repository=repo_config["url"],  # Keep URL for display
                 status=WorkflowStatus.PENDING,
                 estimated_duration="10-30 minutes",
-                message=f"Indexing workflow queued for {repo_config['url']}"
+                message=f"Indexing workflow queued for {repo_config['url']}",
+                change_summary=None  # No change summary for batch operations
             ))
         
         logger.info(f"Started batch indexing for {len(workflows)} repositories")
@@ -223,12 +259,16 @@ async def index_repository(
     Trigger LangGraph indexing workflow for a specific repository.
     
     This endpoint initiates the indexing workflow for a single repository,
-    processing all files and generating vector embeddings for storage.
+    supporting both full and incremental re-indexing modes based on git history.
     """
     try:
         workflow_id = str(uuid.uuid4())
         
-        logger.info(f"Starting indexing workflow for repository: {request.repository_url}")
+        mode_desc = "incremental" if request.incremental else "full"
+        if request.dry_run:
+            mode_desc += " (dry-run)"
+            
+        logger.info(f"Starting {mode_desc} indexing workflow for repository: {request.repository_url}")
         
         # Extract repository name from URL (e.g., "anhhai680/car-web-client" from URL)
         if request.repository_url.startswith("https://github.com/"):
@@ -247,12 +287,15 @@ async def index_repository(
             # Fallback: use the URL as-is (this will likely fail but allows debugging)
             repo_name = request.repository_url
         
-        # Start background indexing workflow
+        # Start background indexing workflow with incremental parameters
         background_tasks.add_task(
             _run_indexing_workflow,
             workflow_id,
             repo_name,
-            indexing_workflow
+            indexing_workflow,
+            request.incremental,
+            request.dry_run,
+            request.repository_url  # Pass full repository URL
         )
         
         # Track workflow
@@ -261,15 +304,33 @@ async def index_repository(
             "type": "indexing",
             "status": WorkflowStatus.PENDING,
             "repository": request.repository_url,
-            "started_at": datetime.now()
+            "started_at": datetime.now(),
+            "incremental": request.incremental,
+            "dry_run": request.dry_run
         }
+        
+        logger.info(f"Created workflow {workflow_id} with status {WorkflowStatus.PENDING}. Total workflows: {len(active_workflows)}")
+        
+        # Prepare response message
+        if request.dry_run:
+            message = f"Dry-run analysis started for {request.repository_url} - no actual indexing will be performed"
+            estimated_duration = "1-5 minutes"
+        elif request.incremental:
+            message = f"Incremental re-indexing started for {request.repository_url}"
+            estimated_duration = "2-15 minutes"
+        else:
+            message = f"Full indexing workflow started for {request.repository_url}"
+            estimated_duration = "10-30 minutes"
         
         return IndexingResponse(
             workflow_id=workflow_id,
             repository=request.repository_url,
             status=WorkflowStatus.PENDING,
-            estimated_duration="10-30 minutes",
-            message=f"Indexing workflow started for {request.repository_url}"
+            estimated_duration=estimated_duration,
+            message=message,
+            incremental=request.incremental,
+            dry_run=request.dry_run,
+            change_summary=None  # Will be populated when workflow completes
         )
         
     except Exception as e:
@@ -290,77 +351,164 @@ async def process_query(
     
     This endpoint processes user queries using the complete LangGraph query
     workflow, including intent analysis, document retrieval, and response generation.
+    For Q2 system visualization queries, it returns generated Mermaid diagrams.
     """
     try:
         start_time = datetime.now()
         
         logger.info(f"Processing query: {request.query[:100]}...")
         
-        # Execute query workflow using the workflow's proper state creation
-        result_state = await query_workflow.run(
-            query=request.query,
-            repositories=request.repositories,
-            languages=request.language_filter,
-            k=request.top_k or 5
+        # Use RAGAgent for Q2 queries and advanced prompt management
+        # Import here to avoid circular imports
+        from src.agents.rag_agent import RAGAgent
+        from src.workflows.query.handlers.query_parsing_handler import QueryParsingHandler
+        
+        # Pre-check for Q2 queries to ensure detection
+        parsing_handler = QueryParsingHandler()
+        is_q2_query_direct = parsing_handler._is_q2_system_relationship_query(request.query)
+        logger.info(f"API Q2 DIRECT CHECK: Query='{request.query}' -> Q2={is_q2_query_direct}")
+        
+        # Create RAGAgent with the same workflow
+        rag_agent = RAGAgent(
+            workflow=query_workflow,
+            default_top_k=request.top_k or 5,
+            repository_filter=request.repositories,
+            language_filter=request.language_filter
         )
-
-        logger.debug(f"Final workflow state: {result_state}")
+        
+        # Process query through RAGAgent which supports Q2 queries
+        agent_result = await rag_agent._process_input({
+            "query": request.query,
+            "repositories": request.repositories,
+            "language_filter": request.language_filter,
+            "top_k": request.top_k or 5
+        })
+        
+        logger.debug(f"RAGAgent result: {agent_result}")
         
         # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds()
         
-        # Convert workflow results to API response
+        # Check if this is a Q2 query vs event flow query with proper logic
+        generated_answer = agent_result.get("answer", "")
+        actual_query_intent = agent_result.get("query_intent")
+        intent_value = actual_query_intent.value if actual_query_intent else "general"
+        
+        # Event flow queries should be handled differently from Q2 system visualization
+        is_event_flow_response = (intent_value == "event_flow")
+        
+        # Q2 system visualization detection (exclude event flow)
+        is_q2_response = (
+            not is_event_flow_response and (
+                "graph TB" in generated_answer or
+                agent_result.get("prompt_metadata", {}).get("template_type") == "Q2SystemVisualizationTemplate"
+            )
+        )
+        
+        # Additional Q2 detection logging for debugging
+        logger.debug(f"API Q2 DEBUG: Template type={agent_result.get('prompt_metadata', {}).get('template_type')}")
+        logger.debug(f"API Q2 DEBUG: RAG result keys={list(agent_result.keys())}")
+
+        # Check for Q2 flag in the RAGAgent result metadata
+        if not is_q2_response and agent_result.get("prompt_metadata", {}).get("is_q2_visualization"):
+            is_q2_response = True
+            logger.info("API Q2: Q2 detected via metadata flag")
+        
+        # Fallback: If Q2 was detected directly but response doesn't seem like Q2, force Q2 response
+        if is_q2_query_direct and not is_q2_response:
+            logger.warning("API Q2 FALLBACK: Q2 query detected but response doesn't contain Q2 content. Creating fallback Q2 response.")
+            
+            # Import here to avoid circular imports
+            from src.utils.prompt_manager import PromptManager
+            
+            # Create a generic Q2 response based on actual repositories
+            prompt_manager = PromptManager()
+            repositories = prompt_manager._get_repository_information()
+            mermaid_diagram = prompt_manager._generate_generic_mermaid_diagram(repositories)
+            architecture_explanation = prompt_manager._generate_architecture_explanation(repositories)
+            
+            fallback_q2_response = f"""Looking at the system architecture based on the available repositories:
+
+```mermaid
+graph TB
+{mermaid_diagram}
+```
+
+{architecture_explanation}
+
+**Communication Patterns:**
+- **API Integration**: Services communicate through well-defined REST APIs
+- **Data Flow**: Information flows between components based on business requirements  
+- **Modular Design**: Each repository handles specific functionality and concerns
+
+This architecture provides flexibility and maintainability by organizing functionality into separate, focused components."""
+            
+            generated_answer = fallback_q2_response
+            is_q2_response = True
+            logger.info("API Q2 FALLBACK: Created generic fallback Q2 response based on actual repositories")
+        
+        logger.debug(f"Generated answer length: {len(generated_answer)}")
+        logger.debug(f"Template type: {agent_result.get('prompt_metadata', {}).get('template_type')}")
+        
+        # Convert RAGAgent sources to API document results
         document_results = []
-        for doc in result_state.get("context_documents", []):
-            # Create DocumentMetadata object properly
+        for source in agent_result.get("sources", []):
+            metadata = source.get("metadata", {})
             doc_metadata = DocumentMetadata(
-                source=doc.get("metadata", {}).get("source", ""),
-                repository=doc.get("metadata", {}).get("repository", ""),
-                language=doc.get("metadata", {}).get("language"),
-                file_type=doc.get("metadata", {}).get("file_type"),
-                symbols=doc.get("metadata", {}).get("symbols", []),
-                last_modified=doc.get("metadata", {}).get("last_modified"),
-                size=doc.get("metadata", {}).get("size")
+                source=metadata.get("file_path", metadata.get("source", "")),
+                repository=metadata.get("repository", ""),
+                language=metadata.get("language"),
+                file_type=metadata.get("file_type"),
+                symbols=metadata.get("symbols", []),
+                last_modified=metadata.get("last_modified"),
+                size=metadata.get("size")
             )
             
             document_results.append(DocumentResult(
-                content=doc.get("content", ""),  # Fixed: changed from "page_content" to "content"
+                content=source.get("content", ""),
                 metadata=doc_metadata,
-                score=0.0,  # Fixed: Set to 0.0 since similarity scores aren't computed in current workflow
-                chunk_index=doc.get("metadata", {}).get("chunk_index")
+                score=0.0,  # RAGAgent doesn't provide similarity scores
+                chunk_index=metadata.get("chunk_index")
             ))
         
-        # Calculate confidence score with proper fallback
-        confidence_score = result_state.get("response_confidence")
-        if confidence_score is None:  
-            # Calculate a basic confidence score based on retrieved documents  
-            doc_count = len(document_results)  
-            if doc_count == 0:  
-                confidence_score = 0.0  
-            else:  
-                # Simple confidence calculation based on document count and content  
-                base_confidence = min(doc_count / 5.0, 1.0)  # More docs = higher confidence  
-                total_content_length = sum(len(doc.content) for doc in document_results)  
-                content_confidence = min(total_content_length / 2000.0, 1.0)  # More content = higher confidence  
-                confidence_score = (base_confidence * 0.6 + content_confidence * 0.4) # Weighted average
+        # Extract confidence score
+        confidence_score = agent_result.get("confidence", 0.0)
         
-        # Extract and properly format the query intent
-        query_intent = result_state.get("query_intent")
-        intent_value = query_intent.value if query_intent else "general"
+        # Extract and map query intent (moved up to use in response determination)
+        intent_value = intent_value  # Already defined above
         
-        logger.debug(f"API ROUTE DEBUG: Final result_state keys: {list(result_state.keys())}")
-        logger.debug(f"API ROUTE DEBUG: Query='{request.query}', Intent from workflow={query_intent}, Intent value={intent_value}")
-        logger.debug(f"API ROUTE DEBUG: Intent type: {type(query_intent)}")
+        logger.debug(f"API ROUTE DEBUG: RAGAgent result keys: {list(agent_result.keys())}")
+        logger.debug(f"API ROUTE DEBUG: Query='{request.query}', Intent from agent={actual_query_intent}, Intent value={intent_value}")
+        logger.debug(f"API ROUTE DEBUG: Intent type: {type(actual_query_intent)}")
+        logger.debug(f"API ROUTE DEBUG: Generated answer length: {len(generated_answer)}")
+        logger.debug(f"API ROUTE DEBUG: Is event flow: {is_event_flow_response}, Is Q2: {is_q2_response}")
+        
+        # Determine response type and content based on query type
+        if is_event_flow_response or is_q2_response:
+            # For event flow or Q2 queries, return the generated response
+            response_type = "generated"
+            generated_response = generated_answer
+            if is_event_flow_response:
+                logger.info(f"Returning generated response for EVENT_FLOW query: {len(generated_response)} characters")
+            else:
+                logger.info(f"Returning generated response for Q2 query: {len(generated_response)} characters")
+        else:
+            # For regular queries, return search results
+            response_type = "search"
+            generated_response = None
+            logger.info(f"Returning search results: {len(document_results)} documents")
         
         response = QueryResponse(
             query=request.query,
             intent=_map_workflow_intent_to_api(intent_value),
-            strategy=_map_workflow_strategy_to_api(result_state.get("search_strategy", "hybrid")),  # Fixed: use mapping function
+            strategy=_map_workflow_strategy_to_api("semantic"),  # RAGAgent uses semantic search
             results=document_results,
             total_results=len(document_results),
             processing_time=processing_time,
             confidence_score=confidence_score,
-            suggestions=result_state.get("suggestions", [])
+            suggestions=[],  # RAGAgent doesn't provide suggestions currently
+            generated_response=generated_response,
+            response_type=response_type
         )
         
         logger.info(f"Query processed successfully in {processing_time:.2f}s")
@@ -595,9 +743,9 @@ async def get_statistics(
                 if language:
                     language_counts[language] = language_counts.get(language, 0) + repo.get("document_count", 0)
         
-        # Get active workflows count
+        # Get active workflows count (RUNNING or PENDING status)
         active_workflow_count = len([w for w in active_workflows.values() 
-                                   if w["status"] == WorkflowStatus.RUNNING])
+                                   if w["status"] in [WorkflowStatus.RUNNING, WorkflowStatus.PENDING]])
         
         # Determine system health based on vector store availability
         try:
@@ -669,6 +817,7 @@ async def get_workflow_status(workflow_id: str):
 async def list_workflows(
     status: Optional[WorkflowStatus] = Query(None, description="Filter by workflow status"),
     workflow_type: Optional[str] = Query(None, description="Filter by workflow type"),
+    include_completed: bool = Query(True, description="Include completed/failed workflows"),
     limit: int = Query(100, description="Maximum number of workflows to return")
 ):
     """
@@ -676,14 +825,26 @@ async def list_workflows(
     
     Returns a list of workflow states with optional filtering by status
     and type, useful for monitoring and management.
+    By default, shows all workflows including completed ones.
     """
     try:
+        logger.info(f"Listing workflows. Total in dictionary: {len(active_workflows)}")
         workflows = []
         
         for workflow_id, workflow_data in active_workflows.items():
-            # Apply filters
+            logger.info(f"Processing workflow {workflow_id} with status {workflow_data.get('status')}")
+            
+            # Apply status filter
             if status and workflow_data["status"] != status:
+                logger.info(f"Skipping workflow {workflow_id} due to status filter")
                 continue
+                
+            # Filter out completed/failed workflows unless explicitly requested
+            if not include_completed and workflow_data["status"] in [WorkflowStatus.COMPLETED, WorkflowStatus.FAILED, WorkflowStatus.CANCELLED]:
+                logger.info(f"Skipping completed workflow {workflow_id}")
+                continue
+                
+            # Apply workflow type filter
             if workflow_type and workflow_data["type"] != workflow_type:
                 continue
             
@@ -711,10 +872,23 @@ async def list_workflows(
         )
 
 
+@router.get("/workflows/debug")
+async def debug_workflows():
+    """Debug endpoint to see the raw active_workflows dictionary."""
+    return {
+        "active_workflows": active_workflows,
+        "count": len(active_workflows),
+        "statuses": [w.get("status") for w in active_workflows.values()]
+    }
+
+
 async def _run_indexing_workflow(
     workflow_id: str,
     repo_name: str,
-    indexing_workflow: IndexingWorkflow
+    indexing_workflow: IndexingWorkflow,
+    incremental: bool = False,
+    dry_run: bool = False,
+    repository_url: Optional[str] = None
 ):
     """
     Background task to run indexing workflow.
@@ -723,68 +897,115 @@ async def _run_indexing_workflow(
         workflow_id: Unique workflow identifier
         repo_name: Repository name (e.g., "car-web-client")
         indexing_workflow: Indexing workflow instance
+        incremental: Enable incremental re-indexing
+        dry_run: Only analyze changes without indexing
+        repository_url: Full repository URL
     """
     try:
-        logger.info(f"Starting indexing workflow {workflow_id} for repository: {repo_name}")
+        mode_desc = "incremental" if incremental else "full"
+        if dry_run:
+            mode_desc += " (dry-run)"
+            
+        logger.info(f"Starting {mode_desc} indexing workflow {workflow_id} for repository: {repo_name}")
         
-        # Update workflow status
-        active_workflows[workflow_id]["status"] = WorkflowStatus.RUNNING
+        # Update workflow status to running
+        if workflow_id in active_workflows:
+            active_workflows[workflow_id]["status"] = WorkflowStatus.RUNNING
+            active_workflows[workflow_id]["current_step"] = "initializing"
         
-        # Create indexing state as dictionary (TypedDict)
-        indexing_state = {
-            "workflow_id": workflow_id,
-            "workflow_type": "indexing", 
-            "status": "in_progress",
-            "created_at": datetime.now().timestamp(),
-            "updated_at": datetime.now().timestamp(),
-            "progress_percentage": 0.0,
-            "current_step": "initializing",
-            "errors": [],
-            "metadata": {},
-            "repositories": [repo_name],  # Use repository name
-            "current_repo": repo_name,    # Use repository name
-            "processed_files": 0,
-            "total_files": 0,
-            "embeddings_generated": 0,
-            "repository_states": {},
-            "file_processing_states": [],
-            "vector_store_type": "chroma",
-            "collection_name": "knowledge_graph",
-            "batch_size": 100,
-            "total_chunks": 0,
-            "successful_embeddings": 0,
-            "failed_embeddings": 0,
-            "documents_per_second": None,
-            "embeddings_per_second": None,
-            "total_processing_time": None
-        }
+        # Create indexing workflow with incremental parameters
+        repository_urls = {repo_name: repository_url} if repository_url else {}
+        incremental_workflow = IndexingWorkflow(
+            repositories=[repo_name],
+            vector_store_type="chroma",
+            collection_name="knowledge-base-graph",
+            batch_size=100,
+            incremental=incremental,
+            dry_run=dry_run,
+            repository_urls=repository_urls,
+            workflow_id=workflow_id
+        )
         
-        # Execute indexing workflow (simplified for now)
-        result_state = await indexing_workflow.ainvoke(indexing_state)
+        # Create proper indexing state using the workflow state factory
+        indexing_state = create_indexing_state(
+            workflow_id=workflow_id,
+            repositories=[repo_name],
+            vector_store_type="chroma",
+            collection_name="knowledge-base-graph",  # Match the collection name used in ChromaStore
+            batch_size=100
+        )
         
-        # Update workflow completion
-        active_workflows[workflow_id].update({
-            "status": WorkflowStatus.COMPLETED,
-            "completed_at": datetime.now(),
-            "metadata": {
-                "processed_files": result_state.get("processed_files", 0),
-                "embeddings_generated": result_state.get("embeddings_generated", 0),
-                "errors": result_state.get("errors", [])
-            }
-        })
+        # Update state to in_progress
+        indexing_state["status"] = "in_progress"
+        indexing_state["current_step"] = "initializing"
         
-        logger.info(f"Indexing workflow {workflow_id} completed successfully")
+        # Execute indexing workflow with proper state management
+        logger.info(f"Executing {mode_desc} indexing workflow for {repo_name}")
+        result_state = incremental_workflow.invoke(indexing_state)
+        
+        # Check workflow completion status
+        workflow_status = result_state.get("status")
+        workflow_metadata = incremental_workflow.get_metadata()
+        
+        logger.info(f"Workflow completed with status: {workflow_status}")
+        logger.info(f"Workflow metadata status: {workflow_metadata.get('status')}")
+        
+        # Extract change summary for incremental workflows
+        change_summary = None
+        if incremental and "incremental_changes" in result_state.get("metadata", {}):
+            incremental_changes = result_state["metadata"]["incremental_changes"]
+            if repo_name in incremental_changes:
+                change_info = incremental_changes[repo_name]
+                
+                # Defensive programming: ensure lists are not None before using len()
+                files_to_process = ensure_list(change_info.get("files_to_process", []))
+                files_to_remove = ensure_list(change_info.get("files_to_remove", []))
+                
+                change_summary = {
+                    "change_type": change_info.get("change_type"),
+                    "total_changes": change_info.get("total_changes", 0),
+                    "files_to_process": safe_len(files_to_process),
+                    "files_to_remove": safe_len(files_to_remove),
+                    "diff_summary": change_info.get("diff_summary", {}),
+                    "last_commit": change_info.get("last_commit"),
+                    "current_commit": change_info.get("current_commit")
+                }
+        
+        # Update API workflow status based on workflow completion
+        if workflow_id in active_workflows:
+            if workflow_status == "completed" or workflow_metadata.get("status") == "completed":
+                active_workflows[workflow_id].update({
+                    "status": WorkflowStatus.COMPLETED,
+                    "completed_at": datetime.now(),
+                    "current_step": "completed",
+                    "metadata": {
+                        "processed_files": result_state.get("processed_files", 0),
+                        "embeddings_generated": result_state.get("embeddings_generated", 0),
+                        "total_chunks": result_state.get("total_chunks", 0),
+                        "errors": result_state.get("errors", []),
+                        "repository": repo_name,
+                        "workflow_metadata": workflow_metadata,
+                        "incremental": incremental,
+                        "dry_run": dry_run,
+                        "change_summary": change_summary
+                    }
+                })
+                logger.info(f"Indexing workflow {workflow_id} completed successfully")
+            else:
+                # Workflow failed or didn't complete properly - raise exception to be handled by the common error handler below
+                raise Exception(f"Workflow did not complete successfully. Final status: {workflow_status}")
         
     except Exception as e:
-        # TODO: Implement proper workflow execution
         logger.error(f"Indexing workflow {workflow_id} failed: {e}")
         
         # Update workflow failure
-        active_workflows[workflow_id].update({
-            "status": WorkflowStatus.FAILED,
-            "completed_at": datetime.now(),
-            "error_message": str(e)
-        })
+        if workflow_id in active_workflows:
+            active_workflows[workflow_id].update({
+                "status": WorkflowStatus.FAILED,
+                "completed_at": datetime.now(),
+                "current_step": "failed",
+                "error_message": str(e)
+            })
 
 
 @router.post("/fix/chroma-dimension")
@@ -995,3 +1216,198 @@ async def get_graph_health():
             "configuration": graph_config if 'graph_config' in locals() else None,
             "error": error_msg
         }
+
+
+@router.get("/commits/tracking")
+async def get_commit_tracking_info():
+    """
+    Get commit tracking information for all repositories.
+    
+    Returns information about the last indexed commit for each repository,
+    useful for understanding incremental indexing status.
+    """
+    try:
+        from src.utils.commit_tracker import get_commit_tracker
+        
+        commit_tracker = get_commit_tracker()
+        
+        # Get all tracked repositories
+        tracked_repos = commit_tracker.list_tracked_repositories()
+        
+        # Get statistics
+        stats = commit_tracker.get_indexing_statistics()
+        
+        return {
+            "tracked_repositories": tracked_repos,
+            "statistics": stats,
+            "total_repositories": len(tracked_repos)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get commit tracking info: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get commit tracking info: {str(e)}"
+        )
+
+
+@router.delete("/commits/tracking/{owner}/{repo}")
+async def remove_commit_tracking(
+    owner: str,
+    repo: str,
+    branch: str = "main"
+):
+    """
+    Remove commit tracking for a specific repository.
+    
+    This will force a full re-index the next time the repository is processed
+    in incremental mode.
+    """
+    try:
+        from src.utils.commit_tracker import get_commit_tracker
+        
+        commit_tracker = get_commit_tracker()
+        repository = f"{owner}/{repo}"
+        
+        removed = commit_tracker.remove_repository(repository, branch)
+        
+        if removed:
+            return {
+                "success": True,
+                "message": f"Removed commit tracking for {repository}#{branch}",
+                "repository": repository,
+                "branch": branch
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"No commit tracking found for {repository}#{branch}",
+                "repository": repository,
+                "branch": branch
+            }
+        
+    except Exception as e:
+        logger.error(f"Failed to remove commit tracking: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to remove commit tracking: {str(e)}"
+        )
+
+
+@router.get("/commits/diff/{owner}/{repo}")
+async def preview_incremental_changes(
+    owner: str,
+    repo: str,
+    branch: str = "main"
+):
+    """
+    Preview what changes would be processed in an incremental re-index.
+    
+    This endpoint performs a dry-run analysis of changes since the last
+    indexed commit without performing actual indexing.
+    """
+    try:
+        from src.utils.commit_tracker import get_commit_tracker
+        from src.loaders.git_diff_service import GitDiffService
+        from src.loaders.git_repository_manager import GitRepositoryManager
+        from src.config.settings import settings
+        
+        commit_tracker = get_commit_tracker()
+        git_diff_service = GitDiffService()
+        repo_manager = GitRepositoryManager()
+        
+        repository = f"{owner}/{repo}"
+        
+        # Get last indexed commit
+        last_commit = commit_tracker.get_last_indexed_commit(repository, branch)
+        
+        if not last_commit:
+            return {
+                "repository": repository,
+                "branch": branch,
+                "change_type": "full_index",
+                "reason": "no_previous_index",
+                "message": "No previous index found - full indexing required"
+            }
+        
+        # Prepare local repository
+        repo_url = f"https://github.com/{owner}/{repo}.git"
+        local_repo_path = repo_manager.get_local_repo_path(owner, repo)
+        
+        # Clone or update repository if needed
+        if not Path(local_repo_path).exists():
+            clone_result = repo_manager.clone_repository(
+                repo_url=repo_url,
+                owner=owner,
+                repo_name=repo,
+                branch=branch,
+                github_token=settings.github.token
+            )
+            if not clone_result:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to clone repository {repository}"
+                )
+        else:
+            repo_manager.update_repository(owner=owner, repo_name=repo, branch=branch)
+        
+        # Get current commit
+        current_commit = git_diff_service.get_current_commit(local_repo_path, branch)
+        if not current_commit:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to get current commit for {repository}"
+            )
+        
+        # Check if there are changes
+        if last_commit == current_commit:
+            return {
+                "repository": repository,
+                "branch": branch,
+                "change_type": "no_changes",
+                "last_commit": last_commit,
+                "current_commit": current_commit,
+                "message": "No changes detected since last index"
+            }
+        
+        # Compute diff
+        diff_result = git_diff_service.get_changes_between_commits(
+            local_repo_path,
+            last_commit,
+            current_commit,
+            file_extensions=settings.github.file_extensions
+        )
+        
+        # Get files to process and remove
+        files_to_process = list(git_diff_service.get_files_to_process(diff_result))
+        files_to_remove = list(git_diff_service.get_files_to_remove(diff_result))
+        
+        return {
+            "repository": repository,
+            "branch": branch,
+            "change_type": "incremental",
+            "last_commit": last_commit,
+            "current_commit": current_commit,
+            "total_changes": diff_result.total_changes,
+            "changes_by_type": {k.value: v for k, v in diff_result.changes_by_type.items()},
+            "files_to_process": files_to_process,
+            "files_to_remove": files_to_remove,
+            "diff_summary": {
+                "added": safe_len(diff_result.added_files) if diff_result else 0,
+                "modified": safe_len(diff_result.modified_files) if diff_result else 0,
+                "deleted": safe_len(diff_result.deleted_files) if diff_result else 0,
+                "renamed": safe_len(diff_result.renamed_files) if diff_result else 0
+            },
+            "message": f"Found {diff_result.total_changes} file changes to process"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to preview incremental changes: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to preview incremental changes: {str(e)}"
+        )
+
+

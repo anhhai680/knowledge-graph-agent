@@ -10,6 +10,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     
+    <!-- Mermaid.js for diagram rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -174,6 +177,192 @@
             font-size: 0.7rem;
             opacity: 0.7;
             margin-top: 0.25rem;
+        }
+
+        /* Generated response content styling */
+        .message-content h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 1rem 0 0.5rem 0;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 0.25rem;
+        }
+
+        .message-content h2 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #374151;
+            margin: 0.8rem 0 0.4rem 0;
+        }
+
+        .message-content h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #4b5563;
+            margin: 0.6rem 0 0.3rem 0;
+        }
+
+        .message-content ul, .message-content ol {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+        }
+
+        .message-content li {
+            margin: 0.25rem 0;
+            line-height: 1.5;
+        }
+
+        .message-content p {
+            margin: 0.5rem 0;
+            line-height: 1.6;
+        }
+
+        .message-content code {
+            background: #f1f5f9;
+            color: #475569;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+        }
+
+        .message-content strong {
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .message-content em {
+            font-style: italic;
+            color: #4b5563;
+        }
+
+        /* Section headers styling */
+        .section-header {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #2563eb;
+            margin: 1.5rem 0 0.75rem 0;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+            border-left: 4px solid #2563eb;
+            border-radius: 0 8px 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .section-header:first-child {
+            margin-top: 0.5rem;
+        }
+
+        .section-header .section-icon {
+            font-size: 1.2em;
+            color: #1d4ed8;
+        }
+
+        /* Architecture patterns specific styling */
+        .architecture-pattern {
+            background: #fefefe;
+            border: 1px solid #e5e7eb;
+            padding: 1.25rem;
+            margin: 0.5rem 0 1.5rem 0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .architecture-pattern .pattern-title {
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            background: #eff6ff;
+            border-radius: 6px;
+            border-left: 3px solid #3b82f6;
+            display: flex;
+            align-items: center;
+        }
+
+        .architecture-pattern .pattern-content {
+            color: #374151;
+            line-height: 1.6;
+            margin-left: 1rem;
+        }
+
+        /* Code references styling */
+        .code-reference {
+            background: #fefefe;
+            border: 1px solid #d1d5db;
+            padding: 1.25rem;
+            margin: 0.5rem 0 1.5rem 0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Interesting patterns styling */
+        .interesting-pattern {
+            background: #fefefe;
+            border: 1px solid #d1d5db;
+            padding: 1.25rem;
+            margin: 0.5rem 0 1.5rem 0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .code-reference .reference-title {
+            font-weight: 600;
+            color: #065f46;
+            margin-bottom: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            background: #f0fdf4;
+            border-radius: 6px;
+            border-left: 3px solid #059669;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.95em;
+            display: flex;
+            align-items: center;
+        }
+
+        .code-reference .reference-content {
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+            color: #374151;
+            line-height: 1.6;
+            margin-left: 1rem;
+        }
+
+        .code-reference .reference-item {
+            background: #f8fafc;
+            border-radius: 6px;
+            padding: 0.75rem;
+            border-left: 3px solid #10b981;
+            position: relative;
+        }
+
+        .code-reference .reference-item:before {
+            content: "•";
+            color: #10b981;
+            font-weight: bold;
+            position: absolute;
+            left: -0.5rem;
+            top: 0.75rem;
+        }
+
+        /* Improve confidence and source styling */
+        .response-meta {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .confidence-score {
+            background: #f3f4f6;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.9em;
+            color: #6b7280;
+            margin-bottom: 1rem;
         }
 
         .code-block {
@@ -441,6 +630,108 @@
             font-size: 0.8rem;
         }
 
+        .mermaid-container {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            overflow: hidden;
+        }
+
+        .mermaid-rendered {
+            background: white;
+            padding: 2rem;
+            text-align: center;
+            min-height: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .mermaid-rendered svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .mermaid-code {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            overflow-x: auto;
+            display: none;
+        }
+
+        .mermaid-code.show {
+            display: block;
+        }
+
+        .mermaid-code pre {
+            margin: 0;
+            font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .mermaid-controls {
+            background: #f1f5f9;
+            padding: 0.5rem 1rem;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .mermaid-toggle {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: background-color 0.2s;
+        }
+
+        .mermaid-toggle:hover {
+            background: #2563eb;
+        }
+
+        .mermaid-note {
+            color: #64748b;
+            font-size: 0.75rem;
+        }
+
+        .mermaid-note i {
+            margin-right: 0.5rem;
+            color: #3b82f6;
+        }
+
+        /* Core Mermaid.js styles */
+        .mermaid {
+            width: 100%;
+            text-align: center;
+            font-family: 'Trebuchet MS', Verdana, Arial, sans-serif;
+        }
+
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .mermaid-loading {
+            color: #667eea;
+            font-style: italic;
+            padding: 2rem;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100px;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -573,6 +864,8 @@
             </div>
         </div>
     </div>
+    <!-- Include marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js "></script>
     <!-- Set API base URL from environment or deployment config -->
     <script>
         // You can set this variable at deploy time, e.g. via server-side templating or a build tool
@@ -708,7 +1001,7 @@
 
             async loadWorkflows() {
                 try {
-                    const response = await fetch(`${this.apiBase}/workflows`);
+                    const response = await fetch(`${this.apiBase}/workflows?status=running`);
                     const workflows = await response.json();
                     
                     this.currentWorkflows.clear();
@@ -788,47 +1081,603 @@
             }
 
             formatQueryResponse(data) {
-                let response = `<p><strong>Query:</strong> ${data.query}</p>`;
-                response += `<p><strong>Processing Time:</strong> ${data.processing_time.toFixed(2)}s</p>`;
-                response += `<p><strong>Results Found:</strong> ${data.total_results}</p>`;
-                
-                if (data.results && data.results.length > 0) {
-                    response += '<p><strong>Relevant Code Snippets:</strong></p>';
+                // Check if this is a generated response (like Q2 system visualization)
+                if (data.response_type === 'generated' && data.generated_response) {
+                    // For generated responses, just show the formatted content without extra metadata
+                    return this.formatGeneratedResponse(data.generated_response);
+                } else {
+                    // Standard search results display with metadata
+                    let response = `<p><strong>Query:</strong> ${data.query}</p>`;
+                    response += `<p><strong>Processing Time:</strong> ${data.processing_time.toFixed(2)}s</p>`;
+                    response += `<p><strong>Results Found:</strong> ${data.total_results}</p>`;
                     
-                    data.results.forEach((result, index) => {
-                        const metadata = result.metadata;
-                        const language = this.detectLanguage(metadata.file_type || metadata.source);
+                    if (data.results && data.results.length > 0) {
+                        response += '<p><strong>Relevant Code Snippets:</strong></p>';
                         
-                        response += `
-                            <div class="code-block">
-                                <div class="code-header">
-                                    <div class="file-info">
-                                        <i class="fas fa-file-code"></i>
-                                        ${metadata.source} (${metadata.repository})
+                        data.results.forEach((result, index) => {
+                            const metadata = result.metadata;
+                            const language = this.detectLanguage(metadata.file_type || metadata.source);
+                            
+                            response += `
+                                <div class="code-block">
+                                    <div class="code-header">
+                                        <div class="file-info">
+                                            <i class="fas fa-file-code"></i>
+                                            ${metadata.source} (${metadata.repository})
+                                        </div>
+                                        <button class="copy-btn" onclick="copyToClipboard('code-${index}')">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
                                     </div>
-                                    <button class="copy-btn" onclick="copyToClipboard('code-${index}')">
-                                        <i class="fas fa-copy"></i>
-                                    </button>
+                                    <div class="code-content">
+                                        <pre><code class="language-${language}" id="code-${index}">${this.escapeHtml(result.content)}</code></pre>
+                                    </div>
                                 </div>
-                                <div class="code-content">
-                                    <pre><code class="language-${language}" id="code-${index}">${this.escapeHtml(result.content)}</code></pre>
-                                </div>
+                            `;
+                        });
+                    } else {
+                        response += '<p>No relevant code snippets found for your query.</p>';
+                    }
+
+                    if (data.suggestions && data.suggestions.length > 0) {
+                        response += '<p><strong>Suggestions:</strong></p><ul>';
+                        data.suggestions.forEach(suggestion => {
+                            response += `<li>${suggestion}</li>`;
+                        });
+                        response += '</ul>';
+                    }
+
+                    return response;
+                }
+            }
+
+            formatGeneratedResponse(generatedContent) {
+                try {
+                    let jsonContent = generatedContent;
+                    
+                    // Check if the content is wrapped in markdown code blocks
+                    if (generatedContent.includes('```json\n') && generatedContent.includes('\n```')) {
+                        // Extract JSON content from markdown code block
+                        const jsonMatch = generatedContent.match(/```json\n([\s\S]*?)\n```/);
+                        if (jsonMatch) {
+                            jsonContent = jsonMatch[1];
+                        }
+                    }
+                    
+                    // Parse the JSON content
+                    const parsedContent = JSON.parse(jsonContent);
+                    
+                    // Extract the actual answer content
+                    const answerContent = parsedContent.answer || generatedContent;
+                    
+                    let response = '';
+                    
+                    // Check if the content contains Mermaid diagrams
+                    const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/g;
+                    let lastIndex = 0;
+                    let match;
+                    
+                    while ((match = mermaidRegex.exec(answerContent)) !== null) {
+                        // Add any text before the mermaid diagram
+                        if (match.index > lastIndex) {
+                            const textBefore = answerContent.substring(lastIndex, match.index);
+                            response += this.formatText(textBefore);
+                        }
+                        
+                        // Add the mermaid diagram
+                        const mermaidCode = match[1];
+                        response += this.formatMermaidDiagram(mermaidCode);
+                        
+                        lastIndex = mermaidRegex.lastIndex;
+                    }
+                    
+                    // Add any remaining text after the last mermaid diagram
+                    if (lastIndex < answerContent.length) {
+                        const remainingText = answerContent.substring(lastIndex);
+                        response += this.formatText(remainingText);
+                    }
+                    
+                    // If no mermaid diagrams were found, just format as text
+                    if (lastIndex === 0) {
+                        response = this.formatText(answerContent);
+                    }
+                    
+                    // Add confidence score if available
+                    if (parsedContent.confidence) {
+                        response += `<div class="response-meta">
+                            <div class="confidence-score">
+                                <i class="fas fa-chart-line" style="margin-right: 0.5rem;"></i>
+                                <strong>Confidence:</strong> ${(parsedContent.confidence * 100).toFixed(1)}%
+                            </div>
+                        </div>`;
+                    }
+                    
+                    // Add sources if available
+                    if (parsedContent.sources_used && parsedContent.sources_used.length > 0) {
+                        if (!parsedContent.confidence) {
+                            response += '<div class="response-meta">';
+                        }
+                        response += `<div class="section-header">
+                            <i class="fas fa-link section-icon"></i>
+                            Sources
+                        </div>
+                        <ul style="margin-left: 1rem; line-height: 1.6;">`;
+                        parsedContent.sources_used.forEach(source => {
+                            response += `<li><a href="${source}" target="_blank" style="color: #2563eb; text-decoration: none;">${source}</a></li>`;
+                        });
+                        response += '</ul>';
+                        if (!parsedContent.confidence) {
+                            response += '</div>';
+                        }
+                    } else if (parsedContent.confidence) {
+                        response += '</div>';
+                    }
+                    
+                    return response;
+                    
+                } catch (error) {
+                    // If parsing fails, fall back to treating it as plain text
+                    console.warn('Failed to parse generated response as JSON, treating as plain text:', error);
+                    
+                    let response = '';
+                    
+                    // Check if the content contains Mermaid diagrams
+                    const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/g;
+                    let lastIndex = 0;
+                    let match;
+                    
+                    while ((match = mermaidRegex.exec(generatedContent)) !== null) {
+                        // Add any text before the mermaid diagram
+                        if (match.index > lastIndex) {
+                            const textBefore = generatedContent.substring(lastIndex, match.index);
+                            response += this.formatText(textBefore);
+                        }
+                        
+                        // Add the mermaid diagram
+                        const mermaidCode = match[1];
+                        response += this.formatMermaidDiagram(mermaidCode);
+                        
+                        lastIndex = mermaidRegex.lastIndex;
+                    }
+                    
+                    // Add any remaining text after the last mermaid diagram
+                    if (lastIndex < generatedContent.length) {
+                        const remainingText = generatedContent.substring(lastIndex);
+                        response += this.formatText(remainingText);
+                    }
+                    
+                    // If no mermaid diagrams were found, just format as text
+                    if (lastIndex === 0) {
+                        response = this.formatText(generatedContent);
+                    }
+                    
+                    return response;
+                }
+            }
+
+            formatMermaidDiagram(mermaidCode) {
+                const diagramId = `mermaid-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                const codeId = `mermaid-code-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                
+                // Queue the diagram for rendering after DOM insertion
+                setTimeout(() => this.renderMermaidDiagram(diagramId, mermaidCode), 100);
+                
+                return `
+                    <div class="mermaid-container">
+                        <div class="code-header">
+                            <div class="file-info">
+                                <i class="fas fa-project-diagram"></i>
+                                System Architecture Diagram
+                            </div>
+                            <button class="copy-btn" onclick="copyToClipboard('${codeId}')">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="mermaid-rendered" id="${diagramId}">
+                            <div style="color: #6b7280; font-size: 0.9rem;">
+                                <i class="fas fa-spinner fa-spin"></i> Rendering diagram...
+                            </div>
+                        </div>
+                        <div class="mermaid-code" id="${codeId}">
+                            <pre><code class="language-mermaid">${this.escapeHtml(mermaidCode)}</code></pre>
+                        </div>
+                        <div class="mermaid-controls">
+                            <div class="mermaid-note">
+                                <i class="fas fa-info-circle"></i> Interactive system architecture diagram
+                            </div>
+                            <button class="mermaid-toggle" onclick="toggleMermaidCode('${codeId}')">
+                                Show Code
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            renderMermaidDiagram(diagramId, mermaidCode) {
+                console.log('Rendering Mermaid diagram:', diagramId, mermaidCode);
+                const element = document.getElementById(diagramId);
+                if (!element) {
+                    console.error('Element not found:', diagramId);
+                    return;
+                }
+                
+                try {
+                    // Initialize Mermaid if not already done
+                    if (window.mermaid && !window.mermaidConfigured) {
+                        console.log('Configuring Mermaid...');
+                        window.mermaid.initialize({
+                            startOnLoad: true,
+                            theme: 'default',
+                            themeVariables: {
+                                primaryColor: '#667eea',
+                                primaryTextColor: '#1f2937',
+                                primaryBorderColor: '#e5e7eb',
+                                lineColor: '#6b7280',
+                                secondaryColor: '#f3f4f6',
+                                tertiaryColor: '#f9fafb'
+                            },
+                            flowchart: {
+                                useMaxWidth: true,
+                                htmlLabels: true
+                            },
+                            securityLevel: 'loose'
+                        });
+                        window.mermaidConfigured = true;
+                        console.log('Mermaid configured');
+                    }
+                    
+                    if (window.mermaid) {
+                        console.log('Mermaid library available, rendering...');
+                        
+                        // Clear the element first
+                        element.innerHTML = '<div class="mermaid-loading">Rendering diagram...</div>';
+                        
+                        // Create a wrapper div with the mermaid class
+                        const mermaidDiv = document.createElement('div');
+                        mermaidDiv.className = 'mermaid';
+                        mermaidDiv.textContent = mermaidCode;
+                        
+                        // Clear and append the mermaid div
+                        element.innerHTML = '';
+                        element.appendChild(mermaidDiv);
+                        
+                        console.log('Mermaid div created and appended, calling mermaid.init...');
+                        
+                        // Let Mermaid process the element
+                        setTimeout(() => {
+                            try {
+                                window.mermaid.init(undefined, mermaidDiv);
+                                console.log('Mermaid.init completed');
+                            } catch (initError) {
+                                console.error('Mermaid.init error:', initError);
+                                element.innerHTML = `
+                                    <div style="color: #ef4444; font-size: 0.9rem; padding: 1rem; text-align: center;">
+                                        <i class="fas fa-exclamation-triangle"></i> 
+                                        <p>Error during diagram initialization</p>
+                                        <p style="font-size: 0.75rem; margin-top: 0.5rem;">${initError.message}</p>
+                                    </div>
+                                `;
+                            }
+                        }, 100);
+                        
+                    } else {
+                        console.error('Mermaid library not available');
+                        element.innerHTML = `
+                            <div style="color: #ef4444; font-size: 0.9rem; padding: 1rem; text-align: center;">
+                                <i class="fas fa-exclamation-triangle"></i> Mermaid library not loaded
                             </div>
                         `;
-                    });
+                    }
+                } catch (error) {
+                    console.error('Error rendering Mermaid diagram:', error);
+                    element.innerHTML = `
+                        <div style="color: #ef4444; font-size: 0.9rem; padding: 1rem; text-align: center;">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            <p>Error rendering diagram</p>
+                            <p style="font-size: 0.75rem; margin-top: 0.5rem;">${error.message}</p>
+                        </div>
+                    `;
+                }
+            }
+
+            formatText(text) {
+                if (!text || text.trim() === '') return '';
+                
+                // CRITICAL FIX: Handle special sections BEFORE any markdown processing
+                // This prevents headers like "### Code References" from becoming h3 tags
+                text = this.formatSectionHeaders(text);
+                
+                // Split text into paragraphs first
+                const paragraphs = text.split(/\n\s*\n/);
+                let formatted = '';
+                
+                paragraphs.forEach(paragraph => {
+                    const trimmed = paragraph.trim();
+                    if (!trimmed) return;
+                    
+                    // Skip paragraphs that already contain our section formatting
+                    if (trimmed.includes('class="section-header"') || 
+                        trimmed.includes('class="code-reference"') || 
+                        trimmed.includes('class="interesting-pattern"') ||
+                        trimmed.includes('class="architecture-pattern"')) {
+                        formatted += trimmed;
+                        return;
+                    }
+                    
+                    // Handle headers (but only for headers that aren't our special sections)
+                    if (trimmed.startsWith('### ')) {
+                        formatted += `<h3>${trimmed.substring(4)}</h3>`;
+                    } else if (trimmed.startsWith('## ')) {
+                        formatted += `<h2>${trimmed.substring(3)}</h2>`;
+                    } else if (trimmed.startsWith('# ')) {
+                        formatted += `<h1>${trimmed.substring(2)}</h1>`;
+                    }
+                    // Handle lists
+                    else if (trimmed.includes('\n- ') || trimmed.startsWith('- ')) {
+                        const listItems = trimmed.split('\n').filter(line => line.trim().startsWith('- '));
+                        formatted += '<ul>';
+                        listItems.forEach(item => {
+                            const content = item.replace(/^-\s*/, '').trim();
+                            formatted += `<li>${this.applyInlineFormatting(content)}</li>`;
+                        });
+                        formatted += '</ul>';
+                    }
+                    // Handle numbered lists
+                    else if (/^\d+\.\s/.test(trimmed) || /\n\d+\.\s/.test(trimmed)) {
+                        const listItems = trimmed.split('\n').filter(line => /^\d+\.\s/.test(line.trim()));
+                        formatted += '<ol>';
+                        listItems.forEach(item => {
+                            const content = item.replace(/^\d+\.\s*/, '').trim();
+                            formatted += `<li>${this.applyInlineFormatting(content)}</li>`;
+                        });
+                        formatted += '</ol>';
+                    }
+                    // Handle regular paragraphs
+                    else {
+                        const processedParagraph = this.applyInlineFormatting(trimmed.replace(/\n/g, '<br>'));
+                        formatted += `<p>${processedParagraph}</p>`;
+                    }
+                });
+                
+                return formatted;
+            }
+
+            applyInlineFormatting(text) {
+                // CRITICAL PERMANENT FIX: Handle special section headers BEFORE any bold processing
+                // This prevents the sections from being converted to regular bold text
+                console.log('🚀 PERMANENT FIX: Starting text formatting with section-first processing');
+                text = this.formatSectionHeaders(text);
+                
+                return text
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // Bold
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')  // Italic
+                    .replace(/`(.*?)`/g, '<code>$1</code>');  // Inline code
+            }
+
+            formatSectionHeaders(text) {
+                console.log('🔍 ROOT CAUSE FIX: Processing text for section headers...');
+                
+                // ROOT CAUSE FIX: Handle "### Code References" pattern specifically
+                text = text.replace(
+                    /(###\s+)?(Code\s+References?)\s*[-:]?\s*([\s\S]*?)(?=###\s+|Interesting\s+Patterns|Architecture\s+Patterns|Overall,|This\s+structure\s+allows|This\s+architecture\s+provides|Confidence:|$)/gi,
+                    (match, hashPrefix, header, content) => {
+                        console.log('✅ ROOT CAUSE FIX: Code References section found and being processed');
+                        return `<div class="section-header">
+                            <i class="fas fa-code section-icon"></i>
+                            Code References
+                        </div>
+                        <div class="code-reference">
+                            ${this.formatCodeReferences(content.trim())}
+                        </div>`;
+                    }
+                );
+
+                // ROOT CAUSE FIX: Handle "### Interesting Patterns" pattern specifically
+                text = text.replace(
+                    /(###\s+)?(Interesting\s+Patterns?)\s*[-:]?\s*([\s\S]*?)(?=###\s+|Code\s+References|Architecture\s+Patterns|Overall,|This\s+structure\s+allows|This\s+architecture\s+provides|Confidence:|$)/gi,
+                    (match, hashPrefix, header, content) => {
+                        console.log('✅ ROOT CAUSE FIX: Interesting Patterns section found and being processed');
+                        return `<div class="section-header">
+                            <i class="fas fa-lightbulb section-icon"></i>
+                            Interesting Patterns
+                        </div>
+                        <div class="interesting-pattern">
+                            ${this.formatInterestingPatterns(content.trim())}
+                        </div>`;
+                    }
+                );
+
+                // ROOT CAUSE FIX: Handle Architecture Patterns section with ### prefix
+                text = text.replace(
+                    /(###\s+)?(Architecture\s+Patterns?)\s*[-:]?\s*([\s\S]*?)(?=###\s+|Code\s+References|Interesting\s+Patterns|This\s+architecture\s+provides|This\s+structure\s+allows|Overall,|$)/gi,
+                    (match, hashPrefix, header, content) => {
+                        console.log('✅ ROOT CAUSE FIX: Architecture Patterns section found and being processed');
+                        return `<div class="section-header">
+                            <i class="fas fa-sitemap section-icon"></i>
+                            Architecture Patterns
+                        </div>
+                        <div class="architecture-pattern">
+                            ${this.formatArchitectureContent(content.trim())}
+                        </div>`;
+                    }
+                );
+
+                return text;
+            }
+
+            formatArchitectureContent(content) {
+                console.log('Formatting Architecture content:', content);
+                
+                // Handle the format: - **Pattern Name**: Description - **Another Pattern**: Description
+                let formatted = '';
+                
+                // Split by patterns like "- **PatternName**:"
+                const patterns = content.split(/\s*-\s*\*\*([^*]+)\*\*:\s*/);
+                console.log('Split patterns:', patterns);
+                
+                if (patterns.length > 2) {
+                    // Skip the first empty element, then process pairs of (name, description)
+                    for (let i = 1; i < patterns.length; i += 2) {
+                        const patternName = patterns[i];
+                        const patternDescription = patterns[i + 1] || '';
+                        
+                        formatted += `<div class="pattern-title">
+                            <i class="fas fa-cube" style="margin-right: 0.5rem; color: #3b82f6;"></i>
+                            ${patternName}
+                        </div>
+                        <div class="pattern-content">${patternDescription.trim()}</div>`;
+                        
+                        if (i + 2 < patterns.length) {
+                            formatted += '<div style="margin: 1rem 0;"></div>';
+                        }
+                    }
                 } else {
-                    response += '<p>No relevant code snippets found for your query.</p>';
+                    // Fallback: handle inline patterns within the content
+                    let processedContent = content;
+                    
+                    // Handle patterns like **PatternName**: description
+                    processedContent = processedContent.replace(
+                        /\*\*([^*]+)\*\*:\s*([^.*]+?)(?=\s*\*\*[^*]+\*\*:|$)/g,
+                        (match, name, desc) => {
+                            return `<div class="pattern-title">
+                                <i class="fas fa-cube" style="margin-right: 0.5rem; color: #3b82f6;"></i>
+                                ${name}
+                            </div>
+                            <div class="pattern-content">${desc.trim()}</div>
+                            <div style="margin: 1rem 0;"></div>`;
+                        }
+                    );
+                    
+                    // If no patterns were replaced, just clean up bold formatting
+                    if (processedContent === content) {
+                        processedContent = content.replace(/\*\*([^*]+)\*\*/g, '<span class="pattern-title">$1</span>');
+                    }
+                    
+                    formatted = processedContent;
                 }
+                
+                console.log('Formatted architecture content:', formatted);
+                return formatted;
+            }
 
-                if (data.suggestions && data.suggestions.length > 0) {
-                    response += '<p><strong>Suggestions:</strong></p><ul>';
-                    data.suggestions.forEach(suggestion => {
-                        response += `<li>${suggestion}</li>`;
+            formatCodeReferences(content) {
+                console.log('💻 ULTIMATE FIX: Formatting Code References with content:', content);
+                
+                let formatted = content.trim();
+                
+                // Handle single reference without bullet points (like from the new screenshot)
+                if (!formatted.includes(' - ')) {
+                    return `<div class="reference-item" style="background: #f8fafc; border-radius: 6px; padding: 0.75rem; border-left: 3px solid #10b981; margin-bottom: 1rem;">
+                        ${this.formatSingleCodeReference(formatted)}
+                    </div>`;
+                }
+                
+                // Handle multiple references with bullet points
+                const statements = formatted.split(/\s*-\s*(?=The|[A-Z])/).filter(stmt => stmt.trim().length > 0);
+                
+                if (statements.length > 1) {
+                    let result = '';
+                    statements.forEach((statement, index) => {
+                        if (statement.trim()) {
+                            let formattedStatement = this.formatSingleCodeReference(statement.trim());
+                            result += `<div class="reference-item" style="background: #f8fafc; border-radius: 6px; padding: 0.75rem; border-left: 3px solid #10b981; margin-bottom: 1rem;">
+                                ${formattedStatement}
+                            </div>`;
+                        }
                     });
-                    response += '</ul>';
+                    return result;
+                } else {
+                    // If no clear bullet points, try to split by periods for long sentences
+                    const sentences = formatted.split(/\.\s+(?=[A-Z])/).filter(s => s.trim().length > 0);
+                    if (sentences.length > 1) {
+                        let result = '';
+                        sentences.forEach((sentence, index) => {
+                            if (sentence.trim()) {
+                                let cleanSentence = sentence.trim();
+                                if (!cleanSentence.endsWith('.')) cleanSentence += '.';
+                                let formattedSentence = this.formatSingleCodeReference(cleanSentence);
+                                result += `<div class="reference-item" style="margin-bottom: 1rem;">
+                                    ${formattedSentence}
+                                </div>`;
+                            }
+                        });
+                        return result;
+                    } else {
+                        // Single block fallback
+                        return `<div class="reference-item">
+                            ${this.formatSingleCodeReference(formatted)}
+                        </div>`;
+                    }
                 }
+            }
 
-                return response;
+            formatSingleCodeReference(text) {
+                // Handle backtick code references like `car-web-client` - make them stand out more
+                text = text.replace(/`([^`]+)`/g, '<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 3px; font-family: monospace; color: #1f2937; font-weight: 600;">$1</code>');
+                
+                // Handle **bold** repository names (ULTIMATE FIX for screenshot content)
+                text = text.replace(/\*\*([^*]+)\*\*/g, '<span style="font-weight: 700; color: #1e40af;">$1</span>');
+                
+                // Handle repository links if any
+                text = text.replace(
+                    /\[([^\]]+)\]\s*\(([^)]+)\)/g,
+                    '<a href="$2" target="_blank" style="color: #2563eb; text-decoration: none; font-weight: 600;">$1</a>'
+                );
+                
+                // Handle common technical terms and service names
+                text = text.replace(
+                    /(HTTP APIs|API endpoints|backend services|business logic|Mermaid diagrams?|frontend diagram|specific business logic|respective implementations)/gi,
+                    '<span style="font-weight: 600; color: #065f46;">$1</span>'
+                );
+                
+                // Handle directory references like `src/api` or `src`
+                text = text.replace(
+                    /(src\/api|src|directory|directories|repository|repositories)/gi,
+                    '<span style="font-style: italic; color: #6b7280;">$1</span>'
+                );
+                
+                return text;
+            }
+
+            formatInterestingPatterns(content) {
+                console.log('🔍 ULTIMATE FIX: Formatting Interesting Patterns', content);
+                
+                // Handle single pattern without bullet points
+                if (!content.includes(' - ')) {
+                    return `<div class="pattern-item" style="background: #f8fafc; border-radius: 6px; padding: 0.75rem; border-left: 3px solid #10b981; margin-bottom: 1rem;">
+                        <i class="fas fa-puzzle-piece" style="margin-right: 0.5rem; color: #10b981;"></i>
+                        ${this.formatSinglePattern(content)}
+                    </div>`;
+                }
+                
+                // Handle multiple patterns
+                const patterns = content.split(/\s*-\s*(?=The|[A-Z])/).filter(pattern => pattern.trim().length > 0);
+                let result = '';
+                
+                patterns.forEach((pattern, index) => {
+                    if (pattern.trim()) {
+                        let formattedPattern = this.formatSinglePattern(pattern.trim());
+                        result += `<div class="pattern-item" style="background: #f8fafc; border-radius: 6px; padding: 0.75rem; border-left: 3px solid #10b981; margin-bottom: 1rem;">
+                            <i class="fas fa-puzzle-piece" style="margin-right: 0.5rem; color: #10b981;"></i>
+                            ${formattedPattern}
+                        </div>`;
+                    }
+                });
+                
+                return result;
+            }
+
+            formatSinglePattern(text) {
+                // Handle backtick code references
+                text = text.replace(/`([^`]+)`/g, '<code style="background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 3px; font-family: monospace; color: #1f2937; font-weight: 600;">$1</code>');
+                
+                // Handle **bold** terms for emphasis
+                text = text.replace(/\*\*([^*]+)\*\*/g, '<span style="font-weight: 700; color: #059669;">$1</span>');
+                
+                // Handle parenthetical examples like (e.g., `pending`, `paid`, `cancelled`)
+                text = text.replace(/\(e\.g\.,\s*([^)]+)\)/gi, '<span style="font-style: italic; color: #6b7280;">(e.g., $1)</span>');
+                
+                return text;
             }
 
             detectLanguage(fileType) {
@@ -948,20 +1797,45 @@
             }
         }
 
-        function copyToClipboard(event,elementId) {
+        function copyToClipboard(elementId) {
             const element = document.getElementById(elementId);
             if (element) {
                 const text = element.textContent;
                 navigator.clipboard.writeText(text).then(() => {
-                    const btn = event.target.closest('.copy-btn');
-                    const originalIcon = btn.innerHTML;
-                    btn.innerHTML = '<i class="fas fa-check"></i>';
-                    setTimeout(() => {
-                        btn.innerHTML = originalIcon;
-                    }, 1000);
+                    // Find the copy button that was clicked
+                    const copyBtn = document.querySelector(`button[onclick*="${elementId}"]`);
+                    if (copyBtn) {
+                        const originalIcon = copyBtn.innerHTML;
+                        copyBtn.innerHTML = '<i class="fas fa-check"></i>';
+                        setTimeout(() => {
+                            copyBtn.innerHTML = originalIcon;
+                        }, 1000);
+                    }
                 }).catch(err => {
                     console.error('Failed to copy text: ', err);
                 });
+            }
+        }
+
+        function toggleMermaidCode(codeId) {
+            const codeElement = document.getElementById(codeId);
+            const button = document.querySelector(`button[onclick*="${codeId}"]`);
+            
+            if (codeElement && button) {
+                if (codeElement.classList.contains('show')) {
+                    codeElement.classList.remove('show');
+                    button.textContent = 'Show Code';
+                } else {
+                    codeElement.classList.add('show');
+                    button.textContent = 'Hide Code';
+                    
+                    // Trigger syntax highlighting for the code
+                    if (window.Prism) {
+                        setTimeout(() => {
+                            Prism.highlightAllUnder(codeElement);
+                        }, 50);
+                    }
+                }
             }
         }
 

@@ -73,6 +73,7 @@ class QueryIntent(str, Enum):
     EXPLANATION = "explanation"
     DEBUGGING = "debugging"
     ARCHITECTURE = "architecture"
+    EVENT_FLOW = "event_flow"
 
 
 class SearchStrategy(str, Enum):

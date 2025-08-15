@@ -23,6 +23,7 @@ class QueryIntent(str, Enum):
     EXPLANATION = "explanation"
     ARCHITECTURE = "architecture"
     IMPLEMENTATION = "implementation"
+    EVENT_FLOW = "event_flow"
     GENERAL = "general"
 
 
@@ -72,6 +73,14 @@ class IndexRepositoryRequest(BaseModel):
         default=False,
         description="Force reindexing even if repository is already indexed"
     )
+    incremental: bool = Field(
+        default=False,
+        description="Enable incremental re-indexing based on git commit history"
+    )
+    dry_run: bool = Field(
+        default=False,
+        description="Analyze changes without performing actual indexing (incremental mode only)"
+    )
     
     @field_validator('repository_url')
     @classmethod
@@ -79,6 +88,14 @@ class IndexRepositoryRequest(BaseModel):
         """Validate GitHub repository URL format."""
         if not v.startswith(('https://github.com/', 'git@github.com:')):
             raise ValueError('Repository URL must be a valid GitHub URL')
+        return v
+    
+    @field_validator('dry_run')
+    @classmethod
+    def validate_dry_run(cls, v, info):
+        """Validate that dry_run is only used with incremental mode."""
+        if v and not info.data.get('incremental', False):
+            raise ValueError('dry_run can only be used with incremental=True')
         return v
 
 
@@ -172,6 +189,9 @@ class QueryResponse(BaseModel):
     processing_time: float = Field(..., description="Query processing time in seconds")
     confidence_score: float = Field(..., description="Overall confidence score", ge=0.0, le=1.0)
     suggestions: Optional[List[str]] = Field(None, description="Query improvement suggestions")
+    # New field for Q2 system visualization and other generated responses
+    generated_response: Optional[str] = Field(None, description="Generated response content (e.g., Mermaid diagrams for Q2 queries)")
+    response_type: Optional[str] = Field(None, description="Type of response: 'search' for document results, 'generated' for Q2/chat responses")
 
 
 class WorkflowProgress(BaseModel):
@@ -205,6 +225,9 @@ class IndexingResponse(BaseModel):
     status: WorkflowStatus = Field(..., description="Initial workflow status")
     estimated_duration: Optional[str] = Field(None, description="Estimated completion time")
     message: str = Field(..., description="Response message")
+    incremental: bool = Field(default=False, description="Whether incremental mode was used")
+    dry_run: bool = Field(default=False, description="Whether this was a dry-run")
+    change_summary: Optional[Dict[str, Any]] = Field(None, description="Summary of changes (incremental mode only)")
 
 
 class BatchIndexingResponse(BaseModel):
