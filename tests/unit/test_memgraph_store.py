@@ -52,27 +52,30 @@ class TestMemGraphStore:
     @patch('src.graphstores.memgraph_store.GraphDatabase')
     def test_connect_success(self, mock_graph_database, memgraph_store, mock_driver):
         """Test successful connection to MemGraph."""
-        mock_driver_instance, mock_session = mock_driver
+        mock_driver_instance, _ = mock_driver
         mock_graph_database.driver.return_value = mock_driver_instance
-        mock_session.run.return_value = Mock()
         
         result = memgraph_store.connect()
         
         assert result is True
         assert memgraph_store._connected is True
         assert memgraph_store.driver == mock_driver_instance
-        mock_graph_database.driver.assert_called_once_with(
-            "bolt://localhost:7687",
-            auth=("test_user", "test_pass")
-        )
+        # Check that driver was called with the expected parameters (including additional ones)
+        mock_graph_database.driver.assert_called_once()
+        call_args = mock_graph_database.driver.call_args
+        assert call_args[0][0] == "bolt://localhost:7687"
+        assert call_args[1]["auth"] == ("test_user", "test_pass")
+        assert "connection_timeout" in call_args[1]
+        assert "max_connection_lifetime" in call_args[1]
     
     @patch('src.graphstores.memgraph_store.GraphDatabase')
     def test_connect_failure(self, mock_graph_database, memgraph_store):
         """Test connection failure to MemGraph."""
-        # Mock ServiceUnavailable exception instead of importing it
-        service_unavailable_error = Exception("Connection failed")
-        service_unavailable_error.__class__.__name__ = "ServiceUnavailable"
-        mock_graph_database.driver.side_effect = service_unavailable_error
+        # Create a custom exception class that mimics ServiceUnavailable
+        class ServiceUnavailableException(Exception):
+            pass
+        
+        mock_graph_database.driver.side_effect = ServiceUnavailableException("Connection failed")
         
         result = memgraph_store.connect()
         
@@ -254,9 +257,12 @@ class TestMemGraphStore:
                 return False
             
             mock_isinstance.side_effect = isinstance_side_effect
-            mock_serialize.side_effect = lambda record: {"serialized": "data"}
+            mock_serialize.return_value = {"serialized": "data"}
             
             result = memgraph_store.execute_query("MATCH path = (person)-[friendship]->(friend) RETURN person, friendship, path")
+            
+            # Verify that _serialize_record was called for each record
+            assert mock_serialize.call_count == 4
             
             # Verify that counting is based on object types, not key names
             # Expected: 1 direct node + 2 nodes from path = 3 nodes total

@@ -4,7 +4,7 @@ Git Settings Configuration for the Knowledge Graph Agent.
 This module provides configuration settings for Git-based repository operations.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 
 
@@ -107,7 +107,4 @@ class GitSettings(BaseModel):
         description="Log Git commands for debugging (security sensitive)"
     )
     
-    class Config:
-        """Pydantic configuration."""
-        env_prefix = "GIT_"
-        case_sensitive = False
+    model_config = ConfigDict(env_prefix="GIT_", case_sensitive=False)

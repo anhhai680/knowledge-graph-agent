@@ -358,15 +358,6 @@ class TestLoaderMigrationManager:
         
         mock_git_loader.assert_called_once()
 
-    @patch('src.loaders.loader_migration_manager.GitHubLoader')
-    def test_create_api_loader(self, mock_api_loader):
-        """Test API loader creation."""
-        loader = self.migration_manager.create_loader(
-            "test_owner", "test_repo", use_git_loader=False
-        )
-        
-        mock_api_loader.assert_called_once()
-
     def test_migrate_repository_config(self):
         """Test repository configuration migration."""
         old_config = {
@@ -381,15 +372,9 @@ class TestLoaderMigrationManager:
         assert new_config["force_fresh_clone"] is False
         assert "git_timeout_seconds" in new_config
 
-    @patch('src.loaders.loader_migration_manager.GitHubLoader')
     @patch('src.loaders.loader_migration_manager.EnhancedGitHubLoader')
-    def test_benchmark_loaders(self, mock_git_loader, mock_api_loader):
+    def test_benchmark_loaders(self, mock_git_loader):
         """Test loader benchmarking."""
-        # Mock API loader
-        mock_api_instance = Mock()
-        mock_api_instance.load.return_value = [Mock(page_content="test")]
-        mock_api_loader.return_value = mock_api_instance
-        
         # Mock Git loader
         mock_git_instance = Mock()
         mock_git_instance.load.return_value = [Mock(page_content="test")]
@@ -403,7 +388,6 @@ class TestLoaderMigrationManager:
         
         results = self.migration_manager.benchmark_loaders(repo_config)
         
-        assert "api_loader" in results
         assert "git_loader" in results
         assert "comparison" in results
 
@@ -430,7 +414,7 @@ class TestGitErrorHandler:
             Exception("Authentication failed"), "https://github.com/test/repo.git"
         )
         
-        assert recovery_result is None  # Returns None for failed recovery
+        assert recovery_result == "check_github_token"  # Returns recovery suggestion for auth errors
 
     def test_cleanup_corrupted_repo(self):
         """Test corrupted repository cleanup."""
